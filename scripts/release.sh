@@ -10,8 +10,14 @@
 # Requires:
 #   HEARTH_SIGN_IDENTITY   Developer ID Application identity, e.g.
 #                          "Developer ID Application: Your Name (TEAMID)"
+# And notarization credentials, either a stored keychain profile:
 #   HEARTH_NOTARY_PROFILE  a notarytool keychain profile created with
 #                          `xcrun notarytool store-credentials`
+# or an App Store Connect API key passed directly (works in non-interactive
+# contexts where storing a keychain profile is blocked):
+#   HEARTH_NOTARY_KEY      path to the AuthKey_XXXX.p8 private key
+#   HEARTH_NOTARY_KEY_ID   the key ID (the XXXX in the filename)
+#   HEARTH_NOTARY_ISSUER   the App Store Connect issuer ID (a UUID)
 # Optional:
 #   HEARTH_VERSION         overrides the version read from Info.plist
 set -euo pipefail
@@ -19,7 +25,15 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 : "${HEARTH_SIGN_IDENTITY:?Set HEARTH_SIGN_IDENTITY to your Developer ID Application identity}"
-: "${HEARTH_NOTARY_PROFILE:?Set HEARTH_NOTARY_PROFILE to a notarytool keychain profile}"
+
+if [ -n "${HEARTH_NOTARY_PROFILE:-}" ]; then
+  NOTARY_AUTH=(--keychain-profile "$HEARTH_NOTARY_PROFILE")
+elif [ -n "${HEARTH_NOTARY_KEY:-}" ] && [ -n "${HEARTH_NOTARY_KEY_ID:-}" ] && [ -n "${HEARTH_NOTARY_ISSUER:-}" ]; then
+  NOTARY_AUTH=(--key "$HEARTH_NOTARY_KEY" --key-id "$HEARTH_NOTARY_KEY_ID" --issuer "$HEARTH_NOTARY_ISSUER")
+else
+  echo "Set HEARTH_NOTARY_PROFILE, or all of HEARTH_NOTARY_KEY, HEARTH_NOTARY_KEY_ID, HEARTH_NOTARY_ISSUER." >&2
+  exit 2
+fi
 
 VERSION="${HEARTH_VERSION:-$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' Sources/Hearth/Resources/Info.plist)}"
 APP="dist/Hearth.app"
@@ -37,7 +51,7 @@ rm -f "$ZIP"
 ditto -c -k --keepParent "$APP" "$ZIP"
 
 echo "Notarizing (this can take a few minutes)..."
-xcrun notarytool submit "$ZIP" --keychain-profile "$HEARTH_NOTARY_PROFILE" --wait
+xcrun notarytool submit "$ZIP" "${NOTARY_AUTH[@]}" --wait
 
 echo "Stapling and re-zipping the stapled bundle..."
 xcrun stapler staple "$APP"

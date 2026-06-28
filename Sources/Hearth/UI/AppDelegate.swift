@@ -200,65 +200,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
 
-        let modeLabel = config.isManaged ? "managed" : "attached"
-        menu.addItem(disabled("Hearth: \(modeLabel) \(runner.name)"))
+        let now = Date()
 
-        // Setup problems first, with one-click fixes where possible.
+        // Setup problems first, prominent, with one-click fixes where possible.
         if let path = binaryMissingPath {
-            menu.addItem(.separator())
-            menu.addItem(disabled("\u{26A0} \(runner.name) binary not found at \(path)"))
+            menu.addItem(emphasized("\u{26A0} \(runner.name) binary not found", color: .systemYellow))
+            menu.addItem(disabled("   \(path)"))
             if let suggested = suggestedBinaryPath {
                 addAction("Use detected: \(suggested)", #selector(useDetectedBinaryTapped), enabled: true)
             }
             addAction("Open Preferences\u{2026}", #selector(openPreferencesTapped), enabled: true)
+            menu.addItem(.separator())
         }
         if configProblem, let note = configNote {
+            menu.addItem(emphasized("\u{26A0} Config problem", color: .systemYellow))
+            menu.addItem(disabled("   \(note)"))
             menu.addItem(.separator())
-            menu.addItem(disabled("\u{26A0} \(note)"))
         }
 
-        menu.addItem(.separator())
-        menu.addItem(disabled(MenuFormat.statusLine(latestState, now: Date())))
-        if let uptime = latestState.uptime(asOf: Date()) {
-            menu.addItem(disabled("Uptime: \(MenuFormat.duration(uptime))"))
-        }
-        if let reason = latestState.lastRestartReason {
-            menu.addItem(disabled("Last restart: \(reason)"))
-        }
-        if latestState.restartCount > 0 {
-            menu.addItem(disabled("Restarts: \(latestState.restartCount)"))
-        }
-
-        menu.addItem(.separator())
-        menu.addItem(disabled("Resident models"))
-        if latestState.residentModels.isEmpty {
-            let hint = latestState.phase == .healthy ? "   none yet (loads on first request)" : "   none"
-            menu.addItem(disabled(hint))
-        } else {
-            for model in latestState.residentModels {
-                menu.addItem(disabled("   \(MenuFormat.model(model))"))
-            }
+        // Health: a bold, colored headline, then a few dim detail lines.
+        menu.addItem(emphasized(MenuFormat.headline(latestState, now: now),
+                                color: MenuFormat.tint(for: latestState.phase) ?? .labelColor))
+        menu.addItem(disabled(MenuFormat.contextLine(
+            latestState, runnerName: runner.name, managed: config.isManaged, now: now)))
+        if latestState.phase != .healthy, let reason = latestState.lastRestartReason {
+            menu.addItem(disabled("Last: \(reason)"))
         }
 
         let metrics = metricsProvider.sample()
         if let summary = MetricsFormat.summary(metrics) {
-            menu.addItem(.separator())
-            menu.addItem(disabled("System: \(summary)"))
+            var line = summary
             if let resident = metrics.runnerResidentBytes {
-                menu.addItem(disabled("Runner memory: \(MenuFormat.byteString(resident))"))
+                line += " \u{00B7} runner \(MenuFormat.byteString(resident))"
             }
+            menu.addItem(disabled(line))
         }
-
+        if !latestState.residentModels.isEmpty {
+            let loaded = latestState.residentModels.map(MenuFormat.model).joined(separator: ", ")
+            menu.addItem(disabled("Loaded: \(loaded)"))
+        }
         if config.controlEnabled, controlServer != nil {
-            menu.addItem(.separator())
-            menu.addItem(disabled("Remote control: \(config.controlHost):\(config.controlPort)"))
-            if let tailnet = NetworkInterfaces.tailnetIPv4() {
-                menu.addItem(disabled("Phone access: http://\(tailnet):\(config.controlPort)"))
-            }
-        }
-        if !configProblem, let note = configNote {
-            menu.addItem(.separator())
-            menu.addItem(disabled(note))
+            let host = NetworkInterfaces.tailnetIPv4() ?? config.controlHost
+            menu.addItem(disabled("Phone access: http://\(host):\(config.controlPort)"))
         }
 
         menu.addItem(.separator())
@@ -295,6 +278,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func disabled(_ title: String) -> NSMenuItem {
         let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         item.isEnabled = false
+        return item
+    }
+
+    /// A bold, colored, non-clickable row for the health headline and warnings.
+    /// An attributed title keeps full weight and color even though the row is
+    /// disabled, giving the menu a clear visual hierarchy.
+    private func emphasized(_ title: String, color: NSColor) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        let size = NSFont.menuFont(ofSize: 0).pointSize
+        item.attributedTitle = NSAttributedString(string: title, attributes: [
+            .font: NSFont.systemFont(ofSize: size, weight: .semibold),
+            .foregroundColor: color
+        ])
         return item
     }
 

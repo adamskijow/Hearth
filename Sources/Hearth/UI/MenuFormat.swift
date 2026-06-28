@@ -27,21 +27,37 @@ enum MenuFormat {
         }
     }
 
-    static func statusLine(_ state: SupervisorState, now: Date) -> String {
+    /// The prominent one-line health statement (shown bold and colored). No
+    /// "Status:" label: the line is the status.
+    static func headline(_ state: SupervisorState, now: Date) -> String {
         switch state.phase {
         case .stopped:
-            return "Status: Stopped"
+            return "Stopped"
         case .starting:
-            return "Status: Starting\u{2026}"
+            return "Starting\u{2026}"
         case .healthy:
-            return "Status: Healthy"
+            return "Healthy"
         case .down:
-            return "Status: Down\(retrySuffix(state, now: now))"
+            return "Down\(retrySuffix(state, now: now))"
         case .restarting:
-            return "Status: Restarting (attempt \(state.restartCount))"
+            return "Restarting (attempt \(state.restartCount))"
         case .failing:
-            return "Status: Failing (crash loop)\(retrySuffix(state, now: now))"
+            return "Crash loop\(retrySuffix(state, now: now))"
         }
+    }
+
+    /// The dim detail line under the headline: what is being supervised and for
+    /// how long. Folds in the runner and mode (which were a separate static row)
+    /// alongside uptime and restart count, so the line actually changes.
+    static func contextLine(_ state: SupervisorState, runnerName: String, managed: Bool, now: Date) -> String {
+        var parts = ["\(runnerName), \(managed ? "managed" : "attached")"]
+        if let uptime = state.uptime(asOf: now) {
+            parts.append("up \(duration(uptime))")
+        }
+        if state.restartCount > 0 {
+            parts.append("\(state.restartCount) restart\(state.restartCount == 1 ? "" : "s")")
+        }
+        return parts.joined(separator: " \u{00B7} ")
     }
 
     private static func retrySuffix(_ state: SupervisorState, now: Date) -> String {

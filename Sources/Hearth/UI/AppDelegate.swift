@@ -151,7 +151,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
 
-        menu.addItem(disabled("Hearth \u{2014} supervising \(runner.name)"))
+        menu.addItem(disabled("Hearth: supervising \(runner.name)"))
         menu.addItem(disabled(MenuFormat.statusLine(latestState, now: Date())))
 
         if let uptime = latestState.uptime(asOf: Date()) {

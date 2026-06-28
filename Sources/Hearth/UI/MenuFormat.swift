@@ -40,7 +40,7 @@ enum MenuFormat {
         case .restarting:
             return "Status: Restarting (attempt \(state.restartCount))"
         case .failing:
-            return "Status: Failing \u{2014} crash loop\(retrySuffix(state, now: now))"
+            return "Status: Failing (crash loop)\(retrySuffix(state, now: now))"
         }
     }
 

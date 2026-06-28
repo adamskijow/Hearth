@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-.PHONY: build release run test ci hooks smoke validate package icon clean
+.PHONY: build release run test ci hooks smoke validate package install icon clean
 
 # Build the library and the menubar agent (debug).
 build:
@@ -39,6 +39,11 @@ validate:
 # Assemble a Hearth.app bundle under dist/ (see scripts/package-app.sh).
 package:
 	./scripts/package-app.sh
+
+# Build, ad-hoc sign, and install Hearth.app to /Applications for local use
+# (dogfooding before a notarized release). No Developer ID required.
+install:
+	./scripts/install-app.sh
 
 # Rebuild assets/AppIcon.icns from the icon source.
 icon:

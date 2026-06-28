@@ -67,6 +67,18 @@ To assemble a `.app` bundle:
 open dist/Hearth.app
 ```
 
+To actually run it day to day before there is a notarized release, install a
+local, ad-hoc signed copy to `/Applications`:
+
+```
+make install
+open /Applications/Hearth.app
+```
+
+Ad-hoc signing gives the bundle a stable local code identity, which is what the
+login item and Notification Center alerts want, without needing a Developer ID.
+It is for your own machine, not distribution.
+
 Hearth ships as a Developer ID signed and notarized build, not through the Mac
 App Store. This is not a preference; the App Store requires the App Sandbox, and
 the sandbox forbids a process from spawning and supervising another process,

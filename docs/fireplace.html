@@ -106,6 +106,8 @@ void main(){
   float vig = smoothstep(1.15, 0.35, length((uv - vec2(0.5, 0.42)) * vec2(aspect, 1.0)));
   col *= 0.55 + 0.55 * vig;
 
+  // a touch of dither keeps the warm gradient from banding when captured to a GIF
+  col += (hash(gl_FragCoord.xy) - 0.5) * (3.0 / 255.0);
   gl_FragColor = vec4(col, 1.0);
 }`;
 

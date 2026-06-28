@@ -442,12 +442,13 @@ Near term intentions:
 
 ## Visuals
 
-The banner and the state diagram above are self contained animated SVGs. There is
-also a WebGL shader fireplace in [`docs/fireplace.html`](docs/fireplace.html);
-open it in a browser to watch it flicker. A still:
+The banner and the state diagram above are self contained animated SVGs. The
+flame below is a WebGL fragment-shader fireplace; the source is in
+[`docs/fireplace.html`](docs/fireplace.html), and you can open it in a browser to
+watch it live.
 
 <p align="center">
-  <img src="assets/fireplace-preview.png" alt="A WebGL shader fireplace" width="520">
+  <img src="assets/fireplace.gif" alt="A WebGL shader fireplace" width="560">
 </p>
 
 ## Contributing

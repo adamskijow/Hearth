@@ -14,6 +14,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 PORT="${HEARTH_SMOKE_PORT:-11899}"
+CTRL_PORT="${HEARTH_SMOKE_CTRL_PORT:-11935}"
+CTRL_TOKEN="smoke-token-$$"
 WORKDIR="$(mktemp -d)"
 CONFIG="$WORKDIR/config.json"
 RUNNER="$PWD/scripts/fake-runner.py"
@@ -46,7 +48,11 @@ cat > "$CONFIG" <<JSON
   "startupGraceSeconds": 5,
   "startupProbeIntervalSeconds": 0.5,
   "initialBackoffSeconds": 1,
-  "localNotifications": false
+  "localNotifications": false,
+  "controlEnabled": true,
+  "controlHost": "127.0.0.1",
+  "controlPort": $CTRL_PORT,
+  "controlToken": "$CTRL_TOKEN"
 }
 JSON
 
@@ -77,7 +83,27 @@ done
 curl -fs --max-time 2 "http://127.0.0.1:$PORT/api/version" >/dev/null || fail "not serving after restart"
 pass "restarted as $RESTARTED and serving"
 
-echo "4. Clean shutdown releases the assertion and kills the child"
+echo "4. Control endpoint (auth, status, remote restart)"
+CODE=$(curl -s -o "$WORKDIR/status.json" -w '%{http_code}' --max-time 3 \
+  -H "Authorization: Bearer $CTRL_TOKEN" "http://127.0.0.1:$CTRL_PORT/status" || true)
+[ "$CODE" = "200" ] || fail "GET /status returned $CODE"
+grep -q '"phase"' "$WORKDIR/status.json" || fail "status JSON missing phase"
+UNAUTH=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "http://127.0.0.1:$CTRL_PORT/status" || true)
+[ "$UNAUTH" = "401" ] || fail "unauthenticated request returned $UNAUTH (expected 401)"
+BEFORE="$(pgrep -f 'fake-runner.py' || true)"
+RCODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 -X POST \
+  -H "Authorization: Bearer $CTRL_TOKEN" "http://127.0.0.1:$CTRL_PORT/restart" || true)
+[ "$RCODE" = "202" ] || fail "POST /restart returned $RCODE (expected 202)"
+REMOTE_RESTARTED=""
+for _ in $(seq 1 8); do
+  sleep 1
+  NOW="$(pgrep -f 'fake-runner.py' || true)"
+  if [ -n "$NOW" ] && [ "$NOW" != "$BEFORE" ]; then REMOTE_RESTARTED="$NOW"; break; fi
+done
+[ -n "$REMOTE_RESTARTED" ] || fail "remote restart did not cycle the child"
+pass "status 200, 401 without token, remote restart cycled the child"
+
+echo "5. Clean shutdown releases the assertion and kills the child"
 kill -TERM "$HEARTH_PID"; HEARTH_PID=""
 sleep 2
 if pgrep -f 'fake-runner.py' >/dev/null; then fail "child was orphaned"; fi

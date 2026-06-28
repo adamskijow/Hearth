@@ -48,6 +48,47 @@ public enum ExitReason: Sendable, Equatable {
     }
 }
 
+/// Heuristics shared across runners. The out of memory signatures are matched
+/// case insensitively against captured stderr around an abnormal exit; a unified
+/// memory blowout tends to look the same whichever runner sat on top of it.
+public enum RunnerHeuristics {
+    public static let oomSignatures: [String] = [
+        "out of memory",
+        "outofmemory",
+        "oom",
+        "cannot allocate",
+        "failed to allocate",
+        "unable to allocate",
+        "insufficient memory",
+        "not enough memory",
+        "vk_error_out_of_device_memory",
+        "ggml_metal_graph_compute",
+        "mtlbuffer",
+        "metal buffer",
+        "ggml_backend_metal_buffer"
+    ]
+
+    /// Classify an exit given its status and stderr, using the supplied out of
+    /// memory signatures. Shared so every runner classifies the same way unless
+    /// it has a reason not to.
+    public static func classify(_ exit: ProcessExit?,
+                                stderr: [String],
+                                oomSignatures: [String] = RunnerHeuristics.oomSignatures) -> ExitReason {
+        guard let exit else { return .running }
+        let haystack = stderr.joined(separator: "\n").lowercased()
+        if !haystack.isEmpty, oomSignatures.contains(where: { haystack.contains($0.lowercased()) }) {
+            return .outOfMemory
+        }
+        if exit.wasSignaled {
+            return .signal(exit.signal ?? 0)
+        }
+        if exit.code == 0 {
+            return .cleanExit
+        }
+        return .crash(code: exit.code)
+    }
+}
+
 /// The seam that keeps each runner's specifics in one place. Ollama is the first
 /// implementation; LM Studio and mlx_lm can be added later without the engine or
 /// the decision logic learning anything Ollama specific. Every Ollama string,

@@ -15,6 +15,11 @@ public actor SupervisorEngine {
     private let power: PowerManaging
     private let notifier: Notifier
     private let policy: RestartPolicyConfig
+    /// Managed mode spawns and owns the runner. Attached mode (managed == false)
+    /// only monitors an already running one: it probes readiness, holds power,
+    /// and notifies on transitions, but never spawns or kills a process it does
+    /// not own.
+    private let managed: Bool
 
     private var machine: SupervisorMachine
     private var currentHandle: ProcessHandleID?
@@ -37,7 +42,8 @@ public actor SupervisorEngine {
                 runner: Runner,
                 power: PowerManaging,
                 notifier: Notifier,
-                policy: RestartPolicyConfig) {
+                policy: RestartPolicyConfig,
+                managed: Bool = true) {
         self.clock = clock
         self.processes = processes
         self.http = http
@@ -45,6 +51,7 @@ public actor SupervisorEngine {
         self.power = power
         self.notifier = notifier
         self.policy = policy
+        self.managed = managed
         self.machine = SupervisorMachine(config: policy)
 
         let (stateStream, stateCont) = AsyncStream.makeStream(of: SupervisorState.self)
@@ -123,6 +130,20 @@ public actor SupervisorEngine {
     // MARK: - Probing
 
     private func probe(now: Date) async -> HealthReport {
+        if !managed {
+            // Attached mode: there is no child to inspect. Readiness is the whole
+            // health signal. When unreachable, report not alive so the machine
+            // treats it as a failure without trying to kill a process we do not
+            // own (the kill effect is skipped anyway).
+            let outcome = await http.get(runner.readinessEndpoint, timeout: policy.probeTimeout)
+            let readiness = Readiness.from(outcome)
+            guard readiness == .ready else {
+                return HealthReport(isAlive: false, readiness: readiness, exitReason: .unknown)
+            }
+            let models = await fetchModels() ?? currentModels
+            return HealthReport(isAlive: true, readiness: .ready, exitReason: .running, models: models)
+        }
+
         guard let handle = currentHandle else {
             // No child (spawn failed or never spawned): treat as dead.
             return HealthReport(isAlive: false, readiness: .unknown, exitReason: .unknown)
@@ -160,9 +181,10 @@ public actor SupervisorEngine {
         for effect in output.effects {
             switch effect {
             case .spawn:
-                spawnChild()
+                // Attached mode never spawns; it monitors a runner it does not own.
+                if managed { spawnChild() }
             case .kill:
-                killChild()
+                if managed { killChild() }
             case .holdPower:
                 power.hold()
             case .releasePower:
@@ -231,7 +253,7 @@ public actor SupervisorEngine {
             return HearthNotification(
                 level: .warning,
                 title: "Runner down",
-                body: "The runner stopped serving: \(reason.label). Restarting.",
+                body: "The runner stopped serving: \(reason.label).",
                 event: event
             )
         case .recovered:

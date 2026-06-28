@@ -14,25 +14,10 @@ public struct OllamaRunner: Runner {
     private let port: Int
     private let oomSignatures: [String]
 
-    /// Default substrings that, when seen in Ollama or llama.cpp stderr around an
-    /// abnormal exit, indicate a unified memory blowout rather than a plain
-    /// crash. Matched case insensitively. Conservative on purpose: a false
-    /// negative just classifies as a crash, which is still restarted.
-    public static let defaultOOMSignatures: [String] = [
-        "out of memory",
-        "outofmemory",
-        "oom",
-        "cannot allocate",
-        "failed to allocate",
-        "unable to allocate",
-        "insufficient memory",
-        "not enough memory",
-        "vk_error_out_of_device_memory",
-        "ggml_metal_graph_compute",
-        "mtlbuffer",
-        "metal buffer",
-        "ggml_backend_metal_buffer"
-    ]
+    /// Default out of memory stderr signatures. Shared across runners because a
+    /// unified memory blowout looks the same underneath. Conservative on purpose:
+    /// a false negative just classifies as a crash, which is still restarted.
+    public static let defaultOOMSignatures: [String] = RunnerHeuristics.oomSignatures
 
     public init(binaryPath: String,
                 host: String = "127.0.0.1",
@@ -78,24 +63,7 @@ public struct OllamaRunner: Runner {
     }
 
     public func classifyExit(_ exit: ProcessExit?, stderr: [String]) -> ExitReason {
-        guard let exit else { return .running }
-
-        if matchesOOM(stderr) {
-            return .outOfMemory
-        }
-        if exit.wasSignaled {
-            return .signal(exit.signal ?? 0)
-        }
-        if exit.code == 0 {
-            return .cleanExit
-        }
-        return .crash(code: exit.code)
-    }
-
-    private func matchesOOM(_ stderr: [String]) -> Bool {
-        let haystack = stderr.joined(separator: "\n").lowercased()
-        guard !haystack.isEmpty else { return false }
-        return oomSignatures.contains { haystack.contains($0.lowercased()) }
+        RunnerHeuristics.classify(exit, stderr: stderr, oomSignatures: oomSignatures)
     }
 }
 

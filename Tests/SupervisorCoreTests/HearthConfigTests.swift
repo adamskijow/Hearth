@@ -93,4 +93,38 @@ struct HearthConfigTests {
         #expect(runner.readinessEndpoint.absoluteString == "http://0.0.0.0:1234/api/version")
         #expect(runner.processSpec().environmentOverrides["OLLAMA_HOST"] == "0.0.0.0:1234")
     }
+
+    @Test func runnerSelectionDefaultsToOllama() {
+        let runner = HearthConfig().makeRunner()
+        #expect(runner.name == "Ollama")
+    }
+
+    @Test func runnerSelectionPicksLMStudio() {
+        let config = HearthConfig(runner: "lmstudio")
+        #expect(config.makeRunner().name == "LM Studio")
+        #expect(config.selectedBinaryPath == HearthConfig.defaultLMStudioBinaryPath)
+    }
+
+    @Test func modeControlsIsManaged() {
+        #expect(HearthConfig().isManaged)                    // default managed
+        #expect(HearthConfig(mode: "managed").isManaged)
+        #expect(!HearthConfig(mode: "attached").isManaged)
+    }
+
+    @Test func controlFieldsDecode() throws {
+        let json = Data("""
+        {"controlEnabled": true, "controlHost": "100.64.0.2", "controlPort": 8443, "controlToken": "abc123"}
+        """.utf8)
+        let config = try JSONDecoder().decode(HearthConfig.self, from: json)
+        #expect(config.controlEnabled == true)
+        #expect(config.controlHost == "100.64.0.2")
+        #expect(config.controlPort == 8443)
+        #expect(config.controlToken == "abc123")
+    }
+
+    @Test func controlDefaultsAreClosed() {
+        let config = HearthConfig()
+        #expect(config.controlEnabled == false)
+        #expect(config.controlToken == nil)
+    }
 }

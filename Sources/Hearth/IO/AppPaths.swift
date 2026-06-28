@@ -30,9 +30,9 @@ enum AppPaths {
             .appendingPathComponent("Library/Logs/Hearth", isDirectory: true)
     }
 
-    /// ~/Library/Logs/Hearth/ollama.log
+    /// ~/Library/Logs/Hearth/runner.log
     static var runnerLogFile: URL {
-        logDirectory.appendingPathComponent("ollama.log")
+        logDirectory.appendingPathComponent("runner.log")
     }
 }
 

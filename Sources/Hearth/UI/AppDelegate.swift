@@ -10,7 +10,10 @@ import SupervisorCore
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var engine: SupervisorEngine!
-    private var runner: OllamaRunner!
+    private var coordinator: SupervisionCoordinator!
+    private var runner: (any Runner)!
+    private var controlServer: ControlServer?
+    private var config = HearthConfig()
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
 
@@ -24,14 +27,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSApp.setActivationPolicy(.accessory)
 
         let loaded = ConfigStore.load()
-        let config = loaded.config
+        config = loaded.config
         configNote = loaded.note
 
-        if !FileManager.default.fileExists(atPath: config.ollamaBinaryPath) {
-            binaryMissingPath = config.ollamaBinaryPath
+        // The binary only matters in managed mode, where we launch it.
+        if config.isManaged, !FileManager.default.fileExists(atPath: config.selectedBinaryPath) {
+            binaryMissingPath = config.selectedBinaryPath
         }
 
-        runner = config.makeOllamaRunner()
+        runner = config.makeRunner()
         engine = SupervisorEngine(
             clock: SystemClock(),
             processes: FoundationProcessController(logFileURL: AppPaths.runnerLogFile),
@@ -39,8 +43,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             runner: runner,
             power: IOKitPowerManager(),
             notifier: makeNotifier(config: config),
-            policy: config.policy()
+            policy: config.policy(),
+            managed: config.isManaged
         )
+        coordinator = SupervisionCoordinator(engine: engine)
 
         LocalNotifier.requestAuthorization()
 
@@ -50,24 +56,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             LoginItem.register()
         }
 
+        startControlServerIfEnabled()
         configureStatusItem()
         installSignalHandlers()
         subscribeToState()
         subscribeToEvents()
 
-        Task {
-            await engine.start()
-            await engine.runLoop()
-        }
+        Task { await coordinator.begin() }
+    }
+
+    private func startControlServerIfEnabled() {
+        guard config.controlEnabled, let token = config.controlToken, !token.isEmpty else { return }
+        controlServer = ControlServer(
+            host: config.controlHost,
+            port: config.controlPort,
+            token: token,
+            coordinator: coordinator
+        )
+        controlServer?.start()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        controlServer?.stop()
         // Best effort: release the power assertion and kill the child on quit.
         // Detached so it runs off the main actor while we briefly block here.
-        guard let engine else { return }
+        guard let coordinator else { return }
         let semaphore = DispatchSemaphore(value: 0)
         Task.detached {
-            await engine.stop()
+            await coordinator.end()
             semaphore.signal()
         }
         _ = semaphore.wait(timeout: .now() + 2)
@@ -151,7 +167,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
 
-        menu.addItem(disabled("Hearth: supervising \(runner.name)"))
+        let modeLabel = config.isManaged ? "managed" : "attached"
+        menu.addItem(disabled("Hearth: \(modeLabel) \(runner.name)"))
         menu.addItem(disabled(MenuFormat.statusLine(latestState, now: Date())))
 
         if let uptime = latestState.uptime(asOf: Date()) {
@@ -176,7 +193,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         if let path = binaryMissingPath {
             menu.addItem(.separator())
-            menu.addItem(disabled("\u{26A0} Ollama binary not found at \(path)"))
+            menu.addItem(disabled("\u{26A0} \(runner.name) binary not found at \(path)"))
+        }
+        if config.controlEnabled, controlServer != nil {
+            menu.addItem(.separator())
+            menu.addItem(disabled("Remote control: \(config.controlHost):\(config.controlPort)"))
         }
         if let note = configNote {
             menu.addItem(.separator())
@@ -229,18 +250,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - Actions
 
     @objc private func startTapped() {
-        Task {
-            await engine.start()
-            await engine.runLoop()
-        }
+        Task { await coordinator.begin() }
     }
 
     @objc private func stopTapped() {
-        Task { await engine.stop() }
+        Task { await coordinator.end() }
     }
 
     @objc private func restartTapped() {
-        Task { await engine.restart() }
+        Task { await coordinator.restart() }
     }
 
     @objc private func openLogsTapped() {

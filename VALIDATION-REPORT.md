@@ -119,6 +119,20 @@ The pre-spawn sweep decision is unit tested through the process-control seam
 (`respawnSweepsThePreviousRunnerBeforeSpawning`); the OS level group teardown is
 verified live by the orphan checks above.
 
+### Follow-up finding: inherited signal state
+
+A later run of the fake-runner smoke test surfaced a related defect the real
+Ollama had hidden. Hearth sets SIGTERM/SIGINT/SIGHUP to SIG_IGN for its own
+signal handling, and libdispatch leaves them blocked; both the ignore and the
+blocked mask survive `posix_spawn` and `exec`. So a runner that does not reset
+its own signal state started with Hearth's SIGTERM ignored and blocked, and would
+not die from the graceful teardown, only from the SIGKILL backup. Real Ollama (a
+Go binary that resets its signal mask at startup) hid this; the fake Python runner
+exposed it by surviving SIGTERM entirely. Fixed by spawning the runner with
+`POSIX_SPAWN_SETSIGDEF` (default dispositions) and `POSIX_SPAWN_SETSIGMASK` with an
+empty mask (no blocked signals). The fake runner now dies on a clean SIGTERM, and
+the real Ollama gate still passes.
+
 ## Real API fixtures
 
 Captured into `tests/Fixtures/real/` and reconciled with the parser. A

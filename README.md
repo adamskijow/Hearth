@@ -88,17 +88,27 @@ the release pipeline.
 
 ## Configure
 
-Configuration is a JSON file at:
+There are two ways to configure Hearth, and they edit the same file. Open
+**Preferences** from the menubar (or press Cmd-comma) for a form covering the
+runner, notifications, the control endpoint, log rotation, and the timing knobs.
+Or edit the JSON directly at:
 
 ```
 ~/Library/Application Support/Hearth/config.json
 ```
 
-On first launch, if the file is missing, Hearth writes a default template there
-and uses it. Every key is optional; anything you leave out falls back to the
-default below. A malformed file is reported in the menubar and the defaults are
-used rather than refusing to start. To point Hearth at a config somewhere else,
-set the `HEARTH_CONFIG` environment variable to that path.
+Either way, changes apply **without a restart**: the Preferences window's Save
+reloads live, and after editing the file by hand you choose "Reload Config" from
+the menu (or send the agent SIGHUP). Reloading briefly restarts the runner.
+
+On first launch, if the file is missing, Hearth writes a starter template with
+the runner binary auto detected (it probes Homebrew, the Ollama.app install, and
+your PATH), so first run does not fail on a wrong path. If the runner still is not
+found, the menubar says so and offers a one-click fix. Every key is optional;
+anything you leave out falls back to the default below. A malformed file is
+flagged loudly and your running setup is kept rather than silently reverted. To
+point Hearth at a config somewhere else, set the `HEARTH_CONFIG` environment
+variable to that path.
 
 Keys, defaults, and what they do:
 
@@ -318,7 +328,8 @@ sudo launchctl kickstart -k system/com.hearth.daemon
 Remove it with `sudo ./scripts/uninstall-daemon.sh`. In daemon mode Hearth runs
 as root, so its config lives at `/etc/hearth/config.json` (pointed to by the
 plist's `HEARTH_CONFIG`) and its logs at `/var/log/hearth.out.log` and
-`/var/log/hearth.err.log`.
+`/var/log/hearth.err.log`. After editing the config, apply it without restarting
+by sending SIGHUP: `sudo launchctl kill HUP system/com.hearth.daemon`.
 
 ## Exposing the runner
 

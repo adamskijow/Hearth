@@ -49,7 +49,7 @@ enum StatusCLI {
     private static func printControlStatus(_ s: [String: Any]) {
         print("Hearth status (via control endpoint)")
         if let phase = s["phase"] as? String { print(row("phase", phase)) }
-        if let up = s["uptimeSeconds"] as? Int { print(row("uptime", humanDuration(up))) }
+        if let up = s["uptimeSeconds"] as? Int { print(row("uptime", StatusText.duration(Double(up)))) }
         if let rc = s["restartCount"] as? Int { print(row("restarts", String(rc))) }
         if let cf = s["consecutiveFailures"] as? Int { print(row("failures", String(cf))) }
         if let models = s["models"] as? [String], !models.isEmpty {
@@ -59,7 +59,7 @@ enum StatusCLI {
         }
         if let pct = s["memoryUsedPercent"] as? Int { print(row("memory used", "\(pct)%")) }
         if let thermal = s["thermal"] as? String { print(row("thermal", thermal)) }
-        if let rss = s["runnerResidentBytes"] as? Int { print(row("runner RSS", humanBytes(rss))) }
+        if let rss = s["runnerResidentBytes"] as? Int { print(row("runner RSS", StatusText.byteString(Int64(rss)))) }
     }
 
     private static func printReducedStatus(config: HearthConfig) {
@@ -127,19 +127,6 @@ enum StatusCLI {
         guard label.count < width else { return "  \(label)  \(value)" }
         let padded = label.padding(toLength: width, withPad: " ", startingAt: 0)
         return "  \(padded)\(value)"
-    }
-
-    private static func humanDuration(_ seconds: Int) -> String {
-        let h = seconds / 3600, m = (seconds % 3600) / 60, s = seconds % 60
-        if h > 0 { return "\(h)h \(m)m" }
-        if m > 0 { return "\(m)m \(s)s" }
-        return "\(s)s"
-    }
-
-    private static func humanBytes(_ bytes: Int) -> String {
-        let mb = Double(bytes) / 1_048_576
-        if mb >= 1024 { return String(format: "%.1f GB", mb / 1024) }
-        return String(format: "%.0f MB", mb)
     }
 
     private static func isConnectionRefused(_ error: Error?) -> Bool {

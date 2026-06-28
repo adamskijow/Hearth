@@ -76,11 +76,15 @@ struct StatusTextTests {
 
     // MARK: describe
 
-    @Test func describesEvents() {
+    @Test func describesEveryEvent() {
         #expect(StatusText.describe(.started) == "Started")
-        #expect(StatusText.describe(.recovered) == "Recovered")
-        #expect(StatusText.describe(.restarted(attempt: 2)) == "Restarted (attempt 2)")
+        #expect(StatusText.describe(.becameHealthy) == "Became healthy")
+        #expect(StatusText.describe(.down(.wedged)) == "Down: wedged (alive but not answering)")
         #expect(StatusText.describe(.restartScheduled(attempt: 1, backoff: 4)) == "Restart scheduled (attempt 1, in 4s)")
+        #expect(StatusText.describe(.restarted(attempt: 2)) == "Restarted (attempt 2)")
+        #expect(StatusText.describe(.recovered) == "Recovered")
+        #expect(StatusText.describe(.enteredFailing(restartsInWindow: 3, window: 60)) == "Failing: 3 failures within 60s")
+        #expect(StatusText.describe(.modelsUpdated([ResidentModel(name: "qwen2.5:0.5b")])) == "Models: qwen2.5:0.5b")
         #expect(StatusText.describe(.stopped) == "Stopped")
     }
 }

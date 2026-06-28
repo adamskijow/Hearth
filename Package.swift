@@ -50,7 +50,10 @@ let package = Package(
         // The deployable menubar agent. Wires SupervisorCore to real I/O.
         .executableTarget(
             name: "Hearth",
-            dependencies: ["SupervisorCore"]
+            dependencies: ["SupervisorCore"],
+            // Info.plist is consumed by scripts/package-app.sh when assembling the
+            // .app bundle, not as an SPM resource.
+            exclude: ["Resources/Info.plist"]
         ),
         .testTarget(
             name: "SupervisorCoreTests",

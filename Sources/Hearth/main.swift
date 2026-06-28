@@ -1,5 +1,12 @@
 // SPDX-License-Identifier: MIT
 
-// Placeholder. The real menubar agent is wired in after SupervisorCore's tests
-// are green.
-print("Hearth")
+import AppKit
+
+// Hearth is a background menubar agent (LSUIElement). Bring up the shared
+// application first so the status bar is available, then install the delegate
+// and run as an accessory (no Dock icon, no main window).
+let application = NSApplication.shared
+let delegate = AppDelegate()
+application.delegate = delegate
+application.setActivationPolicy(.accessory)
+application.run()

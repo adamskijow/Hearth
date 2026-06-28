@@ -83,9 +83,28 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
 
         var attr: posix_spawnattr_t?
         posix_spawnattr_init(&attr)
-        // New process group led by the child (pgroup 0), and close every inherited
-        // fd except the ones we dup above, so none of Hearth's fds leak to ollama.
-        let flags = Int16(POSIX_SPAWN_SETPGROUP) | Int16(bitPattern: UInt16(POSIX_SPAWN_CLOEXEC_DEFAULT))
+        // Give the runner a clean signal state. Hearth sets SIGTERM/SIGINT/SIGHUP
+        // to SIG_IGN and libdispatch leaves them blocked for its signal sources;
+        // both survive across spawn and exec. Without resetting, the runner starts
+        // with our SIGTERM ignored or blocked and would not die from Hearth's
+        // graceful teardown, only the SIGKILL backup. Reset the relevant signals to
+        // their default disposition, and clear the inherited blocked mask entirely.
+        var resetSignals = sigset_t()
+        sigemptyset(&resetSignals)
+        sigaddset(&resetSignals, SIGTERM)
+        sigaddset(&resetSignals, SIGINT)
+        sigaddset(&resetSignals, SIGHUP)
+        posix_spawnattr_setsigdefault(&attr, &resetSignals)
+        var emptyMask = sigset_t()
+        sigemptyset(&emptyMask)
+        posix_spawnattr_setsigmask(&attr, &emptyMask)
+        // New process group led by the child (pgroup 0), signals reset and
+        // unblocked, and every inherited fd closed except the ones we dup, so none
+        // of Hearth's fds leak to the runner.
+        let flags = Int16(POSIX_SPAWN_SETPGROUP)
+            | Int16(POSIX_SPAWN_SETSIGDEF)
+            | Int16(POSIX_SPAWN_SETSIGMASK)
+            | Int16(bitPattern: UInt16(POSIX_SPAWN_CLOEXEC_DEFAULT))
         posix_spawnattr_setflags(&attr, flags)
         posix_spawnattr_setpgroup(&attr, 0)
 

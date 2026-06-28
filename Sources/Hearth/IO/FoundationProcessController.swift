@@ -150,6 +150,10 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
             return handle
         }
 
+        // Record this runner so a hard SIGKILL of Hearth can be recovered from on
+        // the next launch (the child is its own process group leader).
+        RunnerStateStore.record(pid: pid, pgid: pid)
+
         entry.stdoutRead.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty else { handle.readabilityHandler = nil; return }

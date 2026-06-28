@@ -21,6 +21,11 @@ final class HeadlessRunner {
         let mode = assembly.runner.name
         FileHandle.standardError.write(Data("Hearth headless: supervising \(mode)\n".utf8))
 
+        // Recover from a previous hard crash before starting a new runner.
+        if let swept = RunnerStateStore.sweepOrphan() {
+            FileHandle.standardError.write(Data("Hearth headless: \(swept)\n".utf8))
+        }
+
         assembly.controlServer?.start()
         installSignalHandlers()
 

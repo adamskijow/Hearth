@@ -2,8 +2,9 @@
 # SPDX-License-Identifier: MIT
 #
 # Integration gate: drive the REAL Hearth agent against a REAL `ollama serve`
-# (not the fake runner) and prove the five lifecycle scenarios. Exits non-zero on
-# any failed scenario. Captures live fixtures into tests/Fixtures/real/.
+# (not the fake runner) and prove the six lifecycle scenarios, including
+# hard-crash orphan recovery. Exits non-zero on any failed scenario. Captures
+# live fixtures into tests/Fixtures/real/.
 #
 # REQUIRES a real Ollama install with at least one small model pulled. Set
 # HEARTH_VALIDATE_MODEL to the model tag (default qwen2.5:0.5b).
@@ -36,8 +37,11 @@ cleanup() {
   pkill -f "ollama serve" 2>/dev/null || true
   pkill -f "llama-server" 2>/dev/null || true
   rm -rf "$WORK"
+  rm -f "$HOME/Library/Application Support/Hearth/runner-state.json"
 }
 trap cleanup EXIT
+
+STATE_FILE="$HOME/Library/Application Support/Hearth/runner-state.json"
 
 # --- helpers ---------------------------------------------------------------
 status_json() { curl -s --max-time 4 -H "Authorization: Bearer $TOKEN" "http://127.0.0.1:$CTRL_PORT/status"; }
@@ -227,6 +231,38 @@ else
   fail "attached: respawned a runner it does not own or stayed Healthy (phase $(phase), serve [$(serve_pid)])"
 fi
 stop_hearth
+hr
+
+# === Scenario 6: hard-crash orphan recovery ===
+echo "Scenario 6: a hard SIGKILL of Hearth leaks the runner group; the next launch sweeps it"
+rm -f "$STATE_FILE"
+start_hearth managed
+if wait_phase healthy 40; then pass "reached Healthy before the simulated crash (serve $(serve_pid))"; else fail "did not reach Healthy"; tail -5 "$WORK/hearth.log"; fi
+# load a model so a llama-server grandchild exists inside the group
+curl -s --max-time 90 "http://127.0.0.1:$PORT/api/generate" \
+  -d "{\"model\":\"$MODEL\",\"prompt\":\"hi\",\"stream\":false,\"keep_alive\":\"5m\"}" >/dev/null
+sleep 2
+CRASH_SERVE="$(serve_pid)"; CRASH_RUNNERS="$(runner_pids)"
+echo "  before crash: serve=$CRASH_SERVE llama-server=[$CRASH_RUNNERS]; state recorded: $([ -f "$STATE_FILE" ] && echo yes || echo no)"
+# hard kill Hearth itself: SIGKILL gives it no chance to run teardown
+kill -9 "$HEARTH_PID" 2>/dev/null; HEARTH_PID=""
+sleep 2
+if [ -n "$(ps -p "$CRASH_SERVE" -o pid= 2>/dev/null)" ]; then
+  pass "the hard kill orphaned the runner (serve $CRASH_SERVE survived, reparented to launchd)"
+else
+  fail "runner did not survive the hard kill; cannot exercise recovery"
+fi
+# relaunch: it should sweep the orphaned group before starting fresh
+start_hearth managed
+sleep 5
+SWEPT="no"; [ -z "$(ps -p "$CRASH_SERVE" -o pid= 2>/dev/null)" ] && SWEPT="yes"
+if [ "$SWEPT" = "yes" ]; then pass "next launch swept the orphaned serve $CRASH_SERVE"; else fail "orphaned serve $CRASH_SERVE survived the next launch"; fi
+LEAK=""
+for p in $CRASH_RUNNERS; do [ -z "$p" ] && continue; ps -p "$p" -o pid= >/dev/null 2>&1 && LEAK="$LEAK $p"; done
+if [ -z "$LEAK" ]; then pass "the orphaned llama-server grandchild was swept too"; else fail "orphaned llama-server survived:$LEAK"; fi
+grep -q "swept an orphaned runner" "$WORK/hearth.log" && pass "recovery was logged on the next launch" || fail "no recovery log line on the next launch"
+stop_hearth
+rm -f "$STATE_FILE"
 hr
 
 echo "RESULT: $PASS passed, $FAIL failed"

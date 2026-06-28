@@ -222,6 +222,14 @@ unified memory), and on teardown or restart Hearth kills the whole group, so a
 helper is never orphaned to leak memory across a restart loop. This is verified
 against a real Ollama in [VALIDATION-REPORT.md](VALIDATION-REPORT.md).
 
+That covers every exit Hearth gets to observe. The one it cannot observe is its
+own hard death: if Hearth is SIGKILLed, it never runs teardown and the group it
+spawned is left behind. To close that, Hearth records the runner's PID, process
+group, and start time to disk on every spawn, and on the next launch it sweeps
+any recorded group that is still alive before starting fresh. The start time is
+the safety check: a recycled PID belonging to a different process has a different
+start time, so Hearth never kills a bystander.
+
 In attached mode, Hearth does not spawn anything. It monitors a runner that
 something else started, by probing its readiness endpoint. It still holds the
 power assertion and notifies on transitions, but it never spawns or kills a
@@ -442,16 +450,21 @@ These are stated up front on purpose.
 - Validated against a real Ollama 0.30.11 (see
   [VALIDATION-REPORT.md](VALIDATION-REPORT.md)): cold start, external kill, the
   alive-but-wedged case via SIGSTOP, clean process group teardown with no
-  orphaned `llama-server`, and attached mode. LM Studio and mlx_lm are covered by
-  unit tests against captured payloads but have not yet been exercised against
-  live servers.
+  orphaned `llama-server`, attached mode, and hard-crash orphan recovery (a
+  SIGKILLed Hearth's leaked runner group is swept on the next launch). LM Studio
+  and mlx_lm are covered by unit tests against captured payloads but have not yet
+  been exercised against live servers.
 - Out of memory classification is a heuristic and is UNVERIFIED against a real
   out of memory kill, which could not be induced on high unified-memory hardware.
   The signatures are confirmed absent from a healthy Ollama's output (so they do
   not false-positive), but not confirmed to fire on a real Metal OOM.
 - If Hearth itself is killed without the chance to run its teardown (a hard
-  SIGKILL of the agent), the runner process group it spawned can be left running.
-  A clean quit, a SIGTERM, or a normal restart reaps the whole group.
+  SIGKILL of the agent), the runner process group it spawned keeps running until
+  Hearth next launches. On launch Hearth recognizes the leaked group by its
+  recorded PID and process start time and sweeps it before starting a fresh
+  runner, so the leak self-heals on restart rather than accumulating. The
+  residual gap is only the window between the crash and the next launch. A clean
+  quit, a SIGTERM, or a normal restart reaps the whole group immediately.
 - The power assertion prevents idle sleep, which keeps a Mac that would otherwise
   sleep on idle (a desktop, or a plugged in laptop with the lid open) awake and
   serving. Keeping a laptop serving with the lid closed on battery is a separate,

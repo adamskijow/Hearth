@@ -1,8 +1,10 @@
-# Hearth M4 validation report
+# Hearth validation report
 
 This records validating Hearth against a real Ollama for the first time (it had
-only ever run against a fake Python runner), the defect that surfaced, the fix,
-and what remains unverified. Evidence is raw command output, not prose claims.
+only ever run against a fake Python runner), the defects that surfaced, the fixes,
+and what remains unverified. M4 added scenarios 1 through 5 (lifecycle and process
+group teardown); M5 added scenario 6 (hard-crash orphan recovery). Evidence is raw
+command output, not prose claims.
 
 Reproduce with `./scripts/validate-real.sh` (requires a real Ollama and a small
 pulled model). The script exits non-zero on any failed scenario.
@@ -41,9 +43,11 @@ unified memory) orphaned and re-parented to launchd.
 | 3 | SIGSTOP wedge caught by readiness while PID alive; no orphan | partial: caught, but orphan | PASS |
 | 4 | Clean shutdown reaps the whole process group | FAIL (orphan) | PASS |
 | 5 | Attached mode: readiness only, no spawn or kill | PASS | PASS |
+| 6 | Hard-crash orphan recovery: a SIGKILLed Hearth's leaked group is swept on next launch | (leak) | PASS |
 
-The final run is 12 checks passed, 0 failed; the script exits 0. A run with any
+The final run is 17 checks passed, 0 failed; the script exits 0. A run with any
 failure exits 1 (the first run, before the fix, exited 1 with 3 failures).
+Scenario 6 was added in M5; scenarios 1 through 5 are the original M4 gate.
 
 ### Scenario 1 (real /api/ps parsing)
 
@@ -132,6 +136,34 @@ exposed it by surviving SIGTERM entirely. Fixed by spawning the runner with
 `POSIX_SPAWN_SETSIGDEF` (default dispositions) and `POSIX_SPAWN_SETSIGMASK` with an
 empty mask (no blocked signals). The fake runner now dies on a clean SIGTERM, and
 the real Ollama gate still passes.
+
+## M5: hard-crash orphan recovery (Scenario 6)
+
+The process-group teardown above covers every exit Hearth gets to observe. The
+one exit it cannot observe is its own hard death. If Hearth is SIGKILLed it never
+runs teardown, so the runner group it spawned is left behind, reparented to
+launchd, holding GPU and unified memory.
+
+Hearth now records the runner's PID, process group, and start time to
+`runner-state.json` on every spawn, and sweeps any still-alive recorded group on
+the next launch before starting fresh. The start time is the safety guard: a PID
+reused by an unrelated process has a different start time, so a recycled PID is
+never killed (`RunnerSweepTests`). Scenario 6 proves it end to end against real
+Ollama:
+
+```
+Scenario 6: a hard SIGKILL of Hearth leaks the runner group; the next launch sweeps it
+  PASS: reached Healthy before the simulated crash (serve 85114)
+  before crash: serve=85114 llama-server=[85131]; state recorded: yes
+  PASS: the hard kill orphaned the runner (serve 85114 survived, reparented to launchd)
+  PASS: next launch swept the orphaned serve 85114
+  PASS: the orphaned llama-server grandchild was swept too
+  PASS: recovery was logged on the next launch
+```
+
+The orphaned `llama-server` grandchild (85131) dies with the group because the
+sweep uses `killpg` on the recorded process group, not just the serve PID. The
+residual gap is only the window between the crash and the next launch.
 
 ## Real API fixtures
 

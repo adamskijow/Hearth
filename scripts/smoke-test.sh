@@ -21,11 +21,13 @@ CONFIG="$WORKDIR/config.json"
 RUNNER="$PWD/scripts/fake-runner.py"
 BIN=".build/debug/Hearth"
 
+STATE_FILE="$HOME/Library/Application Support/Hearth/runner-state.json"
 cleanup() {
   [ -n "${HEARTH_PID:-}" ] && kill -TERM "$HEARTH_PID" 2>/dev/null || true
   sleep 1
   pkill -f "fake-runner.py" 2>/dev/null || true
   rm -rf "$WORKDIR"
+  rm -f "$STATE_FILE"
 }
 trap cleanup EXIT
 
@@ -109,6 +111,25 @@ sleep 2
 if pgrep -f 'fake-runner.py' >/dev/null; then fail "child was orphaned"; fi
 if assertion_held; then fail "assertion still held"; fi
 pass "child stopped and assertion released"
+
+echo "6. A hard SIGKILL of Hearth orphans the child; the next launch sweeps it"
+rm -f "$STATE_FILE"
+HEARTH_CONFIG="$CONFIG" "$BIN" >"$WORKDIR/h-crash.log" 2>&1 &
+HEARTH_PID=$!
+sleep 4
+ORPHAN="$(pgrep -f 'fake-runner.py' | head -1 || true)"
+[ -n "$ORPHAN" ] || fail "no child before the simulated crash"
+kill -9 "$HEARTH_PID"; HEARTH_PID=""   # hard kill: Hearth gets no chance to tear down
+sleep 2
+ps -p "$ORPHAN" -o pid= >/dev/null 2>&1 || fail "child did not survive the hard kill (cannot test recovery)"
+HEARTH_CONFIG="$CONFIG" "$BIN" >"$WORKDIR/h-recover.log" 2>&1 &
+HEARTH_PID=$!
+sleep 4
+if ps -p "$ORPHAN" -o pid= >/dev/null 2>&1; then fail "orphaned child $ORPHAN survived the next launch"; fi
+pass "orphaned child $ORPHAN was swept on the next launch"
+kill -TERM "$HEARTH_PID"; HEARTH_PID=""
+sleep 1
+pkill -f "fake-runner.py" 2>/dev/null || true
 
 echo
 echo "All smoke checks passed."

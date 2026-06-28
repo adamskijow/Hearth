@@ -33,6 +33,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         LocalNotifier.requestAuthorization()
+        // Recover from a previous hard crash: sweep any leaked runner group before
+        // we start a new one.
+        if let swept = RunnerStateStore.sweepOrphan() {
+            LocalNotifier.post(title: "Hearth recovered a leaked runner", body: swept)
+        }
         configureStatusItem()
         installSignalHandlers()
         Task { await reloadFromDisk(firstRun: true) }

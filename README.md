@@ -407,6 +407,48 @@ plist's `HEARTH_CONFIG`) and its logs at `/var/log/hearth.out.log` and
 `/var/log/hearth.err.log`. After editing the config, apply it without restarting
 by sending SIGHUP: `sudo launchctl kill HUP system/com.hearth.daemon`.
 
+## Recovering a wedge a restart cannot
+
+Killing and respawning the runner clears a process-level wedge. Some hangs are at
+the driver or GPU level and survive a process restart; only a reboot of the Mac
+clears them (see Known limitations). On a headless box you would otherwise have to
+notice and reboot it by hand. The recovery ladder closes that gap as an opt-in
+last resort:
+
+```
+probe readiness
+  wedged?           -> kill and respawn the runner group   (clears most wedges)
+  still wedged long
+  after restarts
+  stopped helping?  -> reboot the Mac -> comes back, respawns the runner clean
+```
+
+Enable it in the config. It is off by default and needs Hearth running as root
+(the headless daemon above), because rebooting takes privileges:
+
+```json
+{ "rebootOnWedge": true }
+```
+
+The policy is deliberately paranoid, because an auto-reboot done wrong is a boot
+loop:
+
+- Off by default; nothing reboots unless you opt in.
+- Only after the runner was actually healthy this session. A wrong binary path or
+  a bad config never triggers a reboot, only a runner that was serving and then
+  wedged past what a restart can fix.
+- Only after a sustained failing streak (`rebootEscalateAfterSeconds`, default ten
+  minutes), so a brief blip never reboots.
+- Loop-protected. The reboot history is persisted across the reboots themselves;
+  if a reboot did not help (still wedged sooner than `rebootMinIntervalSeconds`)
+  or the daily cap (`rebootMaxPerDay`) is reached, Hearth stops and notifies you
+  rather than rebooting again.
+- Loud. ntfy fires before the reboot, and again if it gives up.
+
+A reboot cannot fix a hardware or thermal fault, so the give-up-and-notify path is
+the honest floor: if even a reboot does not restore the runner, a human needs to
+look.
+
 ## Exposing the runner
 
 Hearth keeps the runner alive but does not put it on the network. If you want to
@@ -549,7 +591,9 @@ These are stated up front on purpose.
   (a hung serve, a deadlocked model load, a wedged child); a GPU stuck at the
   driver level is beyond what any process supervisor can fix. On Apple Silicon and
   Metal a respawn clears more of these than on the discrete-GPU setups in those
-  reports, but it is not a cure-all.
+  reports, but it is not a cure-all. For a headless daemon, the opt-in reboot
+  escalation ("Recovering a wedge a restart cannot") can automate the reboot that
+  does clear it, with a loop guard and a give-up-and-notify floor.
 - Validated against a real Ollama 0.30.11 (see
   [VALIDATION-REPORT.md](VALIDATION-REPORT.md)): cold start, external kill, the
   alive-but-wedged case via SIGSTOP, clean process group teardown with no

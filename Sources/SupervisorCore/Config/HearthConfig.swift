@@ -45,6 +45,13 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     public var logMaxBytes: Int
     public var logKeepFiles: Int
 
+    // Reboot escalation: recover a driver/GPU-level wedge a process restart cannot.
+    // Off by default; needs Hearth running as root (the headless LaunchDaemon).
+    public var rebootOnWedge: Bool
+    public var rebootEscalateAfterSeconds: Double
+    public var rebootMinIntervalSeconds: Double
+    public var rebootMaxPerDay: Int
+
     public init(runner: String = "ollama",
                 mode: String = "managed",
                 ollamaBinaryPath: String = HearthConfig.defaultOllamaBinaryPath,
@@ -70,7 +77,11 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 controlPort: Int = 11435,
                 controlToken: String? = nil,
                 logMaxBytes: Int = 5_000_000,
-                logKeepFiles: Int = 3) {
+                logKeepFiles: Int = 3,
+                rebootOnWedge: Bool = false,
+                rebootEscalateAfterSeconds: Double = 600,
+                rebootMinIntervalSeconds: Double = 1800,
+                rebootMaxPerDay: Int = 3) {
         self.runner = runner
         self.mode = mode
         self.ollamaBinaryPath = ollamaBinaryPath
@@ -97,6 +108,10 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.controlToken = controlToken
         self.logMaxBytes = logMaxBytes
         self.logKeepFiles = logKeepFiles
+        self.rebootOnWedge = rebootOnWedge
+        self.rebootEscalateAfterSeconds = rebootEscalateAfterSeconds
+        self.rebootMinIntervalSeconds = rebootMinIntervalSeconds
+        self.rebootMaxPerDay = rebootMaxPerDay
     }
 
     /// Default Ollama binary location. Apple Silicon Homebrew installs to
@@ -144,6 +159,10 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         controlToken = try c.decodeIfPresent(String.self, forKey: .controlToken)
         logMaxBytes = try value(.logMaxBytes, defaults.logMaxBytes)
         logKeepFiles = try value(.logKeepFiles, defaults.logKeepFiles)
+        rebootOnWedge = try value(.rebootOnWedge, defaults.rebootOnWedge)
+        rebootEscalateAfterSeconds = try value(.rebootEscalateAfterSeconds, defaults.rebootEscalateAfterSeconds)
+        rebootMinIntervalSeconds = try value(.rebootMinIntervalSeconds, defaults.rebootMinIntervalSeconds)
+        rebootMaxPerDay = try value(.rebootMaxPerDay, defaults.rebootMaxPerDay)
     }
 
     // MARK: - Derived
@@ -177,6 +196,17 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     /// The runner log rotation policy these settings describe.
     public func logRotationPolicy() -> LogRotationPolicy {
         LogRotationPolicy(maxBytes: logMaxBytes, keepFiles: logKeepFiles)
+    }
+
+    /// The reboot escalation policy these settings describe. Clamped to safe
+    /// floors so a misconfiguration cannot make Hearth reboot-happy.
+    public func rebootPolicy() -> RebootPolicy {
+        RebootPolicy(
+            enabled: rebootOnWedge,
+            escalateAfterSeconds: max(60, rebootEscalateAfterSeconds),
+            minIntervalSeconds: max(300, rebootMinIntervalSeconds),
+            maxPerDay: max(1, rebootMaxPerDay)
+        )
     }
 
     /// The runner these settings select.

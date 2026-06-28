@@ -66,6 +66,20 @@ endpoint with TLS.
 | `logMaxBytes` | int | `5000000` | Rotate `runner.log` once it grows past this many bytes. `0` disables rotation. |
 | `logKeepFiles` | int | `3` | How many rotated log files to keep before deleting the oldest. |
 
+## Reboot escalation
+
+The last rung of the recovery ladder, for a wedge a process restart cannot clear
+(a driver/GPU-level hang). Off by default, and effective only when Hearth runs as
+root (the headless LaunchDaemon), since rebooting needs privileges. See the
+README's "Recovering a wedge a restart cannot" for the full safety story.
+
+| Key | Type | Default | Meaning |
+|-----|------|---------|---------|
+| `rebootOnWedge` | bool | `false` | Enable the reboot rung. When off, Hearth never reboots. |
+| `rebootEscalateAfterSeconds` | number | `600` | How long the runner must stay failing (process restarts not helping) before a reboot is considered. Clamped to at least 60. |
+| `rebootMinIntervalSeconds` | number | `1800` | Minimum time between recovery reboots. A reboot sooner than this that did not help means Hearth stops and notifies instead of looping. Clamped to at least 300. |
+| `rebootMaxPerDay` | int | `3` | Most recovery reboots allowed in a rolling 24 hours. Clamped to at least 1. |
+
 ## Example
 
 A minimal managed-Ollama config with phone control over Tailscale:

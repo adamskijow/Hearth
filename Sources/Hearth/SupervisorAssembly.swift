@@ -12,6 +12,7 @@ struct SupervisorAssembly {
     let metricsProvider: SystemMetricsProvider
     let processController: FoundationProcessController
     let runner: any Runner
+    let notifier: Notifier
 
     /// `includeLocalNotifications` is false in headless mode, where there is no
     /// GUI session for the local Notification Center to reach.
@@ -24,6 +25,7 @@ struct SupervisorAssembly {
             processController?.latestResidentBytes()
         })
         let runner = config.makeRunner()
+        let notifier = makeNotifier(config: config, includeLocal: includeLocalNotifications)
 
         let engine = SupervisorEngine(
             clock: SystemClock(),
@@ -31,7 +33,7 @@ struct SupervisorAssembly {
             http: URLSessionHTTPClient(),
             runner: runner,
             power: IOKitPowerManager(),
-            notifier: makeNotifier(config: config, includeLocal: includeLocalNotifications),
+            notifier: notifier,
             policy: config.policy(),
             managed: config.isManaged
         )
@@ -54,7 +56,8 @@ struct SupervisorAssembly {
             controlServer: controlServer,
             metricsProvider: metricsProvider,
             processController: processController,
-            runner: runner
+            runner: runner,
+            notifier: notifier
         )
     }
 

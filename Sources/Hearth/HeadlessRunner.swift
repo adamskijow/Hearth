@@ -8,10 +8,12 @@ import SupervisorCore
 /// Notification Center (there is no session to show it); ntfy still reaches a
 /// phone, and the control endpoint and the power assertion work the same.
 final class HeadlessRunner {
+    private let config: HearthConfig
     private let assembly: SupervisorAssembly
     private var signalSources: [DispatchSourceSignal] = []
 
     init(config: HearthConfig) {
+        self.config = config
         assembly = .make(config: config, includeLocalNotifications: false)
     }
 
@@ -33,6 +35,23 @@ final class HeadlessRunner {
         // the history; nothing else consumes the event stream when headless.
         let events = assembly.engine.events
         Task { for await event in events { EventLogStore.append(event) } }
+
+        // Reboot escalation (opt-in, root only): when a wedge survives process
+        // restarts for long enough, escalate to a reboot. Only wired headless,
+        // since the GUI app is not root and cannot reboot.
+        let rebootPolicy = config.rebootPolicy()
+        if rebootPolicy.enabled {
+            let notifier = assembly.notifier
+            let escalator = RebootEscalator(policy: rebootPolicy, system: SystemController()) { message in
+                FileHandle.standardError.write(Data("Hearth headless: \(message)\n".utf8))
+                Task.detached {
+                    await notifier.notify(HearthNotification(
+                        level: .critical, title: "Hearth recovery", body: message, event: .down(.wedged)))
+                }
+            }
+            let states = assembly.engine.states
+            Task { for await state in states { escalator.observe(state) } }
+        }
 
         let coordinator = assembly.coordinator
         Task { await coordinator.begin() }

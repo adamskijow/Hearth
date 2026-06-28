@@ -8,6 +8,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- Reboot escalation, the last rung of the recovery ladder: when a wedge survives
+  process restarts long enough (a driver/GPU-level hang that only a reboot
+  clears), Hearth can reboot the Mac and come back with the runner respawned
+  clean. Opt-in (`rebootOnWedge`), root-only (the headless daemon), and paranoid:
+  only after the runner was healthy this session, only after a sustained failing
+  streak, with the reboot history persisted across reboots so a reboot that did
+  not help, or a daily cap, stops the loop and notifies a human instead. The
+  decision logic is pure and fully unit tested; the actual reboot is a tiny seam.
 - `hearth events` and a persisted, line-capped `events.log`, so the supervisor's
   own history (down with the cause, restart scheduled, recovered, crash loop)
   survives a restart and is readable from the terminal, the menu, and the tail in

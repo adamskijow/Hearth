@@ -41,6 +41,10 @@ xcrun notarytool submit "$ZIP" --keychain-profile "$HEARTH_NOTARY_PROFILE" --wai
 
 echo "Stapling and re-zipping the stapled bundle..."
 xcrun stapler staple "$APP"
+
+echo "Verifying Gatekeeper acceptance (offline, via the stapled ticket)..."
+spctl --assess --type exec --verbose=4 "$APP"
+
 rm -f "$ZIP"
 ditto -c -k --keepParent "$APP" "$ZIP"
 

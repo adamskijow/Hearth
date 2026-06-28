@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+#
+# Local CI gate. Runs before every `git push` once installed with
+# scripts/install-hooks.sh. Runs the headless-safe stages (build, tests, lint);
+# the desktop and Ollama gates stay manual. Bypass a single push with
+# `git push --no-verify`.
+exec "$(git rev-parse --show-toplevel)/scripts/ci.sh"

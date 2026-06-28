@@ -384,9 +384,9 @@ metrics formatting, and tailnet address recognition.
 For end to end checks against a live server, `scripts/validate-real.sh` drives the
 real agent against a real `ollama serve` and proves the lifecycle scenarios
 (cold start, external kill, the SIGSTOP wedge, process group teardown with no
-orphans, attached mode), exiting non-zero on any failure. It needs a real Ollama;
-its findings and the fix it drove are written up in
-[VALIDATION-REPORT.md](VALIDATION-REPORT.md).
+orphans, attached mode, and hard-crash orphan recovery), exiting non-zero on any
+failure. It needs a real Ollama; its findings and the fix it drove are written up
+in [VALIDATION-REPORT.md](VALIDATION-REPORT.md).
 
 Run the tests with:
 
@@ -406,8 +406,13 @@ Testing framework is not on the default search path. The script detects the righ
 directory for both the Command Line Tools and full Xcode layouts and passes it.
 On a machine with full Xcode, a plain `swift test` also works.
 
-Continuous integration builds the package and runs this suite on every push and
-pull request (see `.github/workflows/ci.yml`).
+There is no hosted CI; the gate runs on your own machine. `make ci` (or
+`./scripts/ci.sh`) builds debug and release, runs the unit suite, and lints (an
+SPDX header on every Swift source, and the no em dash rule). Install the pre-push
+hook once with `make hooks`, which points `core.hooksPath` at the in-repo
+`scripts/hooks`, and that gate runs before every push; bypass a single push with
+`git push --no-verify`. Pass `--smoke` or `--real` to `scripts/ci.sh` to also run
+the desktop and Ollama gates described below.
 
 ### Trying it without a runner
 
@@ -439,9 +444,10 @@ export HEARTH_NOTARY_PROFILE="HearthNotary"   # from xcrun notarytool store-cred
 ./scripts/release.sh
 ```
 
-`.github/workflows/release.yml` does the same on a `v*` tag, importing the
-certificate and notarization key from repository secrets and publishing a GitHub
-release with the artifact. It runs only once those secrets are configured.
+Releasing is local too: run `scripts/release.sh` on your Mac, attach the printed
+`Hearth-<version>.zip` to a GitHub release, then update `Casks/hearth.rb` with the
+new `version` and `sha256`. Once published from a tap, install with
+`brew install --cask adamskijow/tap/hearth`.
 
 ## Known limitations
 

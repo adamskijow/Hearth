@@ -94,10 +94,12 @@ struct PreferencesView: View {
                 Text("LM Studio").tag("lmstudio")
                 Text("mlx_lm").tag("mlx")
             }
+            .help("Which local LLM server Hearth supervises.")
             Picker("Mode", selection: $model.config.mode) {
                 Text("Managed (Hearth launches it)").tag("managed")
                 Text("Attached (monitor only)").tag("attached")
             }
+            .help("Managed: Hearth starts and restarts the runner. Attached: Hearth only watches a runner you start yourself.")
             HStack {
                 TextField("Binary path", text: binaryPath)
                 Button("Detect") {
@@ -110,65 +112,109 @@ struct PreferencesView: View {
                 }
                 Button("Choose\u{2026}") { chooseBinary() }
             }
+            .help("Path to the runner executable. Detect searches the usual install locations.")
             TextField("Host", text: $model.config.host)
+                .help("Address the runner serves on. 127.0.0.1 keeps it on this machine.")
             TextField("Port", value: $model.config.port, format: .number.grouping(.never))
+                .help("Port the runner serves on. Ollama's default is 11434.")
         }
     }
 
     private var notificationsSection: some View {
         Section("Notifications") {
             Toggle("Local notifications", isOn: $model.config.localNotifications)
+                .help("Show a macOS notification when the runner goes down or recovers.")
             TextField("ntfy topic (for phone alerts)", text: optional(\.ntfyTopic))
+                .help("Subscribe to this topic in the ntfy app to get alerts on your phone. Leave blank to skip.")
             TextField("ntfy server", text: $model.config.ntfyServer)
+                .help("ntfy server URL. The default is the public ntfy.sh.")
             Button("Send test notification") { sendTest() }
         }
     }
 
     private var controlSection: some View {
-        Section("Remote control") {
+        Section {
             Toggle("Enable control endpoint", isOn: $model.config.controlEnabled)
+                .help("Serve a small HTTP API so a phone can check status and start, stop, or restart the runner.")
+                .onChange(of: model.config.controlEnabled) { _, enabled in
+                    // The endpoint refuses to start without a token, so make one
+                    // the moment it is enabled rather than failing silently.
+                    if enabled, (model.config.controlToken ?? "").isEmpty {
+                        model.config.controlToken = Self.randomToken()
+                        model.status = "Generated a control token."
+                    }
+                }
             TextField("Bind host", text: $model.config.controlHost)
+                .help("Address the control endpoint listens on. Use a private or Tailscale address.")
             TextField("Port", value: $model.config.controlPort, format: .number.grouping(.never))
+                .help("Port for the control endpoint.")
             HStack {
                 TextField("Bearer token", text: optional(\.controlToken))
                 Button("Generate") { model.config.controlToken = Self.randomToken() }
             }
+            .help("Required secret on every control request. Generate makes a random one.")
             Button("Copy phone URL") { copyPhoneURL() }
+        } header: {
+            Text("Remote control")
+        } footer: {
+            Text("Serve this on a private network only (a Tailscale address is ideal), never the open internet.")
         }
     }
 
     private var loggingSection: some View {
         Section("Runner log") {
             TextField("Max bytes before rotating", value: $model.config.logMaxBytes, format: .number.grouping(.never))
+                .help("Rotate the runner log once it grows past this many bytes.")
             TextField("Rotated files to keep", value: $model.config.logKeepFiles, format: .number.grouping(.never))
+                .help("How many rotated log files to keep before deleting the oldest.")
         }
     }
 
     private var advancedSection: some View {
-        Section("Advanced (timing, seconds)") {
-            number("Probe interval", $model.config.probeIntervalSeconds)
-            number("Probe timeout", $model.config.probeTimeoutSeconds)
-            number("Startup grace", $model.config.startupGraceSeconds)
-            number("Initial backoff", $model.config.initialBackoffSeconds)
-            number("Backoff multiplier", $model.config.backoffMultiplier)
-            number("Max backoff", $model.config.maxBackoffSeconds)
-            HStack {
-                Text("Crash loop threshold")
-                Spacer()
-                TextField("", value: $model.config.crashLoopThreshold, format: .number.grouping(.never))
-                    .frame(width: 90).multilineTextAlignment(.trailing)
-            }
-            number("Crash loop window", $model.config.crashLoopWindowSeconds)
-            number("Failing retry interval", $model.config.failingProbeIntervalSeconds)
+        Section {
+            number("Probe interval", $model.config.probeIntervalSeconds,
+                   help: "How often to check the runner's health while it is up.")
+            number("Probe timeout", $model.config.probeTimeoutSeconds,
+                   help: "How long a health probe waits before it counts as a failure.")
+            number("Startup grace", $model.config.startupGraceSeconds,
+                   help: "How long to allow for the runner to come up before treating it as failed.")
+            number("Initial backoff", $model.config.initialBackoffSeconds,
+                   help: "Wait before the first restart attempt.")
+            number("Backoff multiplier", $model.config.backoffMultiplier,
+                   help: "Each failed restart multiplies the wait by this.")
+            number("Max backoff", $model.config.maxBackoffSeconds,
+                   help: "Upper limit on the wait between restarts.")
+            numberInt("Crash loop threshold", $model.config.crashLoopThreshold,
+                      help: "Restarts within the window that trip the crash-loop brake.")
+            number("Crash loop window", $model.config.crashLoopWindowSeconds,
+                   help: "Time window for counting restarts toward the crash-loop brake.")
+            number("Failing retry interval", $model.config.failingProbeIntervalSeconds,
+                   help: "How often to retry while in the crash-loop (failing) state.")
+        } header: {
+            Text("Advanced (timing, seconds)")
+        } footer: {
+            Text("The defaults suit most setups. Lower the probe interval to notice failures sooner.")
         }
     }
 
-    private func number(_ label: String, _ binding: Binding<Double>) -> some View {
+    private func number(_ label: String, _ binding: Binding<Double>, help: String) -> some View {
         HStack {
             Text(label)
             Spacer()
-            TextField("", value: binding, format: .number).frame(width: 90).multilineTextAlignment(.trailing)
+            TextField("", value: binding, format: .number.grouping(.never))
+                .frame(width: 90).multilineTextAlignment(.trailing)
         }
+        .help(help)
+    }
+
+    private func numberInt(_ label: String, _ binding: Binding<Int>, help: String) -> some View {
+        HStack {
+            Text(label)
+            Spacer()
+            TextField("", value: binding, format: .number.grouping(.never))
+                .frame(width: 90).multilineTextAlignment(.trailing)
+        }
+        .help(help)
     }
 
     // MARK: Bindings and actions

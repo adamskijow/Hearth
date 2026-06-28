@@ -9,8 +9,8 @@ struct SpawnError: Error { let code: Int32 }
 
 /// The real process controller. It spawns the runner with `posix_spawn` in a NEW
 /// process group (the child becomes the group leader), captures stdout and stderr
-/// to a log file, keeps a ring of recent stderr for exit classification, and on
-/// teardown kills the WHOLE group with `killpg`.
+/// to a size rotated log file, keeps a ring of recent stderr for exit
+/// classification, and on teardown kills the WHOLE group with `killpg`.
 ///
 /// The process group matters: `ollama serve` forks a separate `llama-server`
 /// child that holds GPU and unified memory. Signalling only the serve PID would
@@ -27,7 +27,6 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
         let stderrRead: FileHandle
         var stderrRing: [String] = []
         var partialStderr = Data()
-        var logHandle: FileHandle?
         var exit: ProcessExit?
         var reaped = false
         init(pid: pid_t, pgid: pid_t, stdoutRead: FileHandle, stderrRead: FileHandle) {
@@ -42,18 +41,28 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
     private let logFileURL: URL
     private let maxStderrLines: Int
     private let killGraceSeconds: Double
+    private let rotation: LogRotationPolicy
     private var nextRaw: UInt64 = 1
     private var entries: [ProcessHandleID: Entry] = [:]
     private var latestPID: pid_t?
 
-    init(logFileURL: URL, maxStderrLines: Int = 200, killGraceSeconds: Double = 3) {
+    // One shared, size rotated log for the runner's stdout and stderr.
+    private var logHandle: FileHandle?
+    private var logBytes: Int = 0
+
+    init(logFileURL: URL,
+         maxStderrLines: Int = 200,
+         killGraceSeconds: Double = 3,
+         rotation: LogRotationPolicy = LogRotationPolicy(maxBytes: 5_000_000, keepFiles: 3)) {
         self.logFileURL = logFileURL
         self.maxStderrLines = maxStderrLines
         self.killGraceSeconds = killGraceSeconds
+        self.rotation = rotation
         try? FileManager.default.createDirectory(
             at: logFileURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
+        openLogLocked()
     }
 
     func spawn(_ spec: ProcessSpec) throws -> ProcessHandleID {
@@ -115,16 +124,17 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
         let id: ProcessHandleID = lock.withLock {
             let handle = ProcessHandleID(raw: nextRaw)
             nextRaw += 1
-            entry.logHandle = openLog(for: spec)
             entries[handle] = entry
             latestPID = pid
+            let banner = "\n=== spawn \(spec.executableURL.lastPathComponent) \(spec.arguments.joined(separator: " ")) ===\n"
+            appendLogLocked(Data(banner.utf8))
             return handle
         }
 
         entry.stdoutRead.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty else { handle.readabilityHandler = nil; return }
-            self?.writeLog(id, data: data)
+            self?.lock.withLock { self?.appendLogLocked(data) }
         }
         entry.stderrRead.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
@@ -150,7 +160,6 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
             if result == 0 {
                 return ProcessStatus(isAlive: true, exit: nil, recentStderr: entry.stderrRing)
             }
-            // Exited (or already gone): record the exit and stop reading.
             let exit = result == entry.pid ? Self.decode(raw) : ProcessExit(code: 0, wasSignaled: true, signal: SIGKILL)
             entry.exit = exit
             entry.reaped = true
@@ -185,7 +194,7 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
         return Int64(info.pti_resident_size)
     }
 
-    // MARK: - Helpers
+    // MARK: - Exit decoding
 
     /// Decode a waitpid status into our exit model. Mirrors WIFEXITED / WTERMSIG.
     private static func decode(_ status: Int32) -> ProcessExit {
@@ -204,30 +213,14 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
         }
         try? entry.stdoutRead.close()
         try? entry.stderrRead.close()
-        try? entry.logHandle?.close()
-        entry.logHandle = nil
     }
 
-    private func openLog(for spec: ProcessSpec) -> FileHandle? {
-        let fm = FileManager.default
-        if !fm.fileExists(atPath: logFileURL.path) {
-            fm.createFile(atPath: logFileURL.path, contents: nil)
-        }
-        guard let handle = try? FileHandle(forWritingTo: logFileURL) else { return nil }
-        handle.seekToEndOfFile()
-        let banner = "\n=== spawn \(spec.executableURL.lastPathComponent) \(spec.arguments.joined(separator: " ")) ===\n"
-        handle.write(Data(banner.utf8))
-        return handle
-    }
-
-    private func writeLog(_ id: ProcessHandleID, data: Data) {
-        lock.withLock { entries[id]?.logHandle?.write(data) }
-    }
+    // MARK: - stderr ring
 
     private func ingestStderr(_ id: ProcessHandleID, data: Data) {
         lock.withLock {
+            appendLogLocked(data)
             guard let entry = entries[id] else { return }
-            entry.logHandle?.write(data)
             entry.partialStderr.append(data)
             while let newline = entry.partialStderr.firstIndex(of: 0x0A) {
                 let lineData = entry.partialStderr[entry.partialStderr.startIndex..<newline]
@@ -240,6 +233,45 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
                 }
             }
         }
+    }
+
+    // MARK: - Log writing and rotation (lock held by callers)
+
+    private func openLogLocked() {
+        let fm = FileManager.default
+        if !fm.fileExists(atPath: logFileURL.path) {
+            fm.createFile(atPath: logFileURL.path, contents: nil)
+        }
+        logHandle = try? FileHandle(forWritingTo: logFileURL)
+        logHandle?.seekToEndOfFile()
+        let attributes = try? fm.attributesOfItem(atPath: logFileURL.path)
+        logBytes = (attributes?[.size] as? Int) ?? 0
+    }
+
+    private func appendLogLocked(_ data: Data) {
+        logHandle?.write(data)
+        logBytes += data.count
+        if rotation.shouldRotate(currentBytes: logBytes) {
+            rotateLocked()
+        }
+    }
+
+    private func rotateLocked() {
+        let fm = FileManager.default
+        try? logHandle?.close()
+        logHandle = nil
+        for step in rotation.steps(forBase: logFileURL.path) {
+            switch step {
+            case .delete(let path):
+                try? fm.removeItem(atPath: path)
+            case .move(let from, let to):
+                guard fm.fileExists(atPath: from) else { continue }
+                try? fm.removeItem(atPath: to)
+                try? fm.moveItem(atPath: from, toPath: to)
+            }
+        }
+        openLogLocked()
+        logBytes = 0
     }
 
     private func withCStringArray<R>(_ values: [String], _ body: (UnsafePointer<UnsafeMutablePointer<CChar>?>) -> R) -> R {

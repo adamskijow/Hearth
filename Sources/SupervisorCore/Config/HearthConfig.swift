@@ -41,6 +41,10 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     public var controlPort: Int
     public var controlToken: String?
 
+    // Runner log rotation
+    public var logMaxBytes: Int
+    public var logKeepFiles: Int
+
     public init(runner: String = "ollama",
                 mode: String = "managed",
                 ollamaBinaryPath: String = HearthConfig.defaultOllamaBinaryPath,
@@ -64,7 +68,9 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 controlEnabled: Bool = false,
                 controlHost: String = "127.0.0.1",
                 controlPort: Int = 11435,
-                controlToken: String? = nil) {
+                controlToken: String? = nil,
+                logMaxBytes: Int = 5_000_000,
+                logKeepFiles: Int = 3) {
         self.runner = runner
         self.mode = mode
         self.ollamaBinaryPath = ollamaBinaryPath
@@ -89,6 +95,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.controlHost = controlHost
         self.controlPort = controlPort
         self.controlToken = controlToken
+        self.logMaxBytes = logMaxBytes
+        self.logKeepFiles = logKeepFiles
     }
 
     /// Default Ollama binary location. Apple Silicon Homebrew installs to
@@ -134,6 +142,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         controlHost = try value(.controlHost, defaults.controlHost)
         controlPort = try value(.controlPort, defaults.controlPort)
         controlToken = try c.decodeIfPresent(String.self, forKey: .controlToken)
+        logMaxBytes = try value(.logMaxBytes, defaults.logMaxBytes)
+        logKeepFiles = try value(.logKeepFiles, defaults.logKeepFiles)
     }
 
     // MARK: - Derived
@@ -158,6 +168,11 @@ public struct HearthConfig: Codable, Sendable, Equatable {
             crashLoopWindow: crashLoopWindowSeconds,
             failingProbeInterval: failingProbeIntervalSeconds
         )
+    }
+
+    /// The runner log rotation policy these settings describe.
+    public func logRotationPolicy() -> LogRotationPolicy {
+        LogRotationPolicy(maxBytes: logMaxBytes, keepFiles: logKeepFiles)
     }
 
     /// The runner these settings select.

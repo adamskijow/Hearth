@@ -16,7 +16,10 @@ struct SupervisorAssembly {
     /// `includeLocalNotifications` is false in headless mode, where there is no
     /// GUI session for the local Notification Center to reach.
     static func make(config: HearthConfig, includeLocalNotifications: Bool) -> SupervisorAssembly {
-        let processController = FoundationProcessController(logFileURL: AppPaths.runnerLogFile)
+        let processController = FoundationProcessController(
+            logFileURL: AppPaths.runnerLogFile,
+            rotation: config.logRotationPolicy()
+        )
         let metricsProvider = SystemMetricsProvider(runnerResidentBytes: { [weak processController] in
             processController?.latestResidentBytes()
         })

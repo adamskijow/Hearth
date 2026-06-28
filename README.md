@@ -157,6 +157,13 @@ Remote control
 - `controlToken` (default `null`): the bearer token every control request must
   carry. The endpoint refuses to start without one.
 
+Runner log
+
+- `logMaxBytes` (default `5000000`): rotate the runner log once it reaches this
+  many bytes. Zero disables rotation.
+- `logKeepFiles` (default `3`): how many rotated logs to keep (`runner.log.1` ...
+  `runner.log.N`); the oldest is deleted.
+
 A complete example:
 
 ```json
@@ -182,7 +189,9 @@ A complete example:
   "controlEnabled": true,
   "controlHost": "127.0.0.1",
   "controlPort": 11435,
-  "controlToken": "a-long-unguessable-secret"
+  "controlToken": "a-long-unguessable-secret",
+  "logMaxBytes": 5000000,
+  "logKeepFiles": 3
 }
 ```
 
@@ -196,6 +205,12 @@ Hearth's default is managed mode. It spawns the runner child itself and owns it,
 setting the child's environment at launch. Because Hearth defines the child's
 environment, `OLLAMA_HOST` is pinned to your configured host and port by
 construction, which is what sidesteps the launchd env trap.
+
+The runner is spawned in its own process group. That matters because a runner
+forks helpers (an Ollama serve forks a separate `llama-server` that holds GPU and
+unified memory), and on teardown or restart Hearth kills the whole group, so a
+helper is never orphaned to leak memory across a restart loop. This is verified
+against a real Ollama in [VALIDATION-REPORT.md](VALIDATION-REPORT.md).
 
 In attached mode, Hearth does not spawn anything. It monitors a runner that
 something else started, by probing its readiness endpoint. It still holds the
@@ -330,9 +345,10 @@ reading a clock, so their behavior is fully determined by their inputs. The
 runner specifics (Ollama, LM Studio, mlx_lm), the control endpoint's routing and
 auth, and the metrics and tailnet helpers also live here as pure, tested code.
 
-`Hearth` is the executable: the menubar agent that wires the core to real
-`Foundation.Process`, URLSession, IOKit, the Network framework, SMAppService, and
-UserNotifications, and renders the published state.
+`Hearth` is the executable: the menubar agent that wires the core to real process
+spawning (`posix_spawn` in a dedicated process group), URLSession, IOKit, the
+Network framework, SMAppService, and UserNotifications, and renders the published
+state.
 
 ## Testing
 
@@ -342,8 +358,16 @@ the clock, process control, and HTTP. There is no real runner and no real
 a hung but alive runner, exponential backoff timing, a crash loop entering the
 failing state without thrashing, recovery back to healthy, out of memory versus
 crash classification, attached mode never spawning or killing, the runners' spec
-and parsing, the control endpoint's routing and auth, the metrics formatting, and
-tailnet address recognition.
+and parsing (including a real Ollama `/api/ps` capture), the pre-spawn process
+group sweep, log rotation decisions, the control endpoint's routing and auth, the
+metrics formatting, and tailnet address recognition.
+
+For end to end checks against a live server, `scripts/validate-real.sh` drives the
+real agent against a real `ollama serve` and proves the lifecycle scenarios
+(cold start, external kill, the SIGSTOP wedge, process group teardown with no
+orphans, attached mode), exiting non-zero on any failure. It needs a real Ollama;
+its findings and the fix it drove are written up in
+[VALIDATION-REPORT.md](VALIDATION-REPORT.md).
 
 Run the tests with:
 
@@ -404,6 +428,19 @@ release with the artifact. It runs only once those secrets are configured.
 
 These are stated up front on purpose.
 
+- Validated against a real Ollama 0.30.11 (see
+  [VALIDATION-REPORT.md](VALIDATION-REPORT.md)): cold start, external kill, the
+  alive-but-wedged case via SIGSTOP, clean process group teardown with no
+  orphaned `llama-server`, and attached mode. LM Studio and mlx_lm are covered by
+  unit tests against captured payloads but have not yet been exercised against
+  live servers.
+- Out of memory classification is a heuristic and is UNVERIFIED against a real
+  out of memory kill, which could not be induced on high unified-memory hardware.
+  The signatures are confirmed absent from a healthy Ollama's output (so they do
+  not false-positive), but not confirmed to fire on a real Metal OOM.
+- If Hearth itself is killed without the chance to run its teardown (a hard
+  SIGKILL of the agent), the runner process group it spawned can be left running.
+  A clean quit, a SIGTERM, or a normal restart reaps the whole group.
 - The power assertion prevents idle sleep, which keeps a Mac that would otherwise
   sleep on idle (a desktop, or a plugged in laptop with the lid open) awake and
   serving. Keeping a laptop serving with the lid closed on battery is a separate,

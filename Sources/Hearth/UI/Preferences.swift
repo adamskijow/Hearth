@@ -124,7 +124,8 @@ struct PreferencesView: View {
         Section("Notifications") {
             Toggle("Local notifications", isOn: $model.config.localNotifications)
                 .help("Show a macOS notification when the runner goes down or recovers.")
-            TextField("ntfy topic (for phone alerts)", text: optional(\.ntfyTopic))
+            TextField("ntfy topic (for phone alerts)", text: optional(\.ntfyTopic),
+                      prompt: Text("e.g. hearth-alerts-7f3a (click here and type)"))
                 .help("Subscribe to this topic in the ntfy app to get alerts on your phone. Leave blank to skip.")
             TextField("ntfy server", text: $model.config.ntfyServer)
                 .help("ntfy server URL. The default is the public ntfy.sh.")
@@ -149,7 +150,8 @@ struct PreferencesView: View {
             TextField("Port", value: $model.config.controlPort, format: .number.grouping(.never))
                 .help("Port for the control endpoint.")
             HStack {
-                TextField("Bearer token", text: optional(\.controlToken))
+                TextField("Bearer token", text: optional(\.controlToken),
+                          prompt: Text("click Generate, or paste a secret"))
                 Button("Generate") { model.config.controlToken = Self.randomToken() }
             }
             .help("Required secret on every control request. Generate makes a random one.")

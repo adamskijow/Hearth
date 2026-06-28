@@ -28,6 +28,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var signalSources: [DispatchSourceSignal] = []
     private var stateTask: Task<Void, Never>?
     private var eventTask: Task<Void, Never>?
+    /// Bumped on each config reload so a reload that started later can supersede
+    /// one still awaiting the old engine's teardown, rather than both rebuilding.
+    private var reloadGeneration = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -79,10 +82,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Tear down the current engine and rebuild it from a config. Safe to call on
     /// first launch (nothing to tear down) and on every later reload.
     private func applyConfig(_ loaded: ConfigLoad) async {
+        reloadGeneration &+= 1
+        let generation = reloadGeneration
+
         controlServer?.stop()
         stateTask?.cancel()
         eventTask?.cancel()
         if let coordinator { await coordinator.end() }
+
+        // Several triggers (SIGHUP, the menu, a Preferences save) each kick off a
+        // reload Task; they interleave at the await above. If a newer reload
+        // started while this one waited for the old engine to stop, let it win,
+        // rather than building a second engine and control server and spawning a
+        // second runner.
+        guard generation == reloadGeneration else { return }
 
         config = loaded.config
         configNote = loaded.note

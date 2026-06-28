@@ -45,6 +45,10 @@ final class SystemMetricsProvider: MetricsProviding, @unchecked Sendable {
         }
         guard result == KERN_SUCCESS else { return nil }
 
+        // Pressure-relevant pages only: active, wired, and compressed. Inactive
+        // and cached pages are reclaimable, so excluding them is intentional. This
+        // is an out-of-memory-risk signal, not Activity Monitor's "Memory Used",
+        // and will read lower than that figure by design.
         let pageSize = UInt64(getpagesize())
         let used = (UInt64(stats.active_count) + UInt64(stats.wire_count) + UInt64(stats.compressor_page_count)) * pageSize
         let total = ProcessInfo.processInfo.physicalMemory

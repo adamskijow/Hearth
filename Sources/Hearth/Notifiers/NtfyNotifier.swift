@@ -18,18 +18,29 @@ final class NtfyNotifier: Notifier, @unchecked Sendable {
         // Trim a trailing slash so "https://ntfy.sh/" and "https://ntfy.sh" behave.
         self.server = server.hasSuffix("/") ? String(server.dropLast()) : server
         self.topic = topic
-        self.session = URLSession(configuration: .ephemeral)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 10
+        configuration.timeoutIntervalForResource = 15
+        self.session = URLSession(configuration: configuration)
     }
 
     func notify(_ notification: HearthNotification) async {
-        guard let url = URL(string: "\(server)/\(topic)") else { return }
-        var request = URLRequest(url: url)
+        // Percent-encode the topic so a topic with a space or other URL-illegal
+        // character does not silently produce a nil URL and drop the alert.
+        let encodedTopic = topic.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? topic
+        guard let url = URL(string: "\(server)/\(encodedTopic)") else { return }
+        var request = URLRequest(url: url, timeoutInterval: 10)
         request.httpMethod = "POST"
         request.httpBody = Data(notification.body.utf8)
         request.setValue(notification.title, forHTTPHeaderField: "Title")
         request.setValue(Self.priority(for: notification.level), forHTTPHeaderField: "Priority")
         request.setValue(Self.tags(for: notification.level), forHTTPHeaderField: "Tags")
-        _ = try? await session.data(for: request)
+        // Fire and forget. The engine awaits notify() on its actor, which also
+        // serves status, control commands, and state publishing; blocking it on a
+        // slow or hung ntfy server (up to the request timeout) would stall the
+        // whole supervision loop. Delivery happens in the background instead.
+        let session = self.session
+        Task.detached { _ = try? await session.data(for: request) }
     }
 
     private static func priority(for level: NotificationLevel) -> String {

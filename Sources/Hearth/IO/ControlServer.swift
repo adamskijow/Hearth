@@ -127,7 +127,13 @@ final class ControlServer: @unchecked Sendable {
                 status = 202
                 body = Data(#"{"ok":true,"command":"\#(command.rawValue)"}"#.utf8)
             }
-            self?.send(box, status: status, body: body)
+            // If the server was torn down mid-request (the config-reload path),
+            // close the connection now rather than leaving it for the deadline.
+            if let self {
+                self.send(box, status: status, body: body)
+            } else {
+                box.connection.cancel()
+            }
         }
     }
 

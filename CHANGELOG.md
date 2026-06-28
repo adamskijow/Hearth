@@ -35,6 +35,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Teardown synchronously kills a wedged runner group rather than relying on a
   deferred SIGKILL that `exit()` could outrun; the control server drops a
   slow-trickle connection.
+- Config reload is serialized by a generation token: rapid reloads (SIGHUP, the
+  menu, a Preferences save interleaving at the teardown await) no longer build a
+  second engine, second control server, or spawn a second runner.
+- ntfy delivery no longer blocks the supervision loop. The engine awaited
+  notification delivery on its actor, so a hung ntfy server could stall status,
+  control commands, and state for up to a minute; requests now have a short
+  timeout and are sent fire-and-forget. The topic is percent-encoded so an
+  unusual character no longer silently drops the alert.
 
 ## [0.1.0]
 

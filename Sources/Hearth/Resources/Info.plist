@@ -10,6 +10,8 @@
 	<string>com.hearth.Hearth</string>
 	<key>CFBundleExecutable</key>
 	<string>Hearth</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

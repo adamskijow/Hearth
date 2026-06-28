@@ -182,7 +182,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let phase = latestState.phase
         let needsAttention = configProblem || binaryMissingPath != nil
         let symbol = needsAttention ? "exclamationmark.triangle.fill" : MenuFormat.symbolName(for: phase)
-        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Hearth: \(phase.rawValue)")
+        let label = "Hearth: \(phase.rawValue)"
+        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+            ?? NSImage(systemSymbolName: "flame", accessibilityDescription: label)
         let tint = needsAttention ? NSColor.systemYellow : MenuFormat.tint(for: phase)
         button.image?.isTemplate = (tint == nil)
         button.contentTintColor = tint

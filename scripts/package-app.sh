@@ -29,6 +29,7 @@ mkdir -p "$APP/Contents/Resources"
 
 cp "$BIN_PATH/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
 cp "Sources/Hearth/Resources/Info.plist" "$APP/Contents/Info.plist"
+cp "assets/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 
 echo "Done: $APP (unsigned)"
 echo

@@ -11,8 +11,8 @@ enum MenuFormat {
         case .stopped: return "moon.zzz"
         case .starting: return "hourglass"
         case .healthy: return "flame.fill"
-        case .down: return "arrow.triangle.2.circlepath"
-        case .restarting: return "arrow.triangle.2.circlepath"
+        case .down: return "clock.arrow.circlepath"        // not serving, waiting out the backoff
+        case .restarting: return "arrow.triangle.2.circlepath" // actively cycling
         case .failing: return "exclamationmark.triangle.fill"
         }
     }

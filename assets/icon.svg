@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Hearth">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a1409"/><stop offset="1" stop-color="#140a05"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.56" r="0.55">
+      <stop offset="0" stop-color="#ff7a18" stop-opacity="0.6"/>
+      <stop offset="0.55" stop-color="#c43c0a" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#c43c0a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="fo" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#a51f06"/><stop offset="0.55" stop-color="#e8500f"/><stop offset="1" stop-color="#ff8a1e"/>
+    </linearGradient>
+    <linearGradient id="fm" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#e0490d"/><stop offset="0.6" stop-color="#ff9a22"/><stop offset="1" stop-color="#ffc44d"/>
+    </linearGradient>
+    <linearGradient id="fc" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#ffb52e"/><stop offset="1" stop-color="#fff1c2"/>
+    </linearGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="6"/></filter>
+    <clipPath id="squircle"><rect x="64" y="64" width="896" height="896" rx="205"/></clipPath>
+  </defs>
+
+  <rect x="64" y="64" width="896" height="896" rx="205" fill="url(#bg)"/>
+  <g clip-path="url(#squircle)">
+    <ellipse cx="512" cy="572" rx="320" ry="340" fill="url(#glow)"/>
+    <!-- logs -->
+    <g transform="translate(512 712)">
+      <rect x="-150" y="0" width="300" height="34" rx="17" fill="#3a241a"/>
+      <rect x="-120" y="-20" width="240" height="32" rx="16" fill="#4a2e20" transform="rotate(-7 0 -4)"/>
+      <rect x="-110" y="-16" width="220" height="30" rx="15" fill="#5a3724" transform="rotate(8 0 -1)"/>
+      <ellipse cx="-130" cy="-8" rx="16" ry="14" fill="#7a4a2e"/>
+      <ellipse cx="130" cy="-8" rx="16" ry="14" fill="#7a4a2e"/>
+    </g>
+    <!-- flame -->
+    <g transform="translate(512 706) scale(2.0)">
+      <path fill="url(#fo)" filter="url(#soft)" opacity="0.97"
+        d="M0,4 C70,-26 86,-96 58,-150 C44,-178 60,-196 30,-238 C16,-258 22,-286 4,-300 C-2,-272 8,-250 -12,-224 C-40,-188 -54,-214 -56,-168 C-58,-128 -82,-104 -50,-50 C-30,-16 -36,-4 0,4 Z"/>
+      <path fill="url(#fm)" filter="url(#soft)" opacity="0.96"
+        d="M0,2 C44,-22 56,-74 38,-116 C28,-138 40,-156 20,-188 C10,-204 14,-224 2,-236 C-2,-214 4,-198 -8,-178 C-28,-150 -36,-168 -38,-132 C-40,-102 -54,-84 -32,-44 C-18,-18 -22,-6 0,2 Z"/>
+      <path fill="url(#fc)" opacity="0.97"
+        d="M0,0 C24,-16 30,-50 20,-82 C14,-100 22,-114 10,-138 C5,-150 8,-162 1,-170 C-2,-152 1,-140 -6,-124 C-18,-104 -22,-118 -22,-92 C-22,-70 -30,-58 -16,-30 C-8,-12 -10,-4 0,0 Z"/>
+    </g>
+  </g>
+</svg>

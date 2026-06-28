@@ -2,6 +2,16 @@
 
 import Foundation
 
+/// Build a runner HTTP endpoint from a configured host and port. Never traps: a
+/// malformed host or port yields an unconnectable URL, so a probe fails
+/// gracefully (the supervisor treats it as not serving and restarts) instead of
+/// crashing the whole supervisor on a config typo.
+func runnerEndpoint(host: String, port: Int, path: String) -> URL {
+    URL(string: "http://\(host):\(port)\(path)")
+        ?? URL(string: "http://127.0.0.1:0\(path)")
+        ?? URL(string: "http://127.0.0.1:0/")!
+}
+
 /// A model the runner currently holds resident in memory, as reported by its own
 /// API. The supervisor surfaces this for situational awareness only. It never
 /// chooses, loads, or unloads a model.

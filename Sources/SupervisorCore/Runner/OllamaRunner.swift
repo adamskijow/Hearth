@@ -44,11 +44,11 @@ public struct OllamaRunner: Runner {
     }
 
     public var readinessEndpoint: URL {
-        URL(string: "http://\(hostPort)/api/version")!
+        runnerEndpoint(host: host, port: port, path: "/api/version")
     }
 
     public var modelsEndpoint: URL {
-        URL(string: "http://\(hostPort)/api/ps")!
+        runnerEndpoint(host: host, port: port, path: "/api/ps")
     }
 
     public func parseResidentModels(_ data: Data) throws -> [ResidentModel] {

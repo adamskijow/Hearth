@@ -35,11 +35,11 @@ public struct MLXRunner: Runner {
     }
 
     public var readinessEndpoint: URL {
-        URL(string: "http://\(host):\(port)/v1/models")!
+        runnerEndpoint(host: host, port: port, path: "/v1/models")
     }
 
     public var modelsEndpoint: URL {
-        URL(string: "http://\(host):\(port)/v1/models")!
+        runnerEndpoint(host: host, port: port, path: "/v1/models")
     }
 
     /// The OpenAI compatible model list: `{ "data": [ { "id": ... } ] }`.

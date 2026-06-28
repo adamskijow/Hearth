@@ -31,6 +31,8 @@ public enum ConfigDiagnostics {
 
         if config.host.trimmingCharacters(in: .whitespaces).isEmpty {
             issues.append(.init(.error, "Host is empty."))
+        } else if URL(string: "http://\(config.host):\(config.port)/") == nil {
+            issues.append(.init(.error, "Host \"\(config.host)\" is not a valid hostname or address."))
         }
         if !isValidPort(config.port) {
             issues.append(.init(.error, "Runner port \(config.port) is out of range (1-65535)."))

@@ -25,6 +25,13 @@ struct ConfigDiagnosticsTests {
         #expect(errors(HearthConfig(host: "   ")).contains { $0.message.contains("Host is empty") })
     }
 
+    @Test func aMalformedHostIsAnError() {
+        // A space (or other URL-invalid character) would have crashed the runner's
+        // force-unwrapped endpoint; it is now caught here.
+        #expect(errors(HearthConfig(host: "127.0.0.1 ")).contains { $0.message.contains("not a valid") })
+        #expect(messages(HearthConfig(host: "192.168.1.10")).isEmpty)
+    }
+
     @Test func unknownRunnerAndModeAreErrors() {
         #expect(errors(HearthConfig(runner: "vllm")).contains { $0.message.contains("Unknown runner") })
         #expect(errors(HearthConfig(mode: "supervised")).contains { $0.message.contains("Unknown mode") })

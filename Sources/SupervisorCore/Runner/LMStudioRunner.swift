@@ -40,12 +40,12 @@ public struct LMStudioRunner: Runner {
 
     /// OpenAI compatible model list. A 200 here means the server is up.
     public var readinessEndpoint: URL {
-        URL(string: "http://\(host):\(port)/v1/models")!
+        runnerEndpoint(host: host, port: port, path: "/v1/models")
     }
 
     /// LM Studio native REST model list, which reports load state per model.
     public var modelsEndpoint: URL {
-        URL(string: "http://\(host):\(port)/api/v0/models")!
+        runnerEndpoint(host: host, port: port, path: "/api/v0/models")
     }
 
     /// Parse `/api/v0/models` and surface only the models LM Studio reports as

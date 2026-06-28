@@ -154,19 +154,23 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         mode.lowercased() != "attached"
     }
 
-    /// The restart policy these settings describe.
+    /// The restart policy these settings describe. Values that would brick
+    /// supervision are clamped to a safe floor here, independent of the
+    /// `ConfigDiagnostics` warnings: a non-positive probe interval would busy
+    /// spin, a multiplier below 1 would shrink backoff toward zero, and a crash
+    /// loop threshold below 1 would trip the brake on the first failure.
     public func policy() -> RestartPolicyConfig {
         RestartPolicyConfig(
-            probeInterval: probeIntervalSeconds,
+            probeInterval: max(0.1, probeIntervalSeconds),
             probeTimeout: probeTimeoutSeconds,
             startupGrace: startupGraceSeconds,
-            startupProbeInterval: startupProbeIntervalSeconds,
+            startupProbeInterval: max(0.1, startupProbeIntervalSeconds),
             initialBackoff: initialBackoffSeconds,
-            backoffMultiplier: backoffMultiplier,
+            backoffMultiplier: max(1, backoffMultiplier),
             maxBackoff: maxBackoffSeconds,
-            crashLoopThreshold: crashLoopThreshold,
+            crashLoopThreshold: max(1, crashLoopThreshold),
             crashLoopWindow: crashLoopWindowSeconds,
-            failingProbeInterval: failingProbeIntervalSeconds
+            failingProbeInterval: max(0.1, failingProbeIntervalSeconds)
         )
     }
 

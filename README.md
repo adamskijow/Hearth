@@ -7,31 +7,34 @@ It is an availability layer, not an inference layer. Hearth watches the runner,
 restarts it when it dies or wedges, keeps the Mac awake while it is meant to be
 serving, and tells you when something goes wrong. It does not do inference. It
 does not pick models, set context length, write prompts, or do RAG or chat. It
-does not replace Ollama. The runner is an opaque child process that Hearth owns
-and supervises; Hearth reads the runner's API and logs only to judge whether it
-is healthy.
+does not replace Ollama or LM Studio. The runner is an opaque child process that
+Hearth owns and supervises; Hearth reads the runner's API and logs only to judge
+whether it is healthy.
 
 ## Why this exists
 
-If you run Ollama on a Mac you leave in a closet, three things quietly break the
-"always available" promise. The runner process dies or, worse, wedges into a
-state where it is still alive but no longer answering, so a plain "is it running"
-check is fooled. The Mac goes to sleep and stops serving. And if you tried to fix
-the first two with a launchd plist, you probably hit the `OLLAMA_HOST` env trap,
-where the daemon does not inherit the environment you expected and ends up
-listening on the wrong address, or only on localhost. Hearth exists to make a
-local runner behave like a real, always on service on a machine nobody is sitting
-at.
+If you run a local model server on a Mac you leave in a closet, three things
+quietly break the "always available" promise. The runner process dies or, worse,
+wedges into a state where it is still alive but no longer answering, so a plain
+"is it running" check is fooled. The Mac goes to sleep and stops serving. And if
+you tried to fix the first two with a launchd plist, you probably hit the
+`OLLAMA_HOST` env trap, where the daemon does not inherit the environment you
+expected and ends up listening on the wrong address, or only on localhost. Hearth
+exists to make a local runner behave like a real, always on service on a machine
+nobody is sitting at.
 
 ## Requirements
 
 - macOS 14 or later.
-- An existing Ollama install. Hearth supervises Ollama; it does not install it.
-  By default it expects the binary at `/opt/homebrew/bin/ollama` (the Apple
-  Silicon Homebrew location). If yours is elsewhere, for example
-  `/usr/local/bin/ollama`, set `ollamaBinaryPath` in the config.
+- An existing runner install. Ollama is the default; LM Studio is also supported.
+  Hearth supervises the runner, it does not install it.
+  - Ollama: expected at `/opt/homebrew/bin/ollama` (the Apple Silicon Homebrew
+    location). If yours is elsewhere, for example `/usr/local/bin/ollama`, set
+    `ollamaBinaryPath`.
+  - LM Studio: set `runner` to `lmstudio` and `lmStudioBinaryPath` to your `lms`
+    CLI. LM Studio is best run in attached mode (below).
 - No third party Swift dependencies. Hearth builds against Apple system
-  frameworks only (Foundation, AppKit, IOKit, ServiceManagement, and
+  frameworks only (Foundation, AppKit, IOKit, Network, ServiceManagement, and
   UserNotifications), which keeps the dependency surface, and the licensing
   surface, empty.
 
@@ -59,19 +62,24 @@ To assemble a `.app` bundle:
 open dist/Hearth.app
 ```
 
-Hearth is meant to ship as a Developer ID signed and notarized build, not through
-the Mac App Store. This is not a preference; the App Store requires the App
-Sandbox, and the sandbox forbids a process from spawning and supervising another
-process, which is the entire job. So the distribution path is Developer ID plus
-notarization with the Hardened Runtime on and the App Sandbox off. The signing
-and notarization steps are stubbed and commented at the bottom of
-`scripts/package-app.sh`; fill in a signing identity and a notarytool profile to
-enable them.
+Hearth ships as a Developer ID signed and notarized build, not through the Mac
+App Store. This is not a preference; the App Store requires the App Sandbox, and
+the sandbox forbids a process from spawning and supervising another process,
+which is the entire job. So the distribution path is Developer ID plus
+notarization with the Hardened Runtime on and the App Sandbox off. See Releasing
+below for the signing pipeline.
 
-### Homebrew cask (planned)
+### Homebrew cask
 
-A Homebrew cask is not published yet. When it is, install will be roughly
-`brew install --cask hearth`. This section is a placeholder until that lands.
+A signed release can be installed with Homebrew once published:
+
+```
+brew install --cask adamskijow/tap/hearth
+```
+
+The cask lives at `Casks/hearth.rb`. It is a template until the first signed
+release is attached to a GitHub release; the version and sha256 are filled in by
+the release pipeline.
 
 ## Configure
 
@@ -89,12 +97,23 @@ set the `HEARTH_CONFIG` environment variable to that path.
 
 Keys, defaults, and what they do:
 
-- `ollamaBinaryPath` (default `"/opt/homebrew/bin/ollama"`): the Ollama binary
-  Hearth launches and supervises.
-- `host` (default `"127.0.0.1"`): the address the runner listens on, set via
-  `OLLAMA_HOST` at spawn. Use `"0.0.0.0"` to listen on all interfaces (see the
-  security note before you do).
-- `port` (default `11434`): the listen port.
+Runner
+
+- `runner` (default `"ollama"`): which runner to supervise, `"ollama"` or
+  `"lmstudio"`.
+- `mode` (default `"managed"`): `"managed"` means Hearth spawns and owns the
+  runner; `"attached"` means it only monitors an already running one (below).
+- `ollamaBinaryPath` (default `"/opt/homebrew/bin/ollama"`): the Ollama binary,
+  when `runner` is `ollama`.
+- `lmStudioBinaryPath` (default `"/usr/local/bin/lms"`): the LM Studio CLI, when
+  `runner` is `lmstudio`.
+- `host` (default `"127.0.0.1"`): the address the runner listens on. For Ollama
+  this is set via `OLLAMA_HOST` at spawn. Use `"0.0.0.0"` to listen on all
+  interfaces (see the security note before you do).
+- `port` (default `11434`): the listen port. LM Studio's default is `1234`.
+
+Health and restart policy
+
 - `probeTimeoutSeconds` (default `2`): how long a readiness request may take
   before it counts as timed out. A timeout is the signature of a wedged runner.
 - `probeIntervalSeconds` (default `5`): how often to check health while healthy.
@@ -113,17 +132,30 @@ Keys, defaults, and what they do:
   are counted for crash loop detection.
 - `failingProbeIntervalSeconds` (default `30`): the slow retry cadence used once
   failing, instead of fast backoff.
+
+Notifications
+
 - `ntfyTopic` (default `null`): an ntfy topic to post notifications to, so a
   headless Mac can reach your phone. `null` disables ntfy.
-- `ntfyServer` (default `"https://ntfy.sh"`): the ntfy server base URL. Point this
-  at a self hosted server if you run one.
+- `ntfyServer` (default `"https://ntfy.sh"`): the ntfy server base URL.
 - `localNotifications` (default `true`): post to the local Notification Center
   when running as a bundled app.
+
+Remote control
+
+- `controlEnabled` (default `false`): enable the HTTP control endpoint.
+- `controlHost` (default `"127.0.0.1"`): the address the control endpoint binds
+  to. Use your Tailscale or private interface address to reach it from a phone.
+- `controlPort` (default `11435`): the control endpoint port.
+- `controlToken` (default `null`): the bearer token every control request must
+  carry. The endpoint refuses to start without one.
 
 A complete example:
 
 ```json
 {
+  "runner": "ollama",
+  "mode": "managed",
   "ollamaBinaryPath": "/opt/homebrew/bin/ollama",
   "host": "127.0.0.1",
   "port": 11434,
@@ -139,7 +171,11 @@ A complete example:
   "failingProbeIntervalSeconds": 30,
   "ntfyTopic": "my-private-hearth-topic-7f3a",
   "ntfyServer": "https://ntfy.sh",
-  "localNotifications": true
+  "localNotifications": true,
+  "controlEnabled": true,
+  "controlHost": "127.0.0.1",
+  "controlPort": 11435,
+  "controlToken": "a-long-unguessable-secret"
 }
 ```
 
@@ -149,24 +185,31 @@ public ntfy topic can read it, so treat the topic name like a secret.
 
 ## How it works
 
-Hearth runs in managed mode. It spawns the `ollama serve` child itself and owns
-it, setting the child's environment at launch. Because Hearth defines the child's
+Hearth's default is managed mode. It spawns the runner child itself and owns it,
+setting the child's environment at launch. Because Hearth defines the child's
 environment, `OLLAMA_HOST` is pinned to your configured host and port by
-construction, which is what sidesteps the launchd env trap. Hearth does not
-attach to an Ollama that something else started; it runs its own.
+construction, which is what sidesteps the launchd env trap.
+
+In attached mode, Hearth does not spawn anything. It monitors a runner that
+something else started, by probing its readiness endpoint. It still holds the
+power assertion and notifies on transitions, but it never spawns or kills a
+process it does not own. Attached mode is the reliable way to use LM Studio,
+whose `lms server start` may hand the server off to a background service rather
+than staying in the foreground.
 
 Health has two parts. Liveness asks whether the child process is still alive.
-Readiness asks whether `GET /api/version` actually answers within the probe
-timeout. Readiness is the important half: it catches the alive but wedged runner
-that a liveness check alone would call healthy, and treats it as down.
+Readiness asks whether the runner's version endpoint actually answers within the
+probe timeout. Readiness is the important half: it catches the alive but wedged
+runner that a liveness check alone would call healthy, and treats it as down. (In
+attached mode there is no child to inspect, so readiness is the whole signal.)
 
 When the runner stops serving, whether it crashed or wedged, Hearth restarts it
-on an exponential backoff capped at `maxBackoffSeconds`. If failures keep coming,
-specifically `crashLoopThreshold` failures within `crashLoopWindowSeconds`, Hearth
-decides it is in a crash loop. It stops thrashing, enters a failing state, and
-retries slowly on `failingProbeIntervalSeconds` instead of hammering the machine.
-It keeps probing, so if the underlying problem clears, it recovers on its own and
-returns to healthy.
+(in managed mode) on an exponential backoff capped at `maxBackoffSeconds`. If
+failures keep coming, specifically `crashLoopThreshold` failures within
+`crashLoopWindowSeconds`, Hearth decides it is in a crash loop. It stops
+thrashing, enters a failing state, and retries slowly on
+`failingProbeIntervalSeconds` instead of hammering the machine. It keeps probing,
+so if the underlying problem clears, it recovers on its own.
 
 Hearth classifies how the child exited from its exit status and recent stderr,
 distinguishing a clean stop from an ordinary crash from an out of memory kill.
@@ -184,10 +227,33 @@ Center alerts for when you are at the machine, and ntfy HTTP posts for when you
 are not, so a Mac in a closet can still reach your phone.
 
 The menubar shows the current status, the models the runner currently holds
-resident (from `GET /api/ps`, surfaced for awareness only, never chosen by
-Hearth), uptime of the current healthy streak, and the reason for the last
-restart. The actions are Start, Stop, Restart, and Open Logs. The child's stdout
-and stderr are captured to `~/Library/Logs/Hearth/ollama.log`.
+resident (from its own API, surfaced for awareness only, never chosen by Hearth),
+uptime of the current healthy streak, and the reason for the last restart. The
+actions are Start, Stop, Restart, and Open Logs. The child's stdout and stderr
+are captured to `~/Library/Logs/Hearth/runner.log`.
+
+## Remote control
+
+With `controlEnabled` and a `controlToken` set, Hearth runs a small HTTP control
+endpoint so a phone can check status and start, stop, or restart the runner, not
+just receive notifications. Every request must carry the token as a bearer
+header.
+
+```
+# status
+curl -H "Authorization: Bearer $TOKEN" http://HOST:11435/status
+
+# control
+curl -X POST -H "Authorization: Bearer $TOKEN" http://HOST:11435/restart
+curl -X POST -H "Authorization: Bearer $TOKEN" http://HOST:11435/stop
+curl -X POST -H "Authorization: Bearer $TOKEN" http://HOST:11435/start
+```
+
+`/status` returns a compact JSON document with the phase, resident models,
+uptime, restart count, and last restart reason. The control endpoint is a control
+surface, not a public API: bind it to localhost or a private interface (a
+Tailscale address is ideal) and keep it behind a VPN. It refuses to start without
+a token, and rejects any request whose bearer token does not match.
 
 ## Architecture
 
@@ -199,20 +265,23 @@ AppKit and no SwiftUI. Time, process control, HTTP, power, and notifications all
 sit behind protocols, so the whole thing is unit testable with fakes and never
 touches real I/O in a test. The heart is an explicit restart state machine and a
 pure exit classifier; both take the current time as an argument rather than
-reading a clock, so their behavior is fully determined by their inputs.
+reading a clock, so their behavior is fully determined by their inputs. The
+runner specifics (Ollama, LM Studio) and the control endpoint's routing and auth
+also live here as pure, tested code.
 
 `Hearth` is the executable: the menubar agent that wires the core to real
-`Foundation.Process`, URLSession, IOKit, SMAppService, and UserNotifications, and
-renders the published state.
+`Foundation.Process`, URLSession, IOKit, the Network framework, SMAppService, and
+UserNotifications, and renders the published state.
 
 ## Testing
 
 `SupervisorCore` is covered by a Swift Testing suite driven entirely by fakes for
-the clock, process control, and HTTP. There is no real Ollama and no real
+the clock, process control, and HTTP. There is no real runner and no real
 `sleep`; the fake clock is advanced by hand. The suite covers readiness catching
 a hung but alive runner, exponential backoff timing, a crash loop entering the
-failing state without thrashing, recovery back to healthy, and out of memory
-versus crash classification from fixture stderr.
+failing state without thrashing, recovery back to healthy, out of memory versus
+crash classification, attached mode never spawning or killing, the runners' spec
+and parsing, and the control endpoint's routing and auth.
 
 Run the tests with:
 
@@ -233,14 +302,12 @@ directory for both the Command Line Tools and full Xcode layouts and passes it.
 On a machine with full Xcode, a plain `swift test` also works.
 
 Continuous integration builds the package and runs this suite on every push and
-pull request (see `.github/workflows/ci.yml`). Notarization and Homebrew
-publishing are not wired into CI yet; they are stubbed in
-`scripts/package-app.sh`.
+pull request (see `.github/workflows/ci.yml`).
 
-### Trying it without Ollama
+### Trying it without a runner
 
-You can exercise the whole agent without installing Ollama, using a small stand
-in runner that answers the two endpoints Hearth probes:
+You can exercise the whole agent without installing Ollama or LM Studio, using a
+small stand in runner that answers the endpoints Hearth probes:
 
 ```
 ./scripts/smoke-test.sh
@@ -249,9 +316,27 @@ in runner that answers the two endpoints Hearth probes:
 This builds Hearth, points it at `scripts/fake-runner.py` through a throwaway
 config, and checks the acceptance behavior end to end: the agent starts and owns
 the child, holds the power assertion (`pmset`), restarts the child when it is
-killed externally, and releases the assertion and kills the child on a clean
-shutdown. It launches the real menubar agent, so it needs a logged in desktop
-session; it is a local helper, not a CI step.
+killed externally, drives a restart through the control endpoint (with token auth
+checked), and releases the assertion and kills the child on a clean shutdown. It
+launches the real menubar agent, so it needs a logged in desktop session; it is a
+local helper, not a CI step.
+
+## Releasing
+
+`scripts/release.sh` builds, Developer ID signs (Hardened Runtime on, App Sandbox
+off), notarizes, staples, and zips `Hearth.app`, then prints the version and
+sha256 for the Homebrew cask. It needs a signing identity and a notarytool
+profile:
+
+```
+export HEARTH_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+export HEARTH_NOTARY_PROFILE="HearthNotary"   # from xcrun notarytool store-credentials
+./scripts/release.sh
+```
+
+`.github/workflows/release.yml` does the same on a `v*` tag, importing the
+certificate and notarization key from repository secrets and publishing a GitHub
+release with the artifact. It runs only once those secrets are configured.
 
 ## Known limitations
 
@@ -260,17 +345,12 @@ These are stated up front on purpose.
 - The power assertion prevents idle sleep, which keeps a Mac that would otherwise
   sleep on idle (a desktop, or a plugged in laptop with the lid open) awake and
   serving. Keeping a laptop serving with the lid closed on battery is a separate,
-  privileged concern and is not in this milestone.
-- The phone gets notifications only. There is no remote control yet; you cannot
-  restart or stop the runner from your phone in this milestone.
-- A single runner, Ollama, is supported. The `Runner` protocol is built so LM
-  Studio and mlx_lm can be added without touching the decision logic, but they
-  are not implemented yet.
-- Only managed mode. Hearth spawns and owns the runner. It does not attach to an
-  Ollama that something else already started. If Hearth is killed abruptly
-  without the chance to run its shutdown (for example a hard crash), the child it
-  spawned can be left orphaned and may hold the port, which the next managed
-  start would collide with. A clean quit, or a SIGTERM, shuts the child down.
+  privileged concern and is not implemented.
+- LM Studio's managed launch is best effort, because `lms server start` may
+  background the server rather than staying in the foreground. Attached mode is
+  the reliable path for LM Studio.
+- The control endpoint is unauthenticated beyond a shared bearer token and is
+  meant to live behind a VPN, not on the open internet.
 
 ## Security note
 
@@ -284,22 +364,19 @@ Hearth never exposes the runner beyond what you configure. By default the runner
 listens on `127.0.0.1`, reachable only from the same machine. If you set `host`
 to `0.0.0.0` you are choosing to expose the runner on your network, and securing
 that (a firewall, a VPN such as Tailscale, or an authenticating reverse proxy) is
-up to you. Hearth sends only short status text to notifiers; no prompts, model
-data, or runner content leave the machine.
+up to you. The control endpoint is off by default; when on, it requires a bearer
+token and should be bound to a private interface. Hearth sends only short status
+text to notifiers; no prompts, model data, or runner content leave the machine.
 
 ## Roadmap
 
-Near term intentions, roughly the current out of scope list:
+Near term intentions:
 
 - A thermal, tokens per second, and memory dashboard.
-- A phone side control endpoint, so the phone can do more than receive alerts.
 - Tailscale auto configuration.
 - An authenticating reverse proxy in front of the runner.
-- Additional runners behind the existing `Runner` protocol: LM Studio and
-  mlx_lm.
-- A pre login root LaunchDaemon, and attached mode for an externally managed
-  runner.
-- Notarization and Homebrew automation in CI.
+- A third runner, mlx_lm, behind the existing `Runner` protocol.
+- A pre login root LaunchDaemon, so the runner is up before anyone logs in.
 
 ## Contributing
 

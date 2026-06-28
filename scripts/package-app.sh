@@ -30,29 +30,10 @@ mkdir -p "$APP/Contents/Resources"
 cp "$BIN_PATH/$APP_NAME" "$APP/Contents/MacOS/$APP_NAME"
 cp "Sources/Hearth/Resources/Info.plist" "$APP/Contents/Info.plist"
 
-echo "Done: $APP"
+echo "Done: $APP (unsigned)"
 echo
 echo "Run it with:  open $APP"
 echo "A menubar item appears; there is no Dock icon (LSUIElement)."
 echo
-
-# ---------------------------------------------------------------------------
-# STUB: Developer ID signing and notarization (not run by default).
-#
-# Hardened Runtime is required for notarization. App Sandbox stays OFF because
-# the whole job is supervising a child process.
-#
-# Fill in your signing identity and an App Store Connect API key / notarytool
-# profile, then uncomment:
-#
-# SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
-# codesign --force --options runtime --timestamp \
-#   --sign "$SIGN_IDENTITY" "$APP/Contents/MacOS/$APP_NAME"
-# codesign --force --options runtime --timestamp \
-#   --sign "$SIGN_IDENTITY" "$APP"
-#
-# ditto -c -k --keepParent "$APP" "$DIST/$APP_NAME.zip"
-# xcrun notarytool submit "$DIST/$APP_NAME.zip" \
-#   --keychain-profile "HearthNotary" --wait
-# xcrun stapler staple "$APP"
-# ---------------------------------------------------------------------------
+echo "This bundle is unsigned. For a distributable, Developer ID signed and"
+echo "notarized build, use scripts/release.sh."

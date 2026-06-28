@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: MIT
+#
+# Build, Developer ID sign, notarize, and publish Hearth on a version tag.
+#
+# This runs only when the required secrets are configured on the repository:
+#   HEARTH_CERT_P12_BASE64    base64 of the Developer ID Application .p12
+#   HEARTH_CERT_PASSWORD      password for that .p12
+#   HEARTH_SIGN_IDENTITY      "Developer ID Application: Name (TEAMID)"
+#   HEARTH_NOTARY_KEY_P8_BASE64  base64 of the App Store Connect API key (.p8)
+#   HEARTH_NOTARY_KEY_ID      the API key id
+#   HEARTH_NOTARY_ISSUER      the API key issuer id
+#
+# Until those exist, tagging is a no op signing wise; the steps fail fast with a
+# clear message. App Sandbox stays off and Hardened Runtime on (see release.sh).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Import Developer ID certificate
+        env:
+          CERT_P12_BASE64: ${{ secrets.HEARTH_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.HEARTH_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/build.keychain"
+          security create-keychain -p actions "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p actions "$KEYCHAIN"
+          echo "$CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions "$KEYCHAIN"
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+      - name: Store notarization credentials
+        env:
+          KEY_P8_BASE64: ${{ secrets.HEARTH_NOTARY_KEY_P8_BASE64 }}
+          KEY_ID: ${{ secrets.HEARTH_NOTARY_KEY_ID }}
+          ISSUER: ${{ secrets.HEARTH_NOTARY_ISSUER }}
+        run: |
+          set -euo pipefail
+          echo "$KEY_P8_BASE64" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+          xcrun notarytool store-credentials HearthNotary \
+            --key "$RUNNER_TEMP/notary.p8" --key-id "$KEY_ID" --issuer "$ISSUER"
+          rm -f "$RUNNER_TEMP/notary.p8"
+
+      - name: Build, sign, notarize, staple
+        env:
+          HEARTH_SIGN_IDENTITY: ${{ secrets.HEARTH_SIGN_IDENTITY }}
+          HEARTH_NOTARY_PROFILE: HearthNotary
+          HEARTH_VERSION: ${{ github.ref_name }}
+        run: ./scripts/release.sh
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" dist/Hearth-*.zip --generate-notes

@@ -1,0 +1,177 @@
+// SPDX-License-Identifier: MIT
+
+import Testing
+import Foundation
+@testable import SupervisorCore
+
+/// End to end checks of the engine driving real effects through fakes. Time is
+/// advanced by hand and the loop is pumped with `stepOnce`, so there is no real
+/// sleep and no Ollama.
+struct EngineTests {
+    private struct Harness {
+        let engine: SupervisorEngine
+        let clock: ManualClock
+        let processes: FakeProcessController
+        let http: FakeHTTPClient
+        let power: FakePowerManager
+        let notifier: FakeNotifier
+        let runner: OllamaRunner
+    }
+
+    private func makeHarness(policy: RestartPolicyConfig = RestartPolicyConfig(startupGrace: 30)) -> Harness {
+        let clock = ManualClock(now: Date(timeIntervalSince1970: 0))
+        let processes = FakeProcessController()
+        let http = FakeHTTPClient()
+        let power = FakePowerManager()
+        let notifier = FakeNotifier()
+        let runner = OllamaRunner(binaryPath: "/x", host: "127.0.0.1", port: 11434)
+        let engine = SupervisorEngine(
+            clock: clock,
+            processes: processes,
+            http: http,
+            runner: runner,
+            power: power,
+            notifier: notifier,
+            policy: policy
+        )
+        return Harness(engine: engine, clock: clock, processes: processes, http: http,
+                       power: power, notifier: notifier, runner: runner)
+    }
+
+    private func makeServing(_ h: Harness, models: String = #"{"models":[{"name":"llama3:8b","size":42}]}"#) {
+        h.http.set(h.runner.readinessEndpoint, .ok(Data(#"{"version":"0.1.0"}"#.utf8)))
+        h.http.set(h.runner.modelsEndpoint, .ok(Data(models.utf8)))
+    }
+
+    @Test func startSpawnsHoldsPowerAndBecomesHealthy() async {
+        let h = makeHarness()
+        makeServing(h)
+
+        await h.engine.start()
+        #expect(h.processes.spawnCount == 1)
+        #expect(h.power.isHeld)
+        #expect(await h.engine.snapshot().phase == .starting)
+
+        _ = await h.engine.stepOnce()   // probe -> ready -> healthy
+
+        let state = await h.engine.snapshot()
+        #expect(state.phase == .healthy)
+        #expect(state.residentModels.map(\.name) == ["llama3:8b"])
+        #expect(state.healthySince != nil)
+    }
+
+    @Test func externalKillIsDetectedRestartedAndRecoveryNotified() async throws {
+        let h = makeHarness()
+        makeServing(h)
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+        #expect(await h.engine.snapshot().phase == .healthy)
+
+        // Kill ollama serve out from under the supervisor.
+        let handle = try #require(h.processes.lastHandle)
+        h.processes.simulateExit(handle, exit: ProcessExit(code: 0, wasSignaled: true, signal: 9), stderr: ["killed"])
+
+        // Next probe detects it within the interval and schedules a restart.
+        let wait = await h.engine.stepOnce()
+        #expect(await h.engine.snapshot().phase == .down)
+        let downCount = await h.notifier.received.filter { if case .down = $0.event { return true }; return false }.count
+        #expect(downCount == 1)
+
+        // Backoff elapses; the engine respawns.
+        h.clock.advance(by: wait + 0.01)
+        _ = await h.engine.stepOnce()
+        #expect(h.processes.spawnCount == 2)
+
+        // The fresh child is serving; the engine sees healthy and fires Recovered.
+        _ = await h.engine.stepOnce()
+        #expect(await h.engine.snapshot().phase == .healthy)
+        let recoveredCount = await h.notifier.received.filter { $0.event == .recovered }.count
+        #expect(recoveredCount == 1)
+    }
+
+    @Test func wedgedRunnerIsCaughtByReadinessWhilePidIsAlive() async throws {
+        let h = makeHarness()
+        makeServing(h)
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+        #expect(await h.engine.snapshot().phase == .healthy)
+
+        // Hang the API: the socket accepts but nothing answers. PID stays alive.
+        h.http.set(h.runner.readinessEndpoint, .timedOut)
+        let handle = try #require(h.processes.lastHandle)
+        #expect(h.processes.isAlive(handle), "precondition: the process is still alive")
+
+        _ = await h.engine.stepOnce()
+
+        #expect(await h.engine.snapshot().phase == .down)
+        // The wedged process was killed so a healthy one can take its place.
+        #expect(h.processes.terminateCount >= 1)
+        let wedgeCount = await h.notifier.received.filter { $0.event == .down(.wedged) }.count
+        #expect(wedgeCount == 1)
+    }
+
+    @Test func rapidCrashesEnterFailingAndStopThrashing() async {
+        let policy = RestartPolicyConfig(
+            startupGrace: 5,
+            initialBackoff: 1,
+            backoffMultiplier: 2,
+            maxBackoff: 60,
+            crashLoopThreshold: 3,
+            crashLoopWindow: 600,
+            failingProbeInterval: 30
+        )
+        let h = makeHarness(policy: policy)
+        // Readiness never succeeds; every spawned child dies immediately.
+        await h.engine.start()
+
+        var guardCount = 0
+        while await h.engine.snapshot().phase != .failing && guardCount < 30 {
+            guardCount += 1
+            if let handle = h.processes.lastHandle {
+                h.processes.simulateExit(handle, exit: ProcessExit(code: 1), stderr: ["boom"])
+            }
+            let wait = await h.engine.stepOnce()        // detect death
+            h.clock.advance(by: wait + 0.01)
+            let phase = await h.engine.snapshot().phase
+            if phase == .down || phase == .failing {
+                _ = await h.engine.stepOnce()           // respawn
+            }
+        }
+
+        #expect(await h.engine.snapshot().phase == .failing)
+        let failingCount = await h.notifier.received.filter {
+            if case .enteredFailing = $0.event { return true }; return false
+        }.count
+        #expect(failingCount == 1)
+        // It did not spawn a runaway number of children; it stopped thrashing.
+        #expect(h.processes.spawnCount <= 5)
+    }
+
+    @Test func stopReleasesPowerAndTerminatesChild() async {
+        let h = makeHarness()
+        makeServing(h)
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+        #expect(await h.engine.snapshot().phase == .healthy)
+        #expect(h.power.isHeld)
+
+        await h.engine.stop()
+
+        #expect(await h.engine.snapshot().phase == .stopped)
+        #expect(!h.power.isHeld)
+        #expect(h.power.releases == 1)
+        #expect(h.processes.terminateCount >= 1)
+    }
+
+    @Test func spawnFailureFunnelsIntoRestartPath() async {
+        let h = makeHarness(policy: RestartPolicyConfig(startupGrace: 0, initialBackoff: 1))
+        struct SpawnFail: Error {}
+        h.processes.failNextSpawns(with: SpawnFail())
+
+        await h.engine.start()
+        // The spawn failed, so there is no live child; the next step detects that
+        // and schedules a restart rather than wedging.
+        _ = await h.engine.stepOnce()
+        #expect(await h.engine.snapshot().phase == .down)
+    }
+}

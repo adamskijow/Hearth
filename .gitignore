@@ -1,0 +1,17 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Xcode
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+DerivedData/
+
+# Packaging output
+dist/
+*.app
+
+# macOS
+.DS_Store

@@ -51,11 +51,18 @@ public enum ExitReason: Sendable, Equatable {
 /// Heuristics shared across runners. The out of memory signatures are matched
 /// case insensitively against captured stderr around an abnormal exit; a unified
 /// memory blowout tends to look the same whichever runner sat on top of it.
+///
+/// Verification status: confirmed ABSENT from a real Ollama 0.30.11's normal
+/// output (so they will not false-positive a healthy runner), but NOT yet
+/// confirmed to fire on a real out of memory kill, which could not be induced on
+/// 128 GiB unified-memory hardware. The Metal specific entries in particular
+/// remain heuristics until a real Metal OOM signature is captured. The bare token
+/// "oom" was deliberately removed: it is a substring of common words (room, zoom,
+/// boom) and is already covered by "out of memory" / "outofmemory".
 public enum RunnerHeuristics {
     public static let oomSignatures: [String] = [
         "out of memory",
         "outofmemory",
-        "oom",
         "cannot allocate",
         "failed to allocate",
         "unable to allocate",

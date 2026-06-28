@@ -174,4 +174,24 @@ struct EngineTests {
         _ = await h.engine.stepOnce()
         #expect(await h.engine.snapshot().phase == .down)
     }
+
+    @Test func respawnSweepsThePreviousRunnerBeforeSpawning() async throws {
+        let h = makeHarness(policy: RestartPolicyConfig(startupGrace: 0, initialBackoff: 1))
+        makeServing(h)
+        await h.engine.start()                       // spawn #1
+        _ = await h.engine.stepOnce()                // -> healthy
+        let first = try #require(h.processes.lastHandle)
+
+        // Crash the runner. A crash, like an external kill, emits no kill effect,
+        // so the only thing that reaps the old runner tree is the pre-spawn sweep.
+        h.processes.simulateExit(first, exit: ProcessExit(code: 1), stderr: ["boom"])
+        let wait = await h.engine.stepOnce()         // detect dead -> down
+        h.clock.advance(by: wait + 0.01)
+        _ = await h.engine.stepOnce()                // respawn
+
+        // The engine terminated the previous handle before spawning the new one,
+        // so a crash-orphaned grandchild cannot stack up across a restart loop.
+        #expect(h.processes.terminatedHandles.contains(first))
+        #expect(h.processes.spawnCount == 2)
+    }
 }

@@ -49,4 +49,23 @@ struct OllamaRunnerTests {
             try runner.parseResidentModels(json)
         }
     }
+
+    /// Reconciled against a live capture. Real Ollama /api/ps carries more fields
+    /// than the hand-written fixtures (digest, details, size_vram, context_length)
+    /// and an expires_at with microsecond precision and a timezone offset. See
+    /// tests/Fixtures/real/ollama-ps.json (Ollama 0.30.11).
+    @Test func parseRealPSCaptureFromOllama() throws {
+        let runner = OllamaRunner(binaryPath: "/x")
+        let json = Data(#"""
+        {"models":[{"name":"qwen2.5:0.5b","model":"qwen2.5:0.5b","size":928755219,"digest":"a8b0c51577010a279d933d14c2a8ab4b268079d44c5c8830c0a93900f1827c67","details":{"parent_model":"","format":"gguf","family":"qwen2","families":["qwen2"],"parameter_size":"494.03M","quantization_level":"Q4_K_M"},"expires_at":"2026-06-28T07:22:51.358551-04:00","size_vram":928755219,"context_length":32768}]}
+        """#.utf8)
+        let models = try runner.parseResidentModels(json)
+        #expect(models.count == 1)
+        #expect(models[0].name == "qwen2.5:0.5b")
+        #expect(models[0].sizeBytes == 928_755_219)
+        // The microsecond-and-offset timestamp must parse to a real date, not fall
+        // back to the epoch.
+        let expires = try #require(models[0].expiresAt)
+        #expect(Calendar(identifier: .gregorian).component(.year, from: expires) == 2026)
+    }
 }

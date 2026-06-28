@@ -36,10 +36,12 @@ final class FakeProcessController: ProcessControlling, @unchecked Sendable {
     private var _terminateCount = 0
     private var _lastHandle: ProcessHandleID?
     private var _spawnError: Error?
+    private var _terminatedHandles: [ProcessHandleID] = []
 
     var spawnCount: Int { lock.withLock { _spawnCount } }
     var terminateCount: Int { lock.withLock { _terminateCount } }
     var lastHandle: ProcessHandleID? { lock.withLock { _lastHandle } }
+    var terminatedHandles: [ProcessHandleID] { lock.withLock { _terminatedHandles } }
 
     func failNextSpawns(with error: Error) {
         lock.withLock { _spawnError = error }
@@ -68,6 +70,7 @@ final class FakeProcessController: ProcessControlling, @unchecked Sendable {
     func terminate(_ id: ProcessHandleID) {
         lock.withLock {
             _terminateCount += 1
+            _terminatedHandles.append(id)
             let prior = statuses[id]?.recentStderr ?? []
             statuses[id] = ProcessStatus(
                 isAlive: false,

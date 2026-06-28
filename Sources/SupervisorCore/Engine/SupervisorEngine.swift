@@ -202,6 +202,14 @@ public actor SupervisorEngine {
     }
 
     private func spawnChild() {
+        // Sweep the previous runner tree before starting a new one. A crash or an
+        // external kill of the runner can orphan its grandchildren (an Ollama
+        // serve leaves a llama-server holding GPU memory); terminating the old
+        // handle kills that whole process group so a restart loop cannot stack up
+        // leaked runners. Idempotent: terminating an already dead group is a no op.
+        if let previous = currentHandle {
+            processes.terminate(previous)
+        }
         do {
             currentHandle = try processes.spawn(runner.processSpec())
             lastSpawnError = nil

@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: MIT
+#
+# An authenticating reverse proxy in front of the runner, using Caddy.
+#
+# Hearth keeps the runner alive but does not put it on the network. If you want
+# to reach the runner's API from elsewhere, do not set the runner's host to
+# 0.0.0.0 and expose it raw. Keep the runner on 127.0.0.1 and put an
+# authenticating proxy in front of it. Proxying inference traffic is a job for a
+# battle tested proxy, not something Hearth should reimplement; this is the
+# recommended pattern.
+#
+# Install Caddy (brew install caddy), edit the address and token below, and run:
+#   caddy run --config deploy/Caddyfile.example
+#
+# This example gates every request on a bearer token and forwards the rest to the
+# local runner. Bind the site address to your Tailscale address (or use Caddy's
+# automatic HTTPS with a real hostname) so it is not open to the whole internet.
+
+# Replace with your Tailscale address or hostname and port.
+100.64.0.2:8443 {
+	@authorized header Authorization "Bearer CHANGE-ME-to-a-long-random-token"
+
+	handle @authorized {
+		# The runner's local address (Ollama default shown).
+		reverse_proxy 127.0.0.1:11434
+	}
+
+	# Anything without the right token gets nothing useful.
+	respond "Unauthorized" 401
+}

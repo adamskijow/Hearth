@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Pre login root LaunchDaemon for Hearth in headless mode. Installed to
+     /Library/LaunchDaemons by scripts/install-daemon.sh (run with sudo). This
+     runs supervision before anyone logs in; there is no menubar in this mode. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.hearth.daemon</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/local/bin/hearth</string>
+		<string>--headless</string>
+	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HEARTH_CONFIG</key>
+		<string>/etc/hearth/config.json</string>
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ProcessType</key>
+	<string>Background</string>
+	<key>StandardOutPath</key>
+	<string>/var/log/hearth.out.log</string>
+	<key>StandardErrorPath</key>
+	<string>/var/log/hearth.err.log</string>
+</dict>
+</plist>

@@ -37,22 +37,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             binaryMissingPath = config.selectedBinaryPath
         }
 
-        processController = FoundationProcessController(logFileURL: AppPaths.runnerLogFile)
-        metricsProvider = SystemMetricsProvider(runnerResidentBytes: { [weak processController] in
-            processController?.latestResidentBytes()
-        })
-        runner = config.makeRunner()
-        engine = SupervisorEngine(
-            clock: SystemClock(),
-            processes: processController,
-            http: URLSessionHTTPClient(),
-            runner: runner,
-            power: IOKitPowerManager(),
-            notifier: makeNotifier(config: config),
-            policy: config.policy(),
-            managed: config.isManaged
-        )
-        coordinator = SupervisionCoordinator(engine: engine)
+        let assembly = SupervisorAssembly.make(config: config, includeLocalNotifications: true)
+        processController = assembly.processController
+        metricsProvider = assembly.metricsProvider
+        runner = assembly.runner
+        engine = assembly.engine
+        coordinator = assembly.coordinator
+        controlServer = assembly.controlServer
 
         LocalNotifier.requestAuthorization()
 
@@ -72,14 +63,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func startControlServerIfEnabled() {
-        guard config.controlEnabled, let token = config.controlToken, !token.isEmpty else { return }
-        controlServer = ControlServer(
-            host: config.controlHost,
-            port: config.controlPort,
-            token: token,
-            coordinator: coordinator,
-            metrics: metricsProvider
-        )
         controlServer?.start()
     }
 
@@ -97,17 +80,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     // MARK: - Wiring
-
-    private func makeNotifier(config: HearthConfig) -> Notifier {
-        var notifiers: [Notifier] = []
-        if config.localNotifications {
-            notifiers.append(LocalNotifier())
-        }
-        if let topic = config.ntfyTopic, !topic.trimmingCharacters(in: .whitespaces).isEmpty {
-            notifiers.append(NtfyNotifier(server: config.ntfyServer, topic: topic))
-        }
-        return CompositeNotifier(notifiers)
-    }
 
     private func configureStatusItem() {
         menu.delegate = self
@@ -214,6 +186,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if config.controlEnabled, controlServer != nil {
             menu.addItem(.separator())
             menu.addItem(disabled("Remote control: \(config.controlHost):\(config.controlPort)"))
+            if let tailnet = NetworkInterfaces.tailnetIPv4() {
+                menu.addItem(disabled("Phone access: http://\(tailnet):\(config.controlPort)"))
+            }
         }
         if let note = configNote {
             menu.addItem(.separator())

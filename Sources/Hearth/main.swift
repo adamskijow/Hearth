@@ -1,12 +1,21 @@
 // SPDX-License-Identifier: MIT
 
 import AppKit
+import SupervisorCore
 
-// Hearth is a background menubar agent (LSUIElement). Bring up the shared
-// application first so the status bar is available, then install the delegate
-// and run as an accessory (no Dock icon, no main window).
-let application = NSApplication.shared
-let delegate = AppDelegate()
-application.delegate = delegate
-application.setActivationPolicy(.accessory)
-application.run()
+// Two ways to run:
+//  - default: an LSUIElement menubar agent (no Dock icon, no main window).
+//  - --headless (or HEARTH_HEADLESS=1): no GUI at all, for a pre login root
+//    LaunchDaemon on a Mac where nobody logs in. See deploy/ and the README.
+let headless = CommandLine.arguments.contains("--headless")
+    || ProcessInfo.processInfo.environment["HEARTH_HEADLESS"] == "1"
+
+if headless {
+    HeadlessRunner(config: ConfigStore.load().config).run()
+} else {
+    let application = NSApplication.shared
+    let delegate = AppDelegate()
+    application.delegate = delegate
+    application.setActivationPolicy(.accessory)
+    application.run()
+}

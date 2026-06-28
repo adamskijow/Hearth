@@ -1,0 +1,23 @@
+{
+  "runner": "ollama",
+  "mode": "managed",
+  "ollamaBinaryPath": "/opt/homebrew/bin/ollama",
+  "host": "127.0.0.1",
+  "port": 11434,
+  "probeTimeoutSeconds": 2,
+  "probeIntervalSeconds": 5,
+  "startupGraceSeconds": 30,
+  "initialBackoffSeconds": 1,
+  "backoffMultiplier": 2,
+  "maxBackoffSeconds": 60,
+  "crashLoopThreshold": 5,
+  "crashLoopWindowSeconds": 60,
+  "failingProbeIntervalSeconds": 30,
+  "localNotifications": false,
+  "ntfyTopic": "CHANGE-ME-to-a-long-random-string",
+  "ntfyServer": "https://ntfy.sh",
+  "controlEnabled": true,
+  "controlHost": "127.0.0.1",
+  "controlPort": 11435,
+  "controlToken": "CHANGE-ME-to-a-long-random-secret"
+}

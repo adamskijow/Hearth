@@ -26,13 +26,14 @@ nobody is sitting at.
 ## Requirements
 
 - macOS 14 or later.
-- An existing runner install. Ollama is the default; LM Studio is also supported.
-  Hearth supervises the runner, it does not install it.
+- An existing runner install. Ollama is the default; LM Studio and mlx_lm are
+  also supported. Hearth supervises the runner, it does not install it.
   - Ollama: expected at `/opt/homebrew/bin/ollama` (the Apple Silicon Homebrew
     location). If yours is elsewhere, for example `/usr/local/bin/ollama`, set
     `ollamaBinaryPath`.
   - LM Studio: set `runner` to `lmstudio` and `lmStudioBinaryPath` to your `lms`
     CLI. LM Studio is best run in attached mode (below).
+  - mlx_lm: set `runner` to `mlx` and `mlxBinaryPath` to your `mlx_lm.server`.
 - No third party Swift dependencies. Hearth builds against Apple system
   frameworks only (Foundation, AppKit, IOKit, Network, ServiceManagement, and
   UserNotifications), which keeps the dependency surface, and the licensing
@@ -99,14 +100,16 @@ Keys, defaults, and what they do:
 
 Runner
 
-- `runner` (default `"ollama"`): which runner to supervise, `"ollama"` or
-  `"lmstudio"`.
+- `runner` (default `"ollama"`): which runner to supervise, `"ollama"`,
+  `"lmstudio"`, or `"mlx"`.
 - `mode` (default `"managed"`): `"managed"` means Hearth spawns and owns the
   runner; `"attached"` means it only monitors an already running one (below).
 - `ollamaBinaryPath` (default `"/opt/homebrew/bin/ollama"`): the Ollama binary,
   when `runner` is `ollama`.
 - `lmStudioBinaryPath` (default `"/usr/local/bin/lms"`): the LM Studio CLI, when
   `runner` is `lmstudio`.
+- `mlxBinaryPath` (default `"/opt/homebrew/bin/mlx_lm.server"`): the mlx_lm
+  server, when `runner` is `mlx`.
 - `host` (default `"127.0.0.1"`): the address the runner listens on. For Ollama
   this is set via `OLLAMA_HOST` at spawn. Use `"0.0.0.0"` to listen on all
   interfaces (see the security note before you do).
@@ -228,9 +231,13 @@ are not, so a Mac in a closet can still reach your phone.
 
 The menubar shows the current status, the models the runner currently holds
 resident (from its own API, surfaced for awareness only, never chosen by Hearth),
-uptime of the current healthy streak, and the reason for the last restart. The
-actions are Start, Stop, Restart, and Open Logs. The child's stdout and stderr
-are captured to `~/Library/Logs/Hearth/runner.log`.
+uptime of the current healthy streak, and the reason for the last restart. It
+also shows a coarse system readout: the thermal state (throttling risk), the
+fraction of physical memory in use (out of memory risk), and the runner's
+resident memory. These come from public APIs only, no root, and are
+observability, not inference. The actions are Start, Stop, Restart, and Open
+Logs. The child's stdout and stderr are captured to
+`~/Library/Logs/Hearth/runner.log`.
 
 ## Remote control
 
@@ -250,10 +257,56 @@ curl -X POST -H "Authorization: Bearer $TOKEN" http://HOST:11435/start
 ```
 
 `/status` returns a compact JSON document with the phase, resident models,
-uptime, restart count, and last restart reason. The control endpoint is a control
-surface, not a public API: bind it to localhost or a private interface (a
+uptime, restart count, last restart reason, and the system metrics (thermal
+state, memory used percent, runner resident bytes). The control endpoint is a
+control surface, not a public API: bind it to localhost or a private interface (a
 Tailscale address is ideal) and keep it behind a VPN. It refuses to start without
 a token, and rejects any request whose bearer token does not match.
+
+When Hearth detects a Tailscale address on the machine (an interface in the
+100.64.0.0/10 range), the menubar shows a "Phone access" line with the full
+control URL to use from your phone. Hearth only reads the interface list; it does
+not configure Tailscale.
+
+## Running headless
+
+The menubar agent needs a logged in desktop session. For a Mac where nobody logs
+in, Hearth has a headless mode that runs supervision with no GUI: no menubar and
+no local Notification Center (there is no session to show it), but ntfy still
+reaches your phone, and the control endpoint and the power assertion work the
+same.
+
+```
+hearth --headless          # or set HEARTH_HEADLESS=1
+```
+
+To run it before anyone logs in, install it as a root LaunchDaemon. The files are
+in `deploy/` and the installer is `scripts/install-daemon.sh`. It modifies your
+system (writes to `/usr/local/bin`, `/etc/hearth`, and
+`/Library/LaunchDaemons`), so read it first and run it with sudo:
+
+```
+swift build -c release
+sudo ./scripts/install-daemon.sh
+# edit /etc/hearth/config.json (set your tokens), then:
+sudo launchctl kickstart -k system/com.hearth.daemon
+```
+
+Remove it with `sudo ./scripts/uninstall-daemon.sh`. In daemon mode Hearth runs
+as root, so its config lives at `/etc/hearth/config.json` (pointed to by the
+plist's `HEARTH_CONFIG`) and its logs at `/var/log/hearth.out.log` and
+`/var/log/hearth.err.log`.
+
+## Exposing the runner
+
+Hearth keeps the runner alive but does not put it on the network. If you want to
+reach the runner's API from another machine, do not set the runner's `host` to
+`0.0.0.0` and expose it raw. Keep it on `127.0.0.1` and put an authenticating
+reverse proxy in front, bound to a private (Tailscale) address. Proxying
+inference traffic is a job for a battle tested proxy, not something Hearth should
+reimplement, so `deploy/Caddyfile.example` shows a Caddy config that gates the
+runner behind a bearer token. Hearth's own control endpoint is separate and is
+only for supervision (status, start, stop, restart), never inference.
 
 ## Architecture
 
@@ -266,8 +319,8 @@ sit behind protocols, so the whole thing is unit testable with fakes and never
 touches real I/O in a test. The heart is an explicit restart state machine and a
 pure exit classifier; both take the current time as an argument rather than
 reading a clock, so their behavior is fully determined by their inputs. The
-runner specifics (Ollama, LM Studio) and the control endpoint's routing and auth
-also live here as pure, tested code.
+runner specifics (Ollama, LM Studio, mlx_lm), the control endpoint's routing and
+auth, and the metrics and tailnet helpers also live here as pure, tested code.
 
 `Hearth` is the executable: the menubar agent that wires the core to real
 `Foundation.Process`, URLSession, IOKit, the Network framework, SMAppService, and
@@ -281,7 +334,8 @@ the clock, process control, and HTTP. There is no real runner and no real
 a hung but alive runner, exponential backoff timing, a crash loop entering the
 failing state without thrashing, recovery back to healthy, out of memory versus
 crash classification, attached mode never spawning or killing, the runners' spec
-and parsing, and the control endpoint's routing and auth.
+and parsing, the control endpoint's routing and auth, the metrics formatting, and
+tailnet address recognition.
 
 Run the tests with:
 
@@ -372,11 +426,11 @@ text to notifiers; no prompts, model data, or runner content leave the machine.
 
 Near term intentions:
 
-- A thermal, tokens per second, and memory dashboard.
-- Tailscale auto configuration.
-- An authenticating reverse proxy in front of the runner.
-- A third runner, mlx_lm, behind the existing `Runner` protocol.
-- A pre login root LaunchDaemon, so the runner is up before anyone logs in.
+- A tokens per second readout, alongside the existing thermal and memory metrics.
+- Full Tailscale auto configuration (tailnet address detection is already done).
+- A first class authenticating proxy (today Hearth ships a documented Caddy
+  config at `deploy/Caddyfile.example`).
+- More runners behind the `Runner` protocol as people want them.
 
 ## Contributing
 

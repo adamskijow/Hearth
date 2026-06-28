@@ -4,8 +4,8 @@
 
 # Hearth
 
-Hearth is a background supervisor that keeps a local LLM runner alive and serving
-on a headless Mac.
+Hearth is a background supervisor that keeps a local LLM runner (Ollama, with LM
+Studio and mlx_lm support) alive and serving on a headless Mac.
 
 It is an availability layer, not an inference layer. Hearth watches the runner,
 restarts it when it dies or wedges, keeps the Mac awake while it is meant to be

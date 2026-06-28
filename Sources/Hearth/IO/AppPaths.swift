@@ -36,33 +36,59 @@ enum AppPaths {
     }
 }
 
+/// The outcome of loading the config, so the UI can tell apart a clean load, a
+/// first-run template, and a parse failure (which is a setup problem to surface
+/// loudly rather than silently revert).
+struct ConfigLoad {
+    var config: HearthConfig
+    var note: String?
+    var isProblem: Bool
+    var createdDefault: Bool
+}
+
 enum ConfigStore {
-    /// Load the config from disk, or write a documented default template on first
-    /// run and return the defaults. A malformed file is reported and the defaults
-    /// are used rather than refusing to start.
-    static func load() -> (config: HearthConfig, note: String?) {
+    /// Load the config from disk, writing a starter template on first run (with
+    /// the runner binary auto detected so first run does not fail on a wrong
+    /// path). A malformed file is flagged as a problem; the caller decides whether
+    /// to keep its current settings rather than reverting.
+    static func load() -> ConfigLoad {
         let fm = FileManager.default
         let url = AppPaths.configFile
         try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+
         guard fm.fileExists(atPath: url.path) else {
-            let defaults = HearthConfig()
-            writeTemplate(defaults, to: url)
-            return (defaults, "Wrote a default config to \(url.path)")
+            var defaults = HearthConfig()
+            if let detected = RunnerLocator.locate(defaults.runner) {
+                defaults.ollamaBinaryPath = detected
+            }
+            save(defaults)
+            return ConfigLoad(config: defaults, note: "Created a starter config at \(url.path)", isProblem: false, createdDefault: true)
         }
 
         do {
             let data = try Data(contentsOf: url)
             let config = try JSONDecoder().decode(HearthConfig.self, from: data)
-            return (config, nil)
+            return ConfigLoad(config: config, note: nil, isProblem: false, createdDefault: false)
         } catch {
-            return (HearthConfig(), "Config at \(url.path) could not be read (\(error.localizedDescription)); using defaults")
+            return ConfigLoad(
+                config: HearthConfig(),
+                note: "Config could not be read: \(error.localizedDescription). Fix it, then choose Reload Config.",
+                isProblem: true,
+                createdDefault: false
+            )
         }
     }
 
-    private static func writeTemplate(_ config: HearthConfig, to url: URL) {
+    /// Write the config to disk as pretty JSON.
+    @discardableResult
+    static func save(_ config: HearthConfig) -> Bool {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? encoder.encode(config) else { return }
-        try? data.write(to: url)
+        guard let data = try? encoder.encode(config) else { return false }
+        try? FileManager.default.createDirectory(
+            at: AppPaths.configFile.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        return (try? data.write(to: AppPaths.configFile)) != nil
     }
 }

@@ -27,7 +27,7 @@ enum NetworkInterfaces {
                 nil, 0, NI_NUMERICHOST
             )
             guard result == 0 else { continue }
-            let ip = String(cString: host)
+            let ip = host.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
             if TailnetAddress.isTailnetIPv4(ip) {
                 return ip
             }

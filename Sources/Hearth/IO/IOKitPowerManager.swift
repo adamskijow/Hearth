@@ -7,10 +7,8 @@ import SupervisorCore
 /// Holds an IOKit power assertion so the Mac does not idle sleep while the runner
 /// is meant to be serving. The assertion is `PreventUserIdleSystemSleep`.
 ///
-/// Honest scope: this prevents idle sleep, which keeps a plugged in, lid open (or
-/// clamshell with external display) headless Mac awake and serving. It does not
-/// defeat closed lid sleep on battery; that is a separate, harder problem called
-/// out in the README and left for a later milestone.
+/// Scope: this prevents idle sleep. It does not defeat closed lid sleep on
+/// battery, which needs a privileged system setting and is left for later.
 final class IOKitPowerManager: PowerManaging, @unchecked Sendable {
     private let lock = NSLock()
     private var assertionID = IOPMAssertionID(0)

@@ -13,9 +13,15 @@ enum AppPaths {
         return base.appendingPathComponent("Hearth", isDirectory: true)
     }
 
-    /// ~/Library/Application Support/Hearth/config.json
+    /// The config file. Defaults to the standard support location, but the
+    /// HEARTH_CONFIG environment variable overrides it (handy for running a
+    /// throwaway config without touching the real one).
     static var configFile: URL {
-        supportDirectory.appendingPathComponent("config.json")
+        if let override = ProcessInfo.processInfo.environment["HEARTH_CONFIG"],
+           !override.isEmpty {
+            return URL(fileURLWithPath: (override as NSString).expandingTildeInPath)
+        }
+        return supportDirectory.appendingPathComponent("config.json")
     }
 
     /// ~/Library/Logs/Hearth
@@ -36,9 +42,8 @@ enum ConfigStore {
     /// are used rather than refusing to start.
     static func load() -> (config: HearthConfig, note: String?) {
         let fm = FileManager.default
-        try? fm.createDirectory(at: AppPaths.supportDirectory, withIntermediateDirectories: true)
-
         let url = AppPaths.configFile
+        try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         guard fm.fileExists(atPath: url.path) else {
             let defaults = HearthConfig()
             writeTemplate(defaults, to: url)

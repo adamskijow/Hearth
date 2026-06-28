@@ -84,7 +84,8 @@ Configuration is a JSON file at:
 On first launch, if the file is missing, Hearth writes a default template there
 and uses it. Every key is optional; anything you leave out falls back to the
 default below. A malformed file is reported in the menubar and the defaults are
-used rather than refusing to start.
+used rather than refusing to start. To point Hearth at a config somewhere else,
+set the `HEARTH_CONFIG` environment variable to that path.
 
 Keys, defaults, and what they do:
 
@@ -231,15 +232,35 @@ Testing framework is not on the default search path. The script detects the righ
 directory for both the Command Line Tools and full Xcode layouts and passes it.
 On a machine with full Xcode, a plain `swift test` also works.
 
+Continuous integration builds the package and runs this suite on every push and
+pull request (see `.github/workflows/ci.yml`). Notarization and Homebrew
+publishing are not wired into CI yet; they are stubbed in
+`scripts/package-app.sh`.
+
+### Trying it without Ollama
+
+You can exercise the whole agent without installing Ollama, using a small stand
+in runner that answers the two endpoints Hearth probes:
+
+```
+./scripts/smoke-test.sh
+```
+
+This builds Hearth, points it at `scripts/fake-runner.py` through a throwaway
+config, and checks the acceptance behavior end to end: the agent starts and owns
+the child, holds the power assertion (`pmset`), restarts the child when it is
+killed externally, and releases the assertion and kills the child on a clean
+shutdown. It launches the real menubar agent, so it needs a logged in desktop
+session; it is a local helper, not a CI step.
+
 ## Known limitations
 
 These are stated up front on purpose.
 
-- Closed lid on battery is not solved in this milestone. The power assertion
-  prevents idle sleep, which keeps a plugged in Mac (lid open, or in clamshell
-  with an external display) awake and serving. It does not defeat closed lid
-  sleep on battery. That is a known hard problem and a later milestone, not a
-  thing Hearth quietly half does.
+- The power assertion prevents idle sleep, which keeps a Mac that would otherwise
+  sleep on idle (a desktop, or a plugged in laptop with the lid open) awake and
+  serving. Keeping a laptop serving with the lid closed on battery is a separate,
+  privileged concern and is not in this milestone.
 - The phone gets notifications only. There is no remote control yet; you cannot
   restart or stop the runner from your phone in this milestone.
 - A single runner, Ollama, is supported. The `Runner` protocol is built so LM

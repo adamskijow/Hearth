@@ -225,17 +225,24 @@ enum StatusCLI {
                 NSURLErrorNetworkConnectionLost, NSURLErrorTimedOut].contains(error.code)
     }
 
+    /// A reference box so the URLSession completion can store its result without
+    /// the compiler flagging a captured-var mutation; the semaphore serializes the
+    /// write and the read.
+    private final class ResultBox: @unchecked Sendable {
+        var value: (Data?, URLResponse?, Error?) = (nil, nil, nil)
+    }
+
     private static func syncGET(_ url: URL, bearer: String?, timeout: TimeInterval) -> (Data?, URLResponse?, Error?) {
         var request = URLRequest(url: url, timeoutInterval: timeout)
         if let bearer { request.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization") }
         let semaphore = DispatchSemaphore(value: 0)
-        var result: (Data?, URLResponse?, Error?) = (nil, nil, nil)
+        let box = ResultBox()
         let task = URLSession.shared.dataTask(with: request) { data, response, error in
-            result = (data, response, error)
+            box.value = (data, response, error)
             semaphore.signal()
         }
         task.resume()
         _ = semaphore.wait(timeout: .now() + timeout + 1)
-        return result
+        return box.value
     }
 }

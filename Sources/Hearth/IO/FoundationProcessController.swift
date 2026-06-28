@@ -29,6 +29,7 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
         var partialStderr = Data()
         var exit: ProcessExit?
         var reaped = false
+        var readingFinished = false
         init(pid: pid_t, pgid: pid_t, stdoutRead: FileHandle, stderrRead: FileHandle) {
             self.pid = pid
             self.pgid = pgid
@@ -187,22 +188,57 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
             entry.exit = exit
             entry.reaped = true
             finishReading(entry)
+            // The child is gone; do not report its (possibly recycled) PID's memory.
+            if latestPID == entry.pid { latestPID = nil }
             return ProcessStatus(isAlive: false, exit: exit, recentStderr: entry.stderrRing)
         }
     }
 
     func terminate(_ id: ProcessHandleID) {
-        let pgid: pid_t? = lock.withLock { entries[id]?.pgid }
-        guard let pgid, pgid > 1 else { return }
+        let entry: Entry? = lock.withLock { entries[id] }
+        guard let entry, entry.pgid > 1 else {
+            // Nothing live to signal; just forget any stale entry.
+            lock.withLock { _ = entries.removeValue(forKey: id) }
+            return
+        }
+        let pgid = entry.pgid
+        let pid = entry.pid
+        // Stop reading the doomed child and release its pipe fds now, rather than
+        // leaking the handlers and descriptors until something probes it again.
+        lock.withLock { finishReading(entry) }
         // Take the whole runner tree down: serve plus the llama-server grandchild.
         killpg(pgid, SIGTERM)
         let grace = killGraceSeconds
-        DispatchQueue.global().asyncAfter(deadline: .now() + grace) {
+        DispatchQueue.global().asyncAfter(deadline: .now() + grace) { [weak self] in
             // SIGKILL the group if anything in it is still alive (a wedged or
             // SIGSTOPped runner ignores SIGTERM; SIGKILL still lands).
             if killpg(pgid, 0) == 0 {
                 killpg(pgid, SIGKILL)
             }
+            // Reap the group leader so it is not left a zombie, and forget the
+            // entry so the dictionary does not grow with every restart.
+            self?.reapAndRemove(id: id, pid: pid)
+        }
+    }
+
+    /// Reap a terminated leader and drop its entry. Safe if it was already reaped
+    /// by a `status` probe; reaps outside the lock so a slow wait cannot stall it.
+    private func reapAndRemove(id: ProcessHandleID, pid: pid_t) {
+        let needsReap: Bool = lock.withLock {
+            guard let entry = entries[id] else { return false }
+            return !entry.reaped
+        }
+        if needsReap {
+            var raw: Int32 = 0
+            _ = waitpid(pid, &raw, 0)   // the group SIGKILL has landed, so this returns at once
+        }
+        lock.withLock {
+            if let entry = entries[id] {
+                entry.reaped = true
+                finishReading(entry)
+                entries.removeValue(forKey: id)
+            }
+            if latestPID == pid { latestPID = nil }
         }
     }
 
@@ -228,6 +264,8 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
     }
 
     private func finishReading(_ entry: Entry) {
+        guard !entry.readingFinished else { return }
+        entry.readingFinished = true
         entry.stdoutRead.readabilityHandler = nil
         entry.stderrRead.readabilityHandler = nil
         if !entry.partialStderr.isEmpty, let line = String(data: entry.partialStderr, encoding: .utf8) {
@@ -248,13 +286,23 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
             while let newline = entry.partialStderr.firstIndex(of: 0x0A) {
                 let lineData = entry.partialStderr[entry.partialStderr.startIndex..<newline]
                 entry.partialStderr.removeSubrange(entry.partialStderr.startIndex...newline)
-                if let line = String(data: lineData, encoding: .utf8) {
-                    entry.stderrRing.append(line)
-                    if entry.stderrRing.count > maxStderrLines {
-                        entry.stderrRing.removeFirst(entry.stderrRing.count - maxStderrLines)
-                    }
-                }
+                appendStderrLine(lineData, to: entry)
             }
+            // Cap a runaway no-newline line so the partial buffer cannot grow
+            // without bound (a runner that floods stderr with no newline).
+            let maxPartialBytes = 64 * 1024
+            if entry.partialStderr.count > maxPartialBytes {
+                appendStderrLine(entry.partialStderr[...], to: entry)
+                entry.partialStderr.removeAll(keepingCapacity: false)
+            }
+        }
+    }
+
+    private func appendStderrLine(_ lineData: Data.SubSequence, to entry: Entry) {
+        guard let line = String(data: lineData, encoding: .utf8) else { return }
+        entry.stderrRing.append(line)
+        if entry.stderrRing.count > maxStderrLines {
+            entry.stderrRing.removeFirst(entry.stderrRing.count - maxStderrLines)
         }
     }
 

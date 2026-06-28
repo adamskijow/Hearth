@@ -18,6 +18,7 @@ enum StatusCLI {
           Hearth --headless         Run headless (no GUI), for a LaunchDaemon.
           Hearth status             Print the current supervision status.
           Hearth logs [-n N] [-f]   Show the runner log (last N lines; -f to follow).
+          Hearth doctor             Check the config and environment for problems.
           Hearth --help             Show this help.
 
         Status reads the config at HEARTH_CONFIG or the standard location and uses
@@ -71,13 +72,101 @@ enum StatusCLI {
             print(row("supervised pid", "none recorded"))
         }
         // Is anything actually listening on the runner's port?
-        let base = URL(string: "http://\(config.host):\(config.port)/")!
-        let (_, response, error) = syncGET(base, bearer: nil, timeout: 2)
-        let serving = response != nil || !isConnectionRefused(error)
+        let serving = isSomethingListening(host: config.host, port: config.port)
         print(row("runner \(config.host):\(config.port)", serving ? "serving" : "not serving"))
         print("")
         print("Enable the control endpoint (Preferences, or controlEnabled in the")
         print("config) for full status: phase, restarts, metrics, and resident models.")
+    }
+
+    // MARK: - doctor
+
+    static func printDoctor() -> Never {
+        print("Hearth doctor")
+        let load = ConfigStore.load()
+        if load.isProblem {
+            print(mark(.error) + " config: \(load.note ?? "could not be read")")
+            print("\n1 error, 0 warnings.")
+            exit(1)
+        }
+        if load.createdDefault, let note = load.note {
+            print("  " + note)
+        }
+        let config = load.config
+
+        var errors = 0, warnings = 0
+        func report(_ diagnostic: Diagnostic) {
+            print(mark(diagnostic.severity) + " " + diagnostic.message)
+            if diagnostic.severity == .error { errors += 1 } else { warnings += 1 }
+        }
+
+        // Pure config rules.
+        for diagnostic in ConfigDiagnostics.check(config) { report(diagnostic) }
+
+        // Runner binary present and executable?
+        let binary = runnerBinaryPath(config)
+        if FileManager.default.isExecutableFile(atPath: binary) {
+            print(mark(nil) + " runner binary: \(binary)")
+        } else if let detected = RunnerLocator.locate(config.runner) {
+            report(Diagnostic(.warning, "Runner binary not at \(binary); detected \(detected). Set it in Preferences or the config."))
+        } else {
+            report(Diagnostic(.error, "Runner binary not found at \(binary), and none detected in the usual locations or on PATH."))
+        }
+
+        // Runner port: free for a managed runner, or already serving for attached.
+        let serving = isSomethingListening(host: config.host, port: config.port)
+        if config.isManaged {
+            if !serving {
+                print(mark(nil) + " runner port \(config.host):\(config.port) is free")
+            } else if let identity = recordedRunner(), kill(identity.pid, 0) == 0 {
+                print(mark(nil) + " runner port \(config.host):\(config.port) served by Hearth's runner (pid \(identity.pid))")
+            } else {
+                report(Diagnostic(.warning, "Something other than Hearth's runner is listening on \(config.host):\(config.port); a managed runner may fail to bind."))
+            }
+        } else if serving {
+            print(mark(nil) + " attached target is serving on \(config.host):\(config.port)")
+        } else {
+            report(Diagnostic(.warning, "Attached mode, but nothing is serving on \(config.host):\(config.port) yet."))
+        }
+
+        // Log directory writable?
+        if directoryIsWritable(AppPaths.logDirectory) {
+            print(mark(nil) + " log directory writable: \(AppPaths.logDirectory.path)")
+        } else {
+            report(Diagnostic(.warning, "Log directory \(AppPaths.logDirectory.path) is not writable; runner logs will be lost."))
+        }
+
+        print("")
+        print("\(errors) error\(errors == 1 ? "" : "s"), \(warnings) warning\(warnings == 1 ? "" : "s").")
+        exit(errors == 0 ? 0 : 1)
+    }
+
+    private static func mark(_ severity: Diagnostic.Severity?) -> String {
+        switch severity {
+        case .error: return "  FAIL"
+        case .warning: return "  WARN"
+        case nil: return "  OK  "
+        }
+    }
+
+    private static func runnerBinaryPath(_ config: HearthConfig) -> String {
+        switch config.runner.lowercased() {
+        case "lmstudio", "lm-studio", "lm_studio": return config.lmStudioBinaryPath
+        case "mlx", "mlx_lm", "mlx-lm": return config.mlxBinaryPath
+        default: return config.ollamaBinaryPath
+        }
+    }
+
+    private static func isSomethingListening(host: String, port: Int) -> Bool {
+        guard let url = URL(string: "http://\(host):\(port)/") else { return false }
+        let (_, response, error) = syncGET(url, bearer: nil, timeout: 2)
+        return response != nil || !isConnectionRefused(error)
+    }
+
+    private static func directoryIsWritable(_ url: URL) -> Bool {
+        let fm = FileManager.default
+        try? fm.createDirectory(at: url, withIntermediateDirectories: true)
+        return fm.isWritableFile(atPath: url.path)
     }
 
     private static func recordedRunner() -> RunnerProcessIdentity? {

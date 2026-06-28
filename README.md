@@ -330,6 +330,7 @@ menubar or a curl invocation:
 hearth status              # phase, uptime, restarts, metrics, resident models
 hearth logs -n 100         # last 100 lines of the runner log
 hearth logs -f             # follow the runner log
+hearth doctor              # check the config and environment for problems
 ```
 
 `hearth status` reads the config (at `HEARTH_CONFIG` or the standard location)
@@ -337,6 +338,13 @@ and queries the control endpoint when it is enabled, printing the full picture.
 With the control endpoint off it falls back to a reduced report: whether a
 supervised runner is recorded and alive, and whether anything is serving on the
 runner's port.
+
+`hearth doctor` is a preflight check. It validates the config (port ranges, an
+unknown runner or mode, a control endpoint with no token, a control port that
+collides with the runner port, backoff timings that cannot grow) and the
+environment (the runner binary exists and is executable, the runner port is free
+for a managed runner or already serving for an attached one, the log directory is
+writable), then prints each result and exits non-zero if anything is an error.
 
 ## Running headless
 

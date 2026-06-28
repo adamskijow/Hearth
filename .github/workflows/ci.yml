@@ -1,0 +1,27 @@
+# SPDX-License-Identifier: MIT
+#
+# Hosted mirror of the local gate. Runs the exact same script (scripts/ci.sh) on
+# a clean macOS runner for every push and pull request, so a green check means
+# the build, the unit suite, and the lint all passed on a fresh checkout, not
+# just on a developer's machine. Free for public repositories.
+#
+# The same script runs locally via the pre-push hook (scripts/install-hooks.sh).
+# Releasing stays local (scripts/release.sh) until a Developer ID is configured.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Run the CI gate (build, tests, lint)
+        run: ./scripts/ci.sh

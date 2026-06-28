@@ -406,13 +406,15 @@ Testing framework is not on the default search path. The script detects the righ
 directory for both the Command Line Tools and full Xcode layouts and passes it.
 On a machine with full Xcode, a plain `swift test` also works.
 
-There is no hosted CI; the gate runs on your own machine. `make ci` (or
-`./scripts/ci.sh`) builds debug and release, runs the unit suite, and lints (an
-SPDX header on every Swift source, and the no em dash rule). Install the pre-push
-hook once with `make hooks`, which points `core.hooksPath` at the in-repo
-`scripts/hooks`, and that gate runs before every push; bypass a single push with
-`git push --no-verify`. Pass `--smoke` or `--real` to `scripts/ci.sh` to also run
-the desktop and Ollama gates described below.
+The gate runs in two places, both through `scripts/ci.sh`: locally via the
+pre-push hook, and on GitHub Actions (free for public repositories) for every push
+and pull request (`.github/workflows/ci.yml`). `make ci` (or `./scripts/ci.sh`)
+builds debug and release, runs the unit suite, and lints (an SPDX header on every
+Swift source, and the no em dash rule). Install the pre-push hook once with
+`make hooks`, which points `core.hooksPath` at the in-repo `scripts/hooks`, and
+that gate runs before every push; bypass a single push with `git push
+--no-verify`. Pass `--smoke` or `--real` to `scripts/ci.sh` to also run the
+desktop and Ollama gates described below.
 
 ### Trying it without a runner
 

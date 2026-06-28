@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-.PHONY: build release run test ci hooks smoke validate package install dmg icon clean
+.PHONY: build release run test ci hooks smoke validate package install uninstall dmg icon clean
 
 # Build the library and the menubar agent (debug).
 build:
@@ -44,6 +44,10 @@ package:
 # (dogfooding before a notarized release). No Developer ID required.
 install:
 	./scripts/install-app.sh
+
+# Remove a local install: the app, config, logs, and state (prompts first).
+uninstall:
+	./scripts/uninstall-app.sh
 
 # Build a drag-to-install DMG from dist/Hearth.app (see scripts/make-dmg.sh).
 # scripts/release.sh signs and notarizes it; on its own this is unsigned.

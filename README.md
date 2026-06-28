@@ -77,7 +77,8 @@ open /Applications/Hearth.app
 
 Ad-hoc signing gives the bundle a stable local code identity, which is what the
 login item and Notification Center alerts want, without needing a Developer ID.
-It is for your own machine, not distribution.
+It is for your own machine, not distribution. To remove a local install (the app,
+config, logs, and state), run `make uninstall`.
 
 Hearth ships as a Developer ID signed and notarized build, not through the Mac
 App Store. This is not a preference; the App Store requires the App Sandbox, and
@@ -103,7 +104,8 @@ the release pipeline.
 There are two ways to configure Hearth, and they edit the same file. Open
 **Preferences** from the menubar (or press Cmd-comma) for a form covering the
 runner, notifications, the control endpoint, log rotation, and the timing knobs.
-Or edit the JSON directly at:
+Every key, its type, and its default is listed in the
+[configuration reference](docs/configuration.md). Or edit the JSON directly at:
 
 ```
 ~/Library/Application Support/Hearth/config.json
@@ -392,9 +394,10 @@ reach the runner's API from another machine, do not set the runner's `host` to
 `0.0.0.0` and expose it raw. Keep it on `127.0.0.1` and put an authenticating
 reverse proxy in front, bound to a private (Tailscale) address. Proxying
 inference traffic is a job for a battle tested proxy, not something Hearth should
-reimplement, so `deploy/Caddyfile.example` shows a Caddy config that gates the
-runner behind a bearer token. Hearth's own control endpoint is separate and is
-only for supervision (status, start, stop, restart), never inference.
+reimplement. The [reverse-proxy guide](docs/reverse-proxy.md) has Caddy and nginx
+examples for the runner and the control endpoint, plus the unauthenticated
+`/healthz` route for uptime monitors. Hearth's own control endpoint is separate
+and is only for supervision (status, start, stop, restart), never inference.
 
 ## Architecture
 

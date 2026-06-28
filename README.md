@@ -321,6 +321,23 @@ When Hearth detects a Tailscale address on the machine (an interface in the
 control URL to use from your phone. Hearth only reads the interface list; it does
 not configure Tailscale.
 
+### Local status and logs
+
+From the same machine, two terminal subcommands give a quick read without the
+menubar or a curl invocation:
+
+```
+hearth status              # phase, uptime, restarts, metrics, resident models
+hearth logs -n 100         # last 100 lines of the runner log
+hearth logs -f             # follow the runner log
+```
+
+`hearth status` reads the config (at `HEARTH_CONFIG` or the standard location)
+and queries the control endpoint when it is enabled, printing the full picture.
+With the control endpoint off it falls back to a reduced report: whether a
+supervised runner is recorded and alive, and whether anything is serving on the
+runner's port.
+
 ## Running headless
 
 The menubar agent needs a logged in desktop session. For a Mac where nobody logs

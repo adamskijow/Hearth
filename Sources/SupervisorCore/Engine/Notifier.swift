@@ -16,9 +16,12 @@ public struct HearthNotification: Sendable, Equatable {
     public var level: NotificationLevel
     public var title: String
     public var body: String
-    public var event: SupervisorEvent
+    /// The supervisor event that triggered this, when there is one. Nil for
+    /// notifications not tied to a state transition, such as a memory or thermal
+    /// pressure alert.
+    public var event: SupervisorEvent?
 
-    public init(level: NotificationLevel, title: String, body: String, event: SupervisorEvent) {
+    public init(level: NotificationLevel, title: String, body: String, event: SupervisorEvent? = nil) {
         self.level = level
         self.title = title
         self.body = body

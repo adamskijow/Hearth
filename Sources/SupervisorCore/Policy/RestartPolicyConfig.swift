@@ -29,6 +29,9 @@ public struct RestartPolicyConfig: Sendable, Equatable {
     public var crashLoopWindow: TimeInterval
     /// The slow retry cadence used while failing, instead of fast backoff.
     public var failingProbeInterval: TimeInterval
+    /// Cycle a long-healthy runner this often to clear the memory creep and VRAM
+    /// fragmentation that degrade a 24/7 runner. Zero disables it.
+    public var maintenanceRestartInterval: TimeInterval
 
     public init(probeInterval: TimeInterval = 5,
                 probeTimeout: TimeInterval = 2,
@@ -39,7 +42,8 @@ public struct RestartPolicyConfig: Sendable, Equatable {
                 maxBackoff: TimeInterval = 60,
                 crashLoopThreshold: Int = 5,
                 crashLoopWindow: TimeInterval = 60,
-                failingProbeInterval: TimeInterval = 30) {
+                failingProbeInterval: TimeInterval = 30,
+                maintenanceRestartInterval: TimeInterval = 0) {
         self.probeInterval = probeInterval
         self.probeTimeout = probeTimeout
         self.startupGrace = startupGrace
@@ -50,6 +54,14 @@ public struct RestartPolicyConfig: Sendable, Equatable {
         self.crashLoopThreshold = crashLoopThreshold
         self.crashLoopWindow = crashLoopWindow
         self.failingProbeInterval = failingProbeInterval
+        self.maintenanceRestartInterval = maintenanceRestartInterval
+    }
+
+    /// Whether a periodic maintenance restart is due for a runner healthy since
+    /// `healthySince`, as of `now`. Disabled when the interval is not positive.
+    public func maintenanceRestartDue(healthySince: Date?, now: Date) -> Bool {
+        guard maintenanceRestartInterval > 0, let healthySince else { return false }
+        return now.timeIntervalSince(healthySince) >= maintenanceRestartInterval
     }
 
     /// The backoff for the nth consecutive failure (n starting at 1), capped.

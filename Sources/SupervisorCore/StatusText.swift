@@ -81,6 +81,7 @@ public enum StatusText {
         case .restartScheduled(let attempt, let backoff):
             return "Restart scheduled (attempt \(attempt), in \(Int(backoff))s)"
         case .restarted(let attempt): return "Restarted (attempt \(attempt))"
+        case .maintenanceRestart: return "Maintenance restart"
         case .recovered: return "Recovered"
         case .enteredFailing(let count, let window):
             return "Failing: \(count) failures within \(Int(window))s"

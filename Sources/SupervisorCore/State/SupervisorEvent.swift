@@ -31,6 +31,9 @@ public enum SupervisorEvent: Sendable, Equatable {
     case restartScheduled(attempt: Int, backoff: TimeInterval)
     /// A respawn was just issued.
     case restarted(attempt: Int)
+    /// A scheduled maintenance restart was issued to clear the memory creep that
+    /// degrades a long-running runner. Routine, so it is logged but not pushed.
+    case maintenanceRestart
     /// Came back to healthy after having been unhealthy.
     case recovered
     /// Crash loop tripped; entered the failing phase.

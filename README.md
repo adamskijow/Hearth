@@ -314,6 +314,28 @@ observability, not inference. The actions are Start, Stop, Restart, and Open
 Logs. The child's stdout and stderr are captured to
 `~/Library/Logs/Hearth/runner.log`.
 
+## Keeping a 24/7 runner fresh
+
+Two opt-in features address what degrades a runner left up for days, not what
+crashes it.
+
+A widely reported problem with a long-running Ollama is gradual memory creep and
+VRAM fragmentation: over a day or two, response times slide from a couple of
+seconds to ten or more, and the documented fix everywhere is "restart it daily."
+Hearth can do that for you. Set `maintenanceRestartHours` (for example `24`) and
+it cycles a healthy runner on that interval, clearing the creep. It is a clean
+restart counted off the runner's healthy uptime, so a reactive restart resets the
+clock too, and the return to healthy is quiet (no "recovered" alert for a routine
+cycle). Off by default.
+
+Hearth already samples the thermal state and memory pressure for the menubar; it
+can also alert on them. When system memory crosses `memoryAlertPercent` (default
+90), which on a unified-memory Mac is the precursor to macOS killing the runner as
+its biggest memory user, or when thermals go serious or critical
+(`thermalAlerts`), Hearth sends a heads-up (and an all-clear when it eases) so you
+learn about pressure before it turns into a crash. On by default; both reuse the
+metrics already collected.
+
 ## Remote control
 
 With `controlEnabled` and a `controlToken` set, Hearth runs a small HTTP control

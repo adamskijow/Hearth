@@ -38,6 +38,7 @@ or mode, a control endpoint with no token, timings that cannot grow).
 | `crashLoopThreshold` | int | `5` | Failures within the window that trip the crash-loop brake (clamped to at least 1). |
 | `crashLoopWindowSeconds` | number | `60` | Sliding window for counting failures toward the brake. |
 | `failingProbeIntervalSeconds` | number | `30` | Slow, steady retry cadence once in the crash-loop (failing) state. |
+| `maintenanceRestartHours` | number | `0` | Proactively cycle a healthy runner this often (in hours) to clear the memory creep that degrades a 24/7 runner. `0` disables it; an enabled value is floored at 1 hour. A common value is `24`. |
 
 ## Notifications
 
@@ -46,6 +47,8 @@ or mode, a control endpoint with no token, timings that cannot grow).
 | `localNotifications` | bool | `true` | Show a macOS notification on down/recovered (needs a logged-in session and a signed app). |
 | `ntfyTopic` | string or null | `null` | Subscribe to this topic in the [ntfy](https://ntfy.sh) app for phone alerts. Null disables ntfy. |
 | `ntfyServer` | string | `"https://ntfy.sh"` | ntfy server URL. |
+| `memoryAlertPercent` | int | `90` | Alert when system memory used reaches this percent (the precursor to the runner being killed under pressure). `0` disables the memory alert. |
+| `thermalAlerts` | bool | `true` | Alert when the Mac's thermal state goes serious or critical. |
 
 ## Control endpoint (phone-side remote control)
 

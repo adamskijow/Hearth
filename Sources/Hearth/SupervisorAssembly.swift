@@ -13,6 +13,7 @@ struct SupervisorAssembly {
     let processController: FoundationProcessController
     let runner: any Runner
     let notifier: Notifier
+    let pressureMonitor: PressureMonitor
 
     /// `includeLocalNotifications` is false in headless mode, where there is no
     /// GUI session for the local Notification Center to reach.
@@ -50,6 +51,12 @@ struct SupervisorAssembly {
             )
         }
 
+        let pressureMonitor = PressureMonitor(
+            metrics: metricsProvider,
+            thresholds: config.pressureThresholds(),
+            notify: { notification in Task.detached { await notifier.notify(notification) } }
+        )
+
         return SupervisorAssembly(
             engine: engine,
             coordinator: coordinator,
@@ -57,7 +64,8 @@ struct SupervisorAssembly {
             metricsProvider: metricsProvider,
             processController: processController,
             runner: runner,
-            notifier: notifier
+            notifier: notifier,
+            pressureMonitor: pressureMonitor
         )
     }
 

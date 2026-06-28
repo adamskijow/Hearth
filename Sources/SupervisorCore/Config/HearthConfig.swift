@@ -29,11 +29,19 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     public var crashLoopThreshold: Int
     public var crashLoopWindowSeconds: Double
     public var failingProbeIntervalSeconds: Double
+    /// Cycle a long-healthy runner this often (in hours) to clear memory creep.
+    /// Zero disables it; a common value for a 24/7 server is 24.
+    public var maintenanceRestartHours: Double
 
     // Notifications
     public var ntfyTopic: String?
     public var ntfyServer: String
     public var localNotifications: Bool
+    /// Alert when system memory used reaches this percent (a precursor to the
+    /// runner being killed under pressure). Zero disables the memory alert.
+    public var memoryAlertPercent: Int
+    /// Alert when the Mac's thermal state is serious or critical.
+    public var thermalAlerts: Bool
 
     // Control endpoint (phone side remote control)
     public var controlEnabled: Bool
@@ -69,9 +77,12 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 crashLoopThreshold: Int = 5,
                 crashLoopWindowSeconds: Double = 60,
                 failingProbeIntervalSeconds: Double = 30,
+                maintenanceRestartHours: Double = 0,
                 ntfyTopic: String? = nil,
                 ntfyServer: String = "https://ntfy.sh",
                 localNotifications: Bool = true,
+                memoryAlertPercent: Int = 90,
+                thermalAlerts: Bool = true,
                 controlEnabled: Bool = false,
                 controlHost: String = "127.0.0.1",
                 controlPort: Int = 11435,
@@ -99,9 +110,12 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.crashLoopThreshold = crashLoopThreshold
         self.crashLoopWindowSeconds = crashLoopWindowSeconds
         self.failingProbeIntervalSeconds = failingProbeIntervalSeconds
+        self.maintenanceRestartHours = maintenanceRestartHours
         self.ntfyTopic = ntfyTopic
         self.ntfyServer = ntfyServer
         self.localNotifications = localNotifications
+        self.memoryAlertPercent = memoryAlertPercent
+        self.thermalAlerts = thermalAlerts
         self.controlEnabled = controlEnabled
         self.controlHost = controlHost
         self.controlPort = controlPort
@@ -150,9 +164,12 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         crashLoopThreshold = try value(.crashLoopThreshold, defaults.crashLoopThreshold)
         crashLoopWindowSeconds = try value(.crashLoopWindowSeconds, defaults.crashLoopWindowSeconds)
         failingProbeIntervalSeconds = try value(.failingProbeIntervalSeconds, defaults.failingProbeIntervalSeconds)
+        maintenanceRestartHours = try value(.maintenanceRestartHours, defaults.maintenanceRestartHours)
         ntfyTopic = try c.decodeIfPresent(String.self, forKey: .ntfyTopic)
         ntfyServer = try value(.ntfyServer, defaults.ntfyServer)
         localNotifications = try value(.localNotifications, defaults.localNotifications)
+        memoryAlertPercent = try value(.memoryAlertPercent, defaults.memoryAlertPercent)
+        thermalAlerts = try value(.thermalAlerts, defaults.thermalAlerts)
         controlEnabled = try value(.controlEnabled, defaults.controlEnabled)
         controlHost = try value(.controlHost, defaults.controlHost)
         controlPort = try value(.controlPort, defaults.controlPort)
@@ -189,8 +206,16 @@ public struct HearthConfig: Codable, Sendable, Equatable {
             maxBackoff: maxBackoffSeconds,
             crashLoopThreshold: max(1, crashLoopThreshold),
             crashLoopWindow: crashLoopWindowSeconds,
-            failingProbeInterval: max(0.1, failingProbeIntervalSeconds)
+            failingProbeInterval: max(0.1, failingProbeIntervalSeconds),
+            // Enabled values are floored at one hour so a tiny setting cannot make
+            // Hearth restart the runner in a tight loop.
+            maintenanceRestartInterval: maintenanceRestartHours <= 0 ? 0 : max(3600, maintenanceRestartHours * 3600)
         )
+    }
+
+    /// The memory and thermal pressure alert thresholds these settings describe.
+    public func pressureThresholds() -> PressureThresholds {
+        PressureThresholds(memoryAlertPercent: memoryAlertPercent, thermalAlerts: thermalAlerts)
     }
 
     /// The runner log rotation policy these settings describe.

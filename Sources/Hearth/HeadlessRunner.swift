@@ -29,6 +29,7 @@ final class HeadlessRunner {
         }
 
         assembly.controlServer?.start()
+        assembly.pressureMonitor.start()
         installSignalHandlers()
 
         // Persist supervisor events so `hearth events` and the next launch can see

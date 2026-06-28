@@ -8,6 +8,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- Scheduled maintenance restart (`maintenanceRestartHours`): proactively cycle a
+  healthy runner on an interval to clear the gradual memory creep and VRAM
+  fragmentation that degrade a long-running Ollama, whose documented fix is "restart
+  it daily." Off by default; floored at one hour; counted off healthy uptime; the
+  return to healthy is quiet so a routine cycle does not push a recovered alert.
+- Memory and thermal pressure alerts (`memoryAlertPercent`, `thermalAlerts`): turn
+  the metrics Hearth already samples into a heads-up before macOS kills the runner
+  under memory pressure or sustained thermals throttle it, with an all-clear when
+  pressure eases. On by default, with hysteresis so they do not flap.
 - Reboot escalation, the last rung of the recovery ladder: when a wedge survives
   process restarts long enough (a driver/GPU-level hang that only a reboot
   clears), Hearth can reboot the Mac and come back with the runner respawned
@@ -29,6 +38,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `docs/`.
 
 ### Fixed
+- Preferences: the ntfy topic and bearer token fields were invisible when empty
+  (a grouped-Form quirk), so there was nothing obvious to click. They now show a
+  placeholder prompt.
 - Crash-loop trap: a runner that crash-looped and then came back was never
   re-probed in the failing state, so it stayed "failing" until a manual restart.
   The slow retry now routes through restarting and recovers.

@@ -116,6 +116,15 @@ public actor SupervisorEngine {
             if machine.phase == .stopped { return 0 }
             let output = machine.observe(report, now: now)
             await apply(output, models: report.models)
+            // Proactive maintenance restart: cycle a long-healthy managed runner to
+            // clear the memory creep and VRAM fragmentation that degrade a 24/7
+            // runner. Off unless configured.
+            if managed, machine.phase == .healthy,
+               policy.maintenanceRestartDue(healthySince: machine.healthySince, now: now) {
+                let maintenance = machine.maintenanceRestart(now: now)
+                await apply(maintenance, models: nil)
+                return maintenance.nextWait
+            }
             return output.nextWait
         case .down, .failing:
             if machine.respawnDue(now: now) {

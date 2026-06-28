@@ -74,7 +74,7 @@ struct EngineTests {
         // Next probe detects it within the interval and schedules a restart.
         let wait = await h.engine.stepOnce()
         #expect(await h.engine.snapshot().phase == .down)
-        let downCount = await h.notifier.received.filter { if case .down = $0.event { return true }; return false }.count
+        let downCount = await h.notifier.received.filter { if case .down? = $0.event { return true }; return false }.count
         #expect(downCount == 1)
 
         // Backoff elapses; the engine respawns.
@@ -123,7 +123,7 @@ struct EngineTests {
 
     private func enteredFailingCount(_ h: Harness) async -> Int {
         await h.notifier.received.filter {
-            if case .enteredFailing = $0.event { return true }; return false
+            if case .enteredFailing? = $0.event { return true }; return false
         }.count
     }
 
@@ -157,6 +157,28 @@ struct EngineTests {
         _ = await h.engine.stepOnce()
         #expect(await h.engine.snapshot().phase == .restarting)
         #expect(h.processes.spawnCount == spawnsBefore + 1)
+    }
+
+    @Test func aLongHealthyRunnerIsMaintenanceRestarted() async {
+        let policy = RestartPolicyConfig(startupGrace: 5, maintenanceRestartInterval: 3600)
+        let h = makeHarness(policy: policy)
+        makeServing(h)
+        await h.engine.start()
+        _ = await h.engine.stepOnce()   // -> healthy
+        #expect(await h.engine.snapshot().phase == .healthy)
+        let spawnsBefore = h.processes.spawnCount
+
+        // Not yet due: a healthy step does not cycle the runner.
+        h.clock.advance(by: 100)
+        _ = await h.engine.stepOnce()
+        #expect(h.processes.spawnCount == spawnsBefore)
+
+        // Past the interval: the next healthy step cycles the runner (a fresh
+        // spawn) and moves to restarting.
+        h.clock.advance(by: 3601)
+        _ = await h.engine.stepOnce()
+        #expect(h.processes.spawnCount == spawnsBefore + 1)
+        #expect(await h.engine.snapshot().phase == .restarting)
     }
 
     @Test func aCrashLoopedRunnerRecoversWhenItComesBack() async {

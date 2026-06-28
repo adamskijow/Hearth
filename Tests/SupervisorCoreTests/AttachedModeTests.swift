@@ -54,7 +54,7 @@ struct AttachedModeTests {
         #expect(await engine.snapshot().phase == .down)
         #expect(processes.terminateCount == 0)   // we do not own it, so we never kill
         #expect(processes.spawnCount == 0)
-        let downCount = await notifier.received.filter { if case .down = $0.event { return true }; return false }.count
+        let downCount = await notifier.received.filter { if case .down? = $0.event { return true }; return false }.count
         #expect(downCount == 1)
     }
 

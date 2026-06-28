@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var coordinator: SupervisionCoordinator!
     private var runner: (any Runner)!
     private var controlServer: ControlServer?
+    private var pressureMonitor: PressureMonitor?
     private var processController: FoundationProcessController!
     private var metricsProvider: SystemMetricsProvider!
     private var config = HearthConfig()
@@ -47,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         controlServer?.stop()
+        pressureMonitor?.stop()
         guard let coordinator else { return }
         let semaphore = DispatchSemaphore(value: 0)
         Task.detached {
@@ -86,6 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let generation = reloadGeneration
 
         controlServer?.stop()
+        pressureMonitor?.stop()
         stateTask?.cancel()
         eventTask?.cancel()
         if let coordinator { await coordinator.end() }
@@ -115,6 +118,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         coordinator = assembly.coordinator
         controlServer = assembly.controlServer
         controlServer?.start()
+        pressureMonitor = assembly.pressureMonitor
+        pressureMonitor?.start()
 
         if LoginItem.isAvailable && !LoginItem.isRegistered {
             LoginItem.register()

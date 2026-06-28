@@ -174,7 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func appendRecentEvent(_ event: SupervisorEvent) {
-        recentEvents.append(MenuFormat.describe(event))
+        recentEvents.append(StatusText.describe(event))
         if recentEvents.count > 12 {
             recentEvents.removeFirst(recentEvents.count - 12)
         }
@@ -220,8 +220,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // Health: a bright, color-coded headline, then a couple of detail lines.
         let phaseColor = MenuFormat.tint(for: latestState.phase) ?? .labelColor
-        menu.addItem(infoRow(headlineAttr(MenuFormat.headline(latestState, now: now), color: phaseColor)))
-        menu.addItem(infoRow(detailAttr(MenuFormat.contextLine(
+        menu.addItem(infoRow(headlineAttr(StatusText.headline(latestState, now: now), color: phaseColor)))
+        menu.addItem(infoRow(detailAttr(StatusText.contextLine(
             latestState, runnerName: runner.name, managed: config.isManaged, now: now))))
         if latestState.phase != .healthy, let reason = latestState.lastRestartReason {
             menu.addItem(infoRow(detailAttr("Last: \(reason)")))
@@ -231,12 +231,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let summary = MetricsFormat.summary(metrics) {
             var line = summary
             if let resident = metrics.runnerResidentBytes {
-                line += " \u{00B7} Runner \(MenuFormat.byteString(resident))"
+                line += " \u{00B7} Runner \(StatusText.byteString(resident))"
             }
             menu.addItem(infoRow(detailAttr(line)))
         }
         if !latestState.residentModels.isEmpty {
-            let loaded = latestState.residentModels.map(MenuFormat.model).joined(separator: ", ")
+            let loaded = latestState.residentModels.map(StatusText.model).joined(separator: ", ")
             menu.addItem(infoRow(detailAttr("Loaded: \(loaded)")))
         }
         if config.controlEnabled, controlServer != nil {

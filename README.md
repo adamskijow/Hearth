@@ -409,8 +409,8 @@ crash classification, attached mode never spawning or killing, the runners' spec
 and parsing (including a real Ollama `/api/ps` capture), the pre-spawn process
 group sweep, the hard-crash sweep decision, log rotation decisions, the control
 endpoint's routing and auth, the metrics formatting, tailnet address recognition,
-runner binary location ordering, and config resolution (the first-run, clean, and
-parse-failure paths).
+runner binary location ordering, config resolution (the first-run, clean, and
+parse-failure paths), and the status line wording for every phase.
 
 For end to end checks against a live server, `scripts/validate-real.sh` drives the
 real agent against a real `ollama serve` and proves the lifecycle scenarios

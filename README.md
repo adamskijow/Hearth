@@ -17,15 +17,35 @@ whether it is healthy.
 
 ## Why this exists
 
-If you run a local model server on a Mac you leave in a closet, three things
-quietly break the "always available" promise. The runner process dies or, worse,
-wedges into a state where it is still alive but no longer answering, so a plain
-"is it running" check is fooled. The Mac goes to sleep and stops serving. And if
-you tried to fix the first two with a launchd plist, you probably hit the
-`OLLAMA_HOST` env trap, where the daemon does not inherit the environment you
-expected and ends up listening on the wrong address, or only on localhost. Hearth
-exists to make a local runner behave like a real, always on service on a machine
-nobody is sitting at.
+If you run a local model server on a Mac you leave in a closet, the usual fix is a
+launchd plist (or `brew services`) with `KeepAlive`, which relaunches the runner
+when the process exits. That handles a clean crash. It does not handle the failure
+that actually wastes your afternoon: the runner is still running, but no longer
+answering.
+
+That "alive but wedged" state is common and well reported. The model runner hangs
+after a few requests with no error and has to be killed by hand
+([ollama#6616](https://github.com/ollama/ollama/issues/6616)); the GPU stops
+responding and "the service needs to be rebooted"
+([Framework](https://community.frame.work/t/ollama-model-runner-unexpectedly-stopped-gpu-hang/76220));
+or Ollama silently reverts to CPU and spins for hours without ever replying
+([ollama#8594](https://github.com/ollama/ollama/issues/8594)). The process is up
+the whole time, so a **liveness** check ("is the PID there?") is satisfied and
+launchd does nothing.
+
+Hearth probes **readiness** instead ("does the API actually answer in time?"), so
+it catches the wedge, not just the crash. Put simply: **launchd restarts the
+runner when it dies; Hearth also restarts it when it wedges.**
+
+Two more things quietly break the "always available" promise, and Hearth handles
+both. The Mac goes to sleep and stops serving, so Hearth holds an IOKit power
+assertion. And the `OLLAMA_HOST` env trap, where a launchd-started daemon does not
+inherit the shell environment you expected and ends up on the wrong address or
+only on localhost, is sidestepped because Hearth sets the runner's environment at
+spawn, so the listen address is correct by construction.
+
+Hearth exists to make a local runner behave like a real, always on service on a
+machine nobody is sitting at.
 
 ## Requirements
 
@@ -521,6 +541,15 @@ copies the app to `/Applications`.
 
 These are stated up front on purpose.
 
+- Restarting the runner clears a process-level wedge, not a driver- or GPU-level
+  one. Some hangs need a full reboot, not a process restart: people report that
+  "stopping and restarting ollama doesn't resolve the issue, only a full restart
+  works" ([ollama#8594](https://github.com/ollama/ollama/issues/8594)). Hearth
+  kills and respawns the runner's process group, which recovers the common cases
+  (a hung serve, a deadlocked model load, a wedged child); a GPU stuck at the
+  driver level is beyond what any process supervisor can fix. On Apple Silicon and
+  Metal a respawn clears more of these than on the discrete-GPU setups in those
+  reports, but it is not a cure-all.
 - Validated against a real Ollama 0.30.11 (see
   [VALIDATION-REPORT.md](VALIDATION-REPORT.md)): cold start, external kill, the
   alive-but-wedged case via SIGSTOP, clean process group teardown with no

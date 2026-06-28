@@ -440,17 +440,6 @@ Near term intentions:
   config at `deploy/Caddyfile.example`).
 - More runners behind the `Runner` protocol as people want them.
 
-## Visuals
-
-The banner and the state diagram above are self contained animated SVGs. The
-flame below is a WebGL fragment-shader fireplace; the source is in
-[`docs/fireplace.html`](docs/fireplace.html), and you can open it in a browser to
-watch it live.
-
-<p align="center">
-  <img src="assets/fireplace.gif" alt="A WebGL shader fireplace" width="560">
-</p>
-
 ## Contributing
 
 Contributions are welcome. The project values the split between logic and

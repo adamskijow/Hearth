@@ -13,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var coordinator: SupervisionCoordinator!
     private var runner: (any Runner)!
     private var controlServer: ControlServer?
+    private var processController: FoundationProcessController!
+    private var metricsProvider: SystemMetricsProvider!
     private var config = HearthConfig()
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
@@ -35,10 +37,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             binaryMissingPath = config.selectedBinaryPath
         }
 
+        processController = FoundationProcessController(logFileURL: AppPaths.runnerLogFile)
+        metricsProvider = SystemMetricsProvider(runnerResidentBytes: { [weak processController] in
+            processController?.latestResidentBytes()
+        })
         runner = config.makeRunner()
         engine = SupervisorEngine(
             clock: SystemClock(),
-            processes: FoundationProcessController(logFileURL: AppPaths.runnerLogFile),
+            processes: processController,
             http: URLSessionHTTPClient(),
             runner: runner,
             power: IOKitPowerManager(),
@@ -71,7 +77,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             host: config.controlHost,
             port: config.controlPort,
             token: token,
-            coordinator: coordinator
+            coordinator: coordinator,
+            metrics: metricsProvider
         )
         controlServer?.start()
     }
@@ -188,6 +195,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             for model in latestState.residentModels {
                 menu.addItem(disabled("   \(MenuFormat.model(model))"))
+            }
+        }
+
+        let metrics = metricsProvider.sample()
+        if let summary = MetricsFormat.summary(metrics) {
+            menu.addItem(.separator())
+            menu.addItem(disabled("System: \(summary)"))
+            if let resident = metrics.runnerResidentBytes {
+                menu.addItem(disabled("Runner memory: \(MenuFormat.byteString(resident))"))
             }
         }
 

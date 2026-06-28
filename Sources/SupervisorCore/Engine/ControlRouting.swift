@@ -33,12 +33,13 @@ public enum ControlRouting {
                               authorization: String?,
                               token: String,
                               state: SupervisorState,
-                              now: Date) -> ControlOutcome {
+                              now: Date,
+                              metrics: SystemMetrics? = nil) -> ControlOutcome {
         guard isAuthorized(authorization, token: token) else { return .unauthorized }
         guard let command = command(method: method, path: path) else { return .notFound }
         switch command {
         case .status:
-            return .status(statusJSON(state, now: now))
+            return .status(statusJSON(state, now: now, metrics: metrics))
         case .start, .stop, .restart:
             return .perform(command)
         }
@@ -69,14 +70,17 @@ public enum ControlRouting {
     }
 
     /// A compact status document for the phone.
-    public static func statusJSON(_ state: SupervisorState, now: Date) -> Data {
+    public static func statusJSON(_ state: SupervisorState, now: Date, metrics: SystemMetrics? = nil) -> Data {
         let payload = StatusPayload(
             phase: state.phase.rawValue,
             models: state.residentModels.map(\.name),
             uptimeSeconds: state.uptime(asOf: now).map { Int($0.rounded()) },
             restartCount: state.restartCount,
             consecutiveFailures: state.consecutiveFailures,
-            lastRestartReason: state.lastRestartReason
+            lastRestartReason: state.lastRestartReason,
+            thermal: metrics.flatMap { $0.thermal == .unknown ? nil : $0.thermal.rawValue },
+            memoryUsedPercent: metrics?.memoryUsedFraction.map { Int(($0 * 100).rounded()) },
+            runnerResidentBytes: metrics?.runnerResidentBytes
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -102,4 +106,7 @@ private struct StatusPayload: Encodable {
     var restartCount: Int
     var consecutiveFailures: Int
     var lastRestartReason: String?
+    var thermal: String?
+    var memoryUsedPercent: Int?
+    var runnerResidentBytes: Int64?
 }

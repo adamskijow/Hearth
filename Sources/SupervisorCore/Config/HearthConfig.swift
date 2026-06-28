@@ -10,10 +10,11 @@ import Foundation
 /// so a partial or empty config file still works.
 public struct HearthConfig: Codable, Sendable, Equatable {
     // Runner selection
-    public var runner: String            // "ollama" | "lmstudio"
+    public var runner: String            // "ollama" | "lmstudio" | "mlx"
     public var mode: String              // "managed" | "attached"
     public var ollamaBinaryPath: String
     public var lmStudioBinaryPath: String
+    public var mlxBinaryPath: String
     public var host: String
     public var port: Int
 
@@ -44,6 +45,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 mode: String = "managed",
                 ollamaBinaryPath: String = HearthConfig.defaultOllamaBinaryPath,
                 lmStudioBinaryPath: String = HearthConfig.defaultLMStudioBinaryPath,
+                mlxBinaryPath: String = HearthConfig.defaultMLXBinaryPath,
                 host: String = "127.0.0.1",
                 port: Int = 11434,
                 probeTimeoutSeconds: Double = 2,
@@ -67,6 +69,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.mode = mode
         self.ollamaBinaryPath = ollamaBinaryPath
         self.lmStudioBinaryPath = lmStudioBinaryPath
+        self.mlxBinaryPath = mlxBinaryPath
         self.host = host
         self.port = port
         self.probeTimeoutSeconds = probeTimeoutSeconds
@@ -96,6 +99,10 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     /// otherwise set `lmStudioBinaryPath` to wherever `lms` lives.
     public static let defaultLMStudioBinaryPath = "/usr/local/bin/lms"
 
+    /// Default mlx_lm server location. pip puts the console script in the active
+    /// environment's bin; set `mlxBinaryPath` to wherever `mlx_lm.server` lives.
+    public static let defaultMLXBinaryPath = "/opt/homebrew/bin/mlx_lm.server"
+
     // Lenient decoding: every key optional, fall back to defaults.
     public init(from decoder: Decoder) throws {
         let defaults = HearthConfig()
@@ -107,6 +114,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         mode = try value(.mode, defaults.mode)
         ollamaBinaryPath = try value(.ollamaBinaryPath, defaults.ollamaBinaryPath)
         lmStudioBinaryPath = try value(.lmStudioBinaryPath, defaults.lmStudioBinaryPath)
+        mlxBinaryPath = try value(.mlxBinaryPath, defaults.mlxBinaryPath)
         host = try value(.host, defaults.host)
         port = try value(.port, defaults.port)
         probeTimeoutSeconds = try value(.probeTimeoutSeconds, defaults.probeTimeoutSeconds)
@@ -157,6 +165,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         switch runner.lowercased() {
         case "lmstudio", "lm-studio", "lm_studio":
             return LMStudioRunner(binaryPath: lmStudioBinaryPath, host: host, port: port)
+        case "mlx", "mlx_lm", "mlx-lm":
+            return MLXRunner(binaryPath: mlxBinaryPath, host: host, port: port)
         default:
             return makeOllamaRunner()
         }
@@ -174,6 +184,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         switch runner.lowercased() {
         case "lmstudio", "lm-studio", "lm_studio":
             return lmStudioBinaryPath
+        case "mlx", "mlx_lm", "mlx-lm":
+            return mlxBinaryPath
         default:
             return ollamaBinaryPath
         }

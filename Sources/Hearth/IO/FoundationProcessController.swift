@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import Foundation
+import Darwin
 import SupervisorCore
 
 /// The real process controller, driving `Foundation.Process`. It owns the child,
@@ -25,6 +26,7 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
     private let maxStderrLines: Int
     private var nextRaw: UInt64 = 1
     private var entries: [ProcessHandleID: Entry] = [:]
+    private var latestPID: pid_t?
 
     init(logFileURL: URL, maxStderrLines: Int = 200) {
         self.logFileURL = logFileURL
@@ -78,11 +80,24 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
 
         do {
             try process.run()
+            lock.withLock { latestPID = process.processIdentifier }
         } catch {
             lock.withLock { entries[id] = nil }
             throw error
         }
         return id
+    }
+
+    /// Resident size of the most recently spawned child, for the metrics readout.
+    /// Returns nil once it has exited.
+    func latestResidentBytes() -> Int64? {
+        let pid: pid_t? = lock.withLock { latestPID }
+        guard let pid else { return nil }
+        var info = proc_taskinfo()
+        let size = Int32(MemoryLayout<proc_taskinfo>.size)
+        let written = proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &info, size)
+        guard written == size else { return nil }
+        return Int64(info.pti_resident_size)
     }
 
     func status(_ id: ProcessHandleID) -> ProcessStatus {

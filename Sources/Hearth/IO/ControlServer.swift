@@ -24,9 +24,10 @@ final class ControlServer: @unchecked Sendable {
     private let listener: NWListener
     private let token: String
     private let coordinator: SupervisionCoordinator
+    private let metrics: MetricsProviding?
     private let queue = DispatchQueue(label: "com.hearth.control")
 
-    init?(host: String, port: Int, token: String, coordinator: SupervisionCoordinator) {
+    init?(host: String, port: Int, token: String, coordinator: SupervisionCoordinator, metrics: MetricsProviding? = nil) {
         guard !token.isEmpty,
               port > 0, port <= 65_535,
               let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else { return nil }
@@ -49,6 +50,7 @@ final class ControlServer: @unchecked Sendable {
         }
         self.token = token
         self.coordinator = coordinator
+        self.metrics = metrics
     }
 
     func start() {
@@ -89,6 +91,7 @@ final class ControlServer: @unchecked Sendable {
     private func respond(_ box: ConnectionBox, _ request: HTTPRequestHead) {
         let token = self.token
         let coordinator = self.coordinator
+        let metrics = self.metrics
         Task { [weak self] in
             let state = await coordinator.status()
             let outcome = ControlRouting.handle(
@@ -97,7 +100,8 @@ final class ControlServer: @unchecked Sendable {
                 authorization: request.value(for: "Authorization"),
                 token: token,
                 state: state,
-                now: Date()
+                now: Date(),
+                metrics: metrics?.sample()
             )
 
             let status: Int

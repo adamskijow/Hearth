@@ -56,27 +56,23 @@ enum ConfigStore {
         let url = AppPaths.configFile
         try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
 
-        guard fm.fileExists(atPath: url.path) else {
-            var defaults = HearthConfig()
-            if let detected = RunnerLocator.locate(defaults.runner) {
-                defaults.ollamaBinaryPath = detected
-            }
-            save(defaults)
-            return ConfigLoad(config: defaults, note: "Created a starter config at \(url.path)", isProblem: false, createdDefault: true)
-        }
+        let exists = fm.fileExists(atPath: url.path)
+        // A present but unreadable file is read as empty Data so it fails to parse
+        // and surfaces as a problem, rather than nil (first run) which would
+        // overwrite it with a template. Detection only seeds the first-run path.
+        let contents: Data? = exists ? ((try? Data(contentsOf: url)) ?? Data()) : nil
+        let detected: String? = exists ? nil : RunnerLocator.locate(HearthConfig().runner)
 
-        do {
-            let data = try Data(contentsOf: url)
-            let config = try JSONDecoder().decode(HearthConfig.self, from: data)
-            return ConfigLoad(config: config, note: nil, isProblem: false, createdDefault: false)
-        } catch {
-            return ConfigLoad(
-                config: HearthConfig(),
-                note: "Config could not be read: \(error.localizedDescription). Fix it, then choose Reload Config.",
-                isProblem: true,
-                createdDefault: false
-            )
+        let resolution = ConfigLoading.resolve(fileContents: contents, configPath: url.path, detectedBinary: detected)
+        if resolution.createdDefault {
+            save(resolution.config)
         }
+        return ConfigLoad(
+            config: resolution.config,
+            note: resolution.note,
+            isProblem: resolution.isProblem,
+            createdDefault: resolution.createdDefault
+        )
     }
 
     /// Write the config to disk as pretty JSON.

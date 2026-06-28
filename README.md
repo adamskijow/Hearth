@@ -390,8 +390,10 @@ a hung but alive runner, exponential backoff timing, a crash loop entering the
 failing state without thrashing, recovery back to healthy, out of memory versus
 crash classification, attached mode never spawning or killing, the runners' spec
 and parsing (including a real Ollama `/api/ps` capture), the pre-spawn process
-group sweep, log rotation decisions, the control endpoint's routing and auth, the
-metrics formatting, and tailnet address recognition.
+group sweep, the hard-crash sweep decision, log rotation decisions, the control
+endpoint's routing and auth, the metrics formatting, tailnet address recognition,
+runner binary location ordering, and config resolution (the first-run, clean, and
+parse-failure paths).
 
 For end to end checks against a live server, `scripts/validate-real.sh` drives the
 real agent against a real `ollama serve` and proves the lifecycle scenarios

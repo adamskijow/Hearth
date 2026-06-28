@@ -11,7 +11,7 @@ cask "hearth" do
   version "0.1.0"
   sha256 "0000000000000000000000000000000000000000000000000000000000000000"
 
-  url "https://github.com/adamskijow/Hearth/releases/download/v#{version}/Hearth-#{version}.zip"
+  url "https://github.com/adamskijow/Hearth/releases/download/v#{version}/Hearth-#{version}.dmg"
   name "Hearth"
   desc "Background supervisor that keeps a local LLM runner alive on a headless Mac"
   homepage "https://github.com/adamskijow/Hearth"

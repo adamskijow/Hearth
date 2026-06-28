@@ -467,9 +467,11 @@ local helper, not a CI step.
 ## Releasing
 
 `scripts/release.sh` builds, Developer ID signs (Hardened Runtime on, App Sandbox
-off), notarizes, staples, and zips `Hearth.app`, then prints the version and
-sha256 for the Homebrew cask. It needs a signing identity and a notarytool
-profile:
+off), notarizes, and staples `Hearth.app`, then packages it two ways: a
+drag-to-install DMG (`scripts/make-dmg.sh`, the app plus an Applications shortcut)
+and a zip, notarizing and stapling the DMG as well. It prints the sha256 of each.
+It needs a signing identity and notarization credentials, either a stored
+notarytool profile:
 
 ```
 export HEARTH_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
@@ -477,10 +479,22 @@ export HEARTH_NOTARY_PROFILE="HearthNotary"   # from xcrun notarytool store-cred
 ./scripts/release.sh
 ```
 
-Releasing is local too: run `scripts/release.sh` on your Mac, attach the printed
-`Hearth-<version>.zip` to a GitHub release, then update `Casks/hearth.rb` with the
-new `version` and `sha256`. Once published from a tap, install with
-`brew install --cask adamskijow/tap/hearth`.
+or an App Store Connect API key passed directly, which works in a non-interactive
+shell where storing a keychain profile is blocked:
+
+```
+export HEARTH_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+export HEARTH_NOTARY_KEY="$HOME/path/AuthKey_XXXX.p8"
+export HEARTH_NOTARY_KEY_ID="XXXX"            # the XXXX in the filename
+export HEARTH_NOTARY_ISSUER="<issuer-uuid>"   # App Store Connect issuer ID
+./scripts/release.sh
+```
+
+Releasing is local: run it on your Mac, attach the DMG (and zip) to a GitHub
+release, then set `Casks/hearth.rb` `version` and `sha256` to the DMG's. Once
+published from a tap, install with `brew install --cask adamskijow/tap/hearth`.
+For a quick local install without a release, `make install` ad-hoc signs and
+copies the app to `/Applications`.
 
 ## Known limitations
 

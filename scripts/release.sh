@@ -62,10 +62,25 @@ spctl --assess --type exec --verbose=4 "$APP"
 rm -f "$ZIP"
 ditto -c -k --keepParent "$APP" "$ZIP"
 
-SHA="$(shasum -a 256 "$ZIP" | awk '{print $1}')"
+echo "Building the DMG from the notarized, stapled app..."
+DMG="$(HEARTH_VERSION="$VERSION" HEARTH_SIGN_IDENTITY="$HEARTH_SIGN_IDENTITY" ./scripts/make-dmg.sh)"
+
+echo "Notarizing the DMG..."
+xcrun notarytool submit "$DMG" "${NOTARY_AUTH[@]}" --wait
+xcrun stapler staple "$DMG"
+
+echo "Verifying Gatekeeper acceptance of the DMG..."
+spctl --assess --type open --context context:primary-signature --verbose=2 "$DMG"
+
+DMG_SHA="$(shasum -a 256 "$DMG" | awk '{print $1}')"
+ZIP_SHA="$(shasum -a 256 "$ZIP" | awk '{print $1}')"
 echo
-echo "Release artifact: $ZIP"
-echo "Version:          $VERSION"
-echo "sha256:           $SHA"
+echo "Release artifacts (both signed, notarized, stapled):"
+echo "  $DMG"
+echo "    sha256: $DMG_SHA"
+echo "  $ZIP"
+echo "    sha256: $ZIP_SHA"
+echo "Version: $VERSION"
 echo
-echo "Next: update Casks/hearth.rb (version and sha256) and attach $ZIP to the GitHub release."
+echo "Next: set Casks/hearth.rb version and sha256 to the DMG's, and attach both"
+echo "artifacts to the GitHub release. The cask installs from the DMG."

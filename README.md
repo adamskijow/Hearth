@@ -330,6 +330,7 @@ menubar or a curl invocation:
 hearth status              # phase, uptime, restarts, metrics, resident models
 hearth logs -n 100         # last 100 lines of the runner log
 hearth logs -f             # follow the runner log
+hearth events              # Hearth's own event history (down, restart, recovered)
 hearth doctor              # check the config and environment for problems
 ```
 
@@ -338,6 +339,14 @@ and queries the control endpoint when it is enabled, printing the full picture.
 With the control endpoint off it falls back to a reduced report: whether a
 supervised runner is recorded and alive, and whether anything is serving on the
 runner's port.
+
+Hearth records its own decisions (became healthy, down with the cause, restart
+scheduled, recovered, crash loop) to a small line-capped `events.log` next to the
+runner log. Unlike the in-memory recent-activity list, this survives a restart,
+so `hearth events`, the menu's Recent activity, and the tail shown by
+`hearth status` all answer "why did it restart last night." The runner log
+(`hearth logs`) is the runner's own stdout and stderr; the event log is Hearth's
+view of it.
 
 `hearth doctor` is a preflight check. It validates the config (port ranges, an
 unknown runner or mode, a control endpoint with no token, a control port that

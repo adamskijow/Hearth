@@ -18,6 +18,7 @@ enum StatusCLI {
           Hearth --headless         Run headless (no GUI), for a LaunchDaemon.
           Hearth status             Print the current supervision status.
           Hearth logs [-n N] [-f]   Show the runner log (last N lines; -f to follow).
+          Hearth events [-n N] [-f] Show Hearth's own event history (down, restart, recovered).
           Hearth doctor             Check the config and environment for problems.
           Hearth --help             Show this help.
 
@@ -37,6 +38,7 @@ enum StatusCLI {
             if let data, (response as? HTTPURLResponse)?.statusCode == 200,
                let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 printControlStatus(object)
+                printRecentEvents()
                 exit(0)
             }
             FileHandle.standardError.write(Data(
@@ -44,7 +46,17 @@ enum StatusCLI {
         }
 
         printReducedStatus(config: config)
+        printRecentEvents()
         exit(0)
+    }
+
+    /// The tail of the persisted event log, which survives a Hearth restart.
+    private static func printRecentEvents() {
+        let recent = EventLogStore.recent(6)
+        guard !recent.isEmpty else { return }
+        print("")
+        print("Recent activity:")
+        for line in recent { print("  \(line)") }
     }
 
     private static func printControlStatus(_ s: [String: Any]) {
@@ -174,12 +186,19 @@ enum StatusCLI {
         return try? JSONDecoder().decode(RunnerProcessIdentity.self, from: data)
     }
 
-    // MARK: - logs
+    // MARK: - logs and events
 
     static func tailLogs(_ args: [String]) -> Never {
-        let file = AppPaths.runnerLogFile.path
+        tailFile(AppPaths.runnerLogFile.path, missing: "No runner log yet", args)
+    }
+
+    static func tailEvents(_ args: [String]) -> Never {
+        tailFile(EventLogStore.url.path, missing: "No events recorded yet", args)
+    }
+
+    private static func tailFile(_ file: String, missing: String, _ args: [String]) -> Never {
         guard FileManager.default.fileExists(atPath: file) else {
-            FileHandle.standardError.write(Data("No runner log yet at \(file)\n".utf8))
+            FileHandle.standardError.write(Data("\(missing) at \(file)\n".utf8))
             exit(1)
         }
 

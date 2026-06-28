@@ -21,7 +21,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var preferences: PreferencesController?
 
     private var latestState = SupervisorState()
-    private var recentEvents: [String] = []
     private var configNote: String?
     private var configProblem = false
     private var binaryMissingPath: String?
@@ -108,7 +107,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             LoginItem.register()
         }
 
-        recentEvents.removeAll()
         subscribeToState()
         subscribeToEvents()
         updateStatusButton()
@@ -177,10 +175,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func appendRecentEvent(_ event: SupervisorEvent) {
-        recentEvents.append(StatusText.describe(event))
-        if recentEvents.count > 12 {
-            recentEvents.removeFirst(recentEvents.count - 12)
-        }
+        // Persist to disk so the recent-activity history survives a restart; the
+        // menu reads it back rather than keeping an in-memory list.
+        EventLogStore.append(event)
     }
 
     // MARK: - Status button
@@ -253,9 +250,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         addAction("Stop", #selector(stopTapped), enabled: latestState.phase != .stopped)
         addAction("Open Logs", #selector(openLogsTapped), enabled: true)
 
-        if !recentEvents.isEmpty {
+        let recent = EventLogStore.recent(12)
+        if !recent.isEmpty {
             let activity = NSMenu()
-            for line in recentEvents.reversed() {
+            for line in recent.reversed() {   // newest first
                 activity.addItem(disabled(line))
             }
             let item = NSMenuItem(title: "Recent activity", action: nil, keyEquivalent: "")

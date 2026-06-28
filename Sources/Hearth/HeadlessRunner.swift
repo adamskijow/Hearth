@@ -29,6 +29,11 @@ final class HeadlessRunner {
         assembly.controlServer?.start()
         installSignalHandlers()
 
+        // Persist supervisor events so `hearth events` and the next launch can see
+        // the history; nothing else consumes the event stream when headless.
+        let events = assembly.engine.events
+        Task { for await event in events { EventLogStore.append(event) } }
+
         let coordinator = assembly.coordinator
         Task { await coordinator.begin() }
 

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/hearth-banner.svg" alt="Hearth: keeps your local LLM runner alive on a headless Mac" width="100%">
+</p>
+
 # Hearth
 
 Hearth is a background supervisor that keeps a local LLM runner alive and serving
@@ -213,6 +217,10 @@ failures keep coming, specifically `crashLoopThreshold` failures within
 thrashing, enters a failing state, and retries slowly on
 `failingProbeIntervalSeconds` instead of hammering the machine. It keeps probing,
 so if the underlying problem clears, it recovers on its own.
+
+<p align="center">
+  <img src="assets/state-machine.svg" alt="The supervisor state machine: Stopped to Starting to Healthy, with a failure cycle through Down, Restarting, and Failing" width="820">
+</p>
 
 Hearth classifies how the child exited from its exit status and recent stderr,
 distinguishing a clean stop from an ordinary crash from an out of memory kill.
@@ -431,6 +439,16 @@ Near term intentions:
 - A first class authenticating proxy (today Hearth ships a documented Caddy
   config at `deploy/Caddyfile.example`).
 - More runners behind the `Runner` protocol as people want them.
+
+## Visuals
+
+The banner and the state diagram above are self contained animated SVGs. There is
+also a WebGL shader fireplace in [`docs/fireplace.html`](docs/fireplace.html);
+open it in a browser to watch it flicker. A still:
+
+<p align="center">
+  <img src="assets/fireplace-preview.png" alt="A WebGL shader fireplace" width="520">
+</p>
 
 ## Contributing
 

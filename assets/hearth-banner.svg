@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 380" width="1200" height="380" role="img" aria-labelledby="title desc">
+  <title id="title">Hearth</title>
+  <desc id="desc">An animated ember and flame mark beside the Hearth wordmark and tagline.</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1b0e08"/>
+      <stop offset="1" stop-color="#0e0704"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.62" r="0.6">
+      <stop offset="0" stop-color="#ff7a18" stop-opacity="0.55"/>
+      <stop offset="0.5" stop-color="#c43c0a" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#c43c0a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="flameOuter" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#a51f06"/>
+      <stop offset="0.55" stop-color="#e8500f"/>
+      <stop offset="1" stop-color="#ff8a1e"/>
+    </linearGradient>
+    <linearGradient id="flameMid" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#e0490d"/>
+      <stop offset="0.6" stop-color="#ff9a22"/>
+      <stop offset="1" stop-color="#ffc44d"/>
+    </linearGradient>
+    <linearGradient id="flameCore" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#ffb52e"/>
+      <stop offset="1" stop-color="#fff1c2"/>
+    </linearGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="2.2"/>
+    </filter>
+    <filter id="emberBlur" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="1.4"/>
+    </filter>
+  </defs>
+
+  <!-- scene -->
+  <rect x="0" y="0" width="1200" height="380" rx="22" fill="url(#bg)"/>
+
+  <!-- warm glow behind the fire -->
+  <ellipse cx="232" cy="232" rx="220" ry="180" fill="url(#glow)">
+    <animate attributeName="rx" values="220;236;220" dur="3.6s" repeatCount="indefinite"/>
+    <animate attributeName="opacity" values="0.85;1;0.85" dur="2.1s" repeatCount="indefinite"/>
+  </ellipse>
+
+  <!-- logs -->
+  <g>
+    <rect x="150" y="300" width="166" height="20" rx="10" fill="#3a241a"/>
+    <rect x="168" y="288" width="130" height="18" rx="9" fill="#4a2e20" transform="rotate(-7 233 297)"/>
+    <rect x="172" y="290" width="120" height="16" rx="8" fill="#5a3724" transform="rotate(8 232 298)"/>
+    <ellipse cx="178" cy="296" rx="9" ry="8" fill="#7a4a2e"/>
+    <ellipse cx="288" cy="296" rx="9" ry="8" fill="#7a4a2e"/>
+  </g>
+
+  <!-- flames -->
+  <g transform="translate(232 300)">
+    <!-- outer -->
+    <path fill="url(#flameOuter)" filter="url(#soft)" opacity="0.96"
+      d="M0,4 C70,-26 86,-96 58,-150 C44,-178 60,-196 30,-238 C16,-258 22,-286 4,-300
+         C-2,-272 8,-250 -12,-224 C-40,-188 -54,-214 -56,-168 C-58,-128 -82,-104 -50,-50
+         C-30,-16 -36,-4 0,4 Z">
+      <animateTransform attributeName="transform" type="scale" additive="sum"
+        values="1 1;1.03 1.07;0.99 0.96;1 1" dur="1.7s" repeatCount="indefinite"/>
+    </path>
+    <!-- mid -->
+    <path fill="url(#flameMid)" filter="url(#soft)" opacity="0.95"
+      d="M0,2 C44,-22 56,-74 38,-116 C28,-138 40,-156 20,-188 C10,-204 14,-224 2,-236
+         C-2,-214 4,-198 -8,-178 C-28,-150 -36,-168 -38,-132 C-40,-102 -54,-84 -32,-44
+         C-18,-18 -22,-6 0,2 Z">
+      <animateTransform attributeName="transform" type="scale" additive="sum"
+        values="1 1;0.97 1.08;1.02 0.95;1 1" dur="1.25s" repeatCount="indefinite"/>
+    </path>
+    <!-- core -->
+    <path fill="url(#flameCore)" opacity="0.96"
+      d="M0,0 C24,-16 30,-50 20,-82 C14,-100 22,-114 10,-138 C5,-150 8,-162 1,-170
+         C-2,-152 1,-140 -6,-124 C-18,-104 -22,-118 -22,-92 C-22,-70 -30,-58 -16,-30
+         C-8,-12 -10,-4 0,0 Z">
+      <animateTransform attributeName="transform" type="scale" additive="sum"
+        values="1 1;1.04 1.1;0.98 0.97;1 1" dur="0.9s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0.86;1;0.86" dur="0.7s" repeatCount="indefinite"/>
+    </path>
+  </g>
+
+  <!-- embers -->
+  <g fill="#ffb24a" filter="url(#emberBlur)">
+    <circle cx="210" cy="240" r="3">
+      <animate attributeName="cy" values="250;70" dur="3.2s" repeatCount="indefinite"/>
+      <animate attributeName="cx" values="210;196;218;206" dur="3.2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;1;1;0" dur="3.2s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="252" cy="230" r="2.3">
+      <animate attributeName="cy" values="248;60" dur="2.6s" begin="0.6s" repeatCount="indefinite"/>
+      <animate attributeName="cx" values="252;264;244;256" dur="2.6s" begin="0.6s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;1;1;0" dur="2.6s" begin="0.6s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="232" cy="220" r="2.6">
+      <animate attributeName="cy" values="246;48" dur="3.8s" begin="1.2s" repeatCount="indefinite"/>
+      <animate attributeName="cx" values="232;222;244;232" dur="3.8s" begin="1.2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;1;1;0" dur="3.8s" begin="1.2s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="200" cy="235" r="1.8">
+      <animate attributeName="cy" values="244;90" dur="2.9s" begin="0.3s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values="0;1;1;0" dur="2.9s" begin="0.3s" repeatCount="indefinite"/>
+    </circle>
+  </g>
+
+  <!-- wordmark -->
+  <g transform="translate(520 0)">
+    <text x="0" y="172" font-family="Georgia, 'Iowan Old Style', 'Times New Roman', serif" font-size="118" font-weight="700" fill="#f7ead8" letter-spacing="1">Hearth</text>
+    <text x="4" y="222" font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="25" fill="#d8b79b">Keeps your local LLM runner alive on a headless Mac.</text>
+    <text x="4" y="270" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="18" fill="#ff9a3c" letter-spacing="1.5">supervise &#183; not inference &#183; Swift &#183; macOS 14+ &#183; MIT</text>
+  </g>
+</svg>

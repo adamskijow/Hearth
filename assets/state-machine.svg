@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 330" width="900" height="330" role="img" aria-labelledby="t d">
+  <title id="t">Hearth supervisor state machine</title>
+  <desc id="d">Stopped to Starting to Healthy, with a failure cycle through Down, Restarting, and Failing that returns to Healthy on recovery.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0,0 L7,3 L0,6 Z" fill="#94897d"/>
+    </marker>
+    <style>
+      .chip { rx: 13px; ry: 13px; }
+      .label { font-family: -apple-system, 'Helvetica Neue', Arial, sans-serif; font-size: 17px; font-weight: 700; text-anchor: middle; }
+      .edge { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12.5px; fill: #b9ada0; text-anchor: middle; }
+      .conn { stroke: #94897d; stroke-width: 2; fill: none; }
+    </style>
+  </defs>
+
+  <rect x="1" y="1" width="898" height="328" rx="20" fill="#15100b" stroke="#2c2117"/>
+
+  <!-- connectors (drawn first, under chips) -->
+  <line class="conn" x1="210" y1="73" x2="271" y2="73" marker-end="url(#arrow)"/>
+  <line class="conn" x1="425" y1="73" x2="486" y2="73" marker-end="url(#arrow)"/>
+  <line class="conn" x1="565" y1="100" x2="565" y2="169" marker-end="url(#arrow)"/>
+  <line class="conn" x1="640" y1="200" x2="706" y2="200" marker-end="url(#arrow)"/>
+  <line class="conn" x1="490" y1="200" x2="389" y2="200" marker-end="url(#arrow)"/>
+  <path class="conn" d="M785,173 C 772,124 690,110 614,101" marker-end="url(#arrow)"/>
+  <path class="conn" d="M310,173 C 330,122 446,108 516,101" marker-end="url(#arrow)"/>
+
+  <!-- edge labels -->
+  <text class="edge" x="240" y="64">start</text>
+  <text class="edge" x="455" y="64">ready</text>
+  <text class="edge" x="583" y="140" text-anchor="start">crash / wedge</text>
+  <text class="edge" x="675" y="191">backoff</text>
+  <text class="edge" x="439" y="191">crash loop</text>
+  <text class="edge" x="712" y="150">recovered</text>
+  <text class="edge" x="398" y="150">recovered</text>
+
+  <!-- chips -->
+  <g>
+    <rect class="chip" x="60"  y="46"  width="150" height="54" fill="#3a3a37" stroke="#5f5e5a"/>
+    <text class="label" x="135" y="79" fill="#d3d1c7">Stopped</text>
+
+    <rect class="chip" x="275" y="46"  width="150" height="54" fill="#1c5a4a" stroke="#1d9e75"/>
+    <text class="label" x="350" y="79" fill="#e1f5ee">Starting</text>
+
+    <rect class="chip" x="490" y="46"  width="150" height="54" fill="#3b6d11" stroke="#639922"/>
+    <text class="label" x="565" y="79" fill="#eaf3de">Healthy</text>
+
+    <rect class="chip" x="490" y="173" width="150" height="54" fill="#8a560f" stroke="#ba7517"/>
+    <text class="label" x="565" y="206" fill="#faeeda">Down</text>
+
+    <rect class="chip" x="710" y="173" width="150" height="54" fill="#185fa5" stroke="#378add"/>
+    <text class="label" x="785" y="206" fill="#e6f1fb">Restarting</text>
+
+    <rect class="chip" x="235" y="173" width="150" height="54" fill="#8c2727" stroke="#e24b4a"/>
+    <text class="label" x="310" y="206" fill="#fcebeb">Failing</text>
+  </g>
+
+  <text x="450" y="300" text-anchor="middle" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="12.5" fill="#8a8078">Simplified. Stop returns to Stopped from any state; backoff is exponential and capped; Failing retries slowly.</text>
+</svg>

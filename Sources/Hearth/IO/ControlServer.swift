@@ -69,6 +69,12 @@ final class ControlServer: @unchecked Sendable {
     private func accept(_ connection: NWConnection) {
         let box = ConnectionBox(connection)
         connection.start(queue: queue)
+        // Drop a connection that has not produced a complete request in time, so a
+        // slow trickle cannot hold a connection and its pending receive open. A
+        // completed request has already cancelled itself, making this a no-op.
+        queue.asyncAfter(deadline: .now() + 10) { [weak box] in
+            box?.connection.cancel()
+        }
         read(box, buffer: Data())
     }
 

@@ -52,6 +52,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             semaphore.signal()
         }
         _ = semaphore.wait(timeout: .now() + 2)
+        // Ensure a wedged child is dead before we exit, rather than relying on the
+        // engine's deferred SIGKILL which exit would outrun.
+        RunnerStateStore.killRecordedGroupNow()
     }
 
     // MARK: - Config load and live reload

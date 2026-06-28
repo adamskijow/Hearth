@@ -70,4 +70,20 @@ enum RunnerStateStore {
         let exe = recorded.executablePath.map { " (\($0))" } ?? ""
         return "swept an orphaned runner from a previous run: pgid \(pgid), pid \(recorded.pid)\(exe)"
     }
+
+    /// Synchronously ensure the recorded runner group is dead, for the shutdown
+    /// path. The engine's teardown sends SIGTERM but schedules its SIGKILL backup
+    /// on a queue that dies when the process exits, so a wedged child that ignores
+    /// SIGTERM could be outrun by exit(). This SIGKILLs whatever is left, after the
+    /// same start-time guard so it never kills a PID-recycled bystander.
+    static func killRecordedGroupNow() {
+        guard let data = try? Data(contentsOf: url),
+              let recorded = try? JSONDecoder().decode(RunnerProcessIdentity.self, from: data) else {
+            return
+        }
+        guard RunnerSweep.shouldSweep(recorded: recorded, live: liveIdentity(pid: recorded.pid)) else { return }
+        if killpg(recorded.pgid, 0) == 0 {
+            killpg(recorded.pgid, SIGKILL)
+        }
+    }
 }

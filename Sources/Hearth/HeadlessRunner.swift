@@ -48,6 +48,10 @@ final class HeadlessRunner {
                     semaphore.signal()
                 }
                 _ = semaphore.wait(timeout: .now() + 2)
+                // The engine sent SIGTERM; ensure a wedged child is actually dead
+                // before we exit, rather than relying on a deferred SIGKILL that
+                // exit() would outrun.
+                RunnerStateStore.killRecordedGroupNow()
                 exit(0)
             }
             source.resume()

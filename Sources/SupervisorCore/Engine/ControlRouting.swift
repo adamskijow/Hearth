@@ -35,6 +35,12 @@ public enum ControlRouting {
                               state: SupervisorState,
                               now: Date,
                               metrics: SystemMetrics? = nil) -> ControlOutcome {
+        // Unauthenticated liveness: confirms Hearth itself is up, for an uptime
+        // monitor or reverse proxy. It reveals nothing about the runner's state,
+        // so it does not require the token.
+        if isHealthCheck(method: method, path: path) {
+            return .status(Data(#"{"status":"ok"}"#.utf8))
+        }
         guard isAuthorized(authorization, token: token) else { return .unauthorized }
         guard let command = command(method: method, path: path) else { return .notFound }
         switch command {
@@ -43,6 +49,12 @@ public enum ControlRouting {
         case .start, .stop, .restart:
             return .perform(command)
         }
+    }
+
+    /// The unauthenticated liveness route: GET /healthz only.
+    public static func isHealthCheck(method: String, path: String) -> Bool {
+        let trimmedPath = String(path.split(separator: "?").first ?? Substring(path))
+        return method.uppercased() == "GET" && trimmedPath == "/healthz"
     }
 
     /// Map an HTTP method and path (query string ignored) to a command.

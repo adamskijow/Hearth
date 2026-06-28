@@ -79,4 +79,24 @@ struct ControlRoutingTests {
         )
         #expect(outcome == .notFound)
     }
+
+    @Test func healthzIsAnUnauthenticatedOK() throws {
+        // No token at all still returns 200 with a minimal body, and never the
+        // supervisor state.
+        for auth in [nil, bearer("nope"), bearer(token)] as [String?] {
+            let outcome = ControlRouting.handle(
+                method: "GET", path: "/healthz", authorization: auth,
+                token: token, state: state, now: now
+            )
+            guard case .status(let data) = outcome else {
+                Issue.record("expected a 200 status outcome for /healthz")
+                return
+            }
+            let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+            #expect(object["status"] as? String == "ok")
+            #expect(object["phase"] == nil)  // leaks no supervisor state
+        }
+        #expect(ControlRouting.isHealthCheck(method: "GET", path: "/healthz?x=1"))
+        #expect(!ControlRouting.isHealthCheck(method: "POST", path: "/healthz"))
+    }
 }

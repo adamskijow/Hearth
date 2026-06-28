@@ -64,10 +64,10 @@ public enum MetricsFormat {
     public static func summary(_ metrics: SystemMetrics) -> String? {
         var parts: [String] = []
         if metrics.thermal != .unknown {
-            parts.append("thermal \(metrics.thermal.label)")
+            parts.append("Thermal \(metrics.thermal.label)")
         }
         if let fraction = metrics.memoryUsedFraction {
-            parts.append("memory \(memoryPercent(fraction))")
+            parts.append("Memory \(memoryPercent(fraction))")
         }
         return parts.isEmpty ? nil : parts.joined(separator: ", ")
     }

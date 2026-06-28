@@ -52,7 +52,7 @@ enum MenuFormat {
     static func contextLine(_ state: SupervisorState, runnerName: String, managed: Bool, now: Date) -> String {
         var parts = ["\(runnerName), \(managed ? "managed" : "attached")"]
         if let uptime = state.uptime(asOf: now) {
-            parts.append("up \(duration(uptime))")
+            parts.append("Up \(duration(uptime))")
         }
         if state.restartCount > 0 {
             parts.append("\(state.restartCount) restart\(state.restartCount == 1 ? "" : "s")")

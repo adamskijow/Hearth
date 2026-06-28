@@ -204,8 +204,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // Setup problems first, prominent, with one-click fixes where possible.
         if let path = binaryMissingPath {
-            menu.addItem(emphasized("\u{26A0} \(runner.name) binary not found", color: .systemYellow))
-            menu.addItem(disabled("   \(path)"))
+            menu.addItem(infoRow(headlineAttr("\u{26A0} \(runner.name) binary not found", color: .systemYellow)))
+            menu.addItem(infoRow(detailAttr("   \(path)")))
             if let suggested = suggestedBinaryPath {
                 addAction("Use detected: \(suggested)", #selector(useDetectedBinaryTapped), enabled: true)
             }
@@ -213,35 +213,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(.separator())
         }
         if configProblem, let note = configNote {
-            menu.addItem(emphasized("\u{26A0} Config problem", color: .systemYellow))
-            menu.addItem(disabled("   \(note)"))
+            menu.addItem(infoRow(headlineAttr("\u{26A0} Config problem", color: .systemYellow)))
+            menu.addItem(infoRow(detailAttr("   \(note)")))
             menu.addItem(.separator())
         }
 
-        // Health: a bold, colored headline, then a few dim detail lines.
-        menu.addItem(emphasized(MenuFormat.headline(latestState, now: now),
-                                color: MenuFormat.tint(for: latestState.phase) ?? .labelColor))
-        menu.addItem(disabled(MenuFormat.contextLine(
-            latestState, runnerName: runner.name, managed: config.isManaged, now: now)))
+        // Health: a bright, color-coded headline, then a couple of detail lines.
+        let phaseColor = MenuFormat.tint(for: latestState.phase) ?? .labelColor
+        menu.addItem(infoRow(headlineAttr(MenuFormat.headline(latestState, now: now), color: phaseColor)))
+        menu.addItem(infoRow(detailAttr(MenuFormat.contextLine(
+            latestState, runnerName: runner.name, managed: config.isManaged, now: now))))
         if latestState.phase != .healthy, let reason = latestState.lastRestartReason {
-            menu.addItem(disabled("Last: \(reason)"))
+            menu.addItem(infoRow(detailAttr("Last: \(reason)")))
         }
 
         let metrics = metricsProvider.sample()
         if let summary = MetricsFormat.summary(metrics) {
             var line = summary
             if let resident = metrics.runnerResidentBytes {
-                line += " \u{00B7} runner \(MenuFormat.byteString(resident))"
+                line += " \u{00B7} Runner \(MenuFormat.byteString(resident))"
             }
-            menu.addItem(disabled(line))
+            menu.addItem(infoRow(detailAttr(line)))
         }
         if !latestState.residentModels.isEmpty {
             let loaded = latestState.residentModels.map(MenuFormat.model).joined(separator: ", ")
-            menu.addItem(disabled("Loaded: \(loaded)"))
+            menu.addItem(infoRow(detailAttr("Loaded: \(loaded)")))
         }
         if config.controlEnabled, controlServer != nil {
             let host = NetworkInterfaces.tailnetIPv4() ?? config.controlHost
-            menu.addItem(disabled("Phone access: http://\(host):\(config.controlPort)"))
+            menu.addItem(infoRow(detailAttr("Phone access: http://\(host):\(config.controlPort)")))
         }
 
         menu.addItem(.separator())
@@ -281,18 +281,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return item
     }
 
-    /// A bold, colored, non-clickable row for the health headline and warnings.
-    /// An attributed title keeps full weight and color even though the row is
-    /// disabled, giving the menu a clear visual hierarchy.
-    private func emphasized(_ title: String, color: NSColor) -> NSMenuItem {
-        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        item.isEnabled = false
+    /// An information row rendered as a custom view rather than a disabled menu
+    /// item. The system greys out disabled items (which read as too dim); a view
+    /// shows at full brightness and does not highlight on hover, which is what
+    /// non-actionable status text wants.
+    private func infoRow(_ attributed: NSAttributedString) -> NSMenuItem {
+        let item = NSMenuItem()
+        let field = NSTextField(labelWithAttributedString: attributed)
+        field.lineBreakMode = .byTruncatingTail
+        field.sizeToFit()
+        let leftInset: CGFloat = 21, rightInset: CGFloat = 16, height: CGFloat = 19
+        let container = NSView(frame: NSRect(
+            x: 0, y: 0, width: field.frame.width + leftInset + rightInset, height: height))
+        field.setFrameOrigin(NSPoint(x: leftInset, y: ((height - field.frame.height) / 2).rounded()))
+        container.addSubview(field)
+        item.view = container
+        return item
+    }
+
+    /// The bold, color-coded health line (and warnings).
+    private func headlineAttr(_ text: String, color: NSColor) -> NSAttributedString {
         let size = NSFont.menuFont(ofSize: 0).pointSize
-        item.attributedTitle = NSAttributedString(string: title, attributes: [
+        return NSAttributedString(string: text, attributes: [
             .font: NSFont.systemFont(ofSize: size, weight: .semibold),
             .foregroundColor: color
         ])
-        return item
+    }
+
+    /// The detail lines under the headline: bright enough to read easily, a step
+    /// below the headline in weight and contrast.
+    private func detailAttr(_ text: String) -> NSAttributedString {
+        NSAttributedString(string: text, attributes: [
+            .font: NSFont.menuFont(ofSize: 0),
+            .foregroundColor: NSColor.labelColor.withAlphaComponent(0.8)
+        ])
     }
 
     private func addAction(_ title: String, _ selector: Selector, enabled: Bool, keyEquivalent: String = "") {

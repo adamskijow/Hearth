@@ -23,13 +23,13 @@ struct MetricsTests {
 
     @Test func summaryCombinesAvailableMetrics() {
         let both = SystemMetrics(thermal: .fair, memoryUsedFraction: 0.5)
-        #expect(MetricsFormat.summary(both) == "thermal fair, memory 50%")
+        #expect(MetricsFormat.summary(both) == "Thermal fair, Memory 50%")
 
         let memoryOnly = SystemMetrics(thermal: .unknown, memoryUsedFraction: 0.25)
-        #expect(MetricsFormat.summary(memoryOnly) == "memory 25%")
+        #expect(MetricsFormat.summary(memoryOnly) == "Memory 25%")
 
         let thermalOnly = SystemMetrics(thermal: .serious, memoryUsedFraction: nil)
-        #expect(MetricsFormat.summary(thermalOnly) == "thermal serious")
+        #expect(MetricsFormat.summary(thermalOnly) == "Thermal serious")
 
         let nothing = SystemMetrics(thermal: .unknown, memoryUsedFraction: nil)
         #expect(MetricsFormat.summary(nothing) == nil)

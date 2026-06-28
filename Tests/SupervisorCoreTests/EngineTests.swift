@@ -110,41 +110,71 @@ struct EngineTests {
         #expect(wedgeCount == 1)
     }
 
-    @Test func rapidCrashesEnterFailingAndStopThrashing() async {
-        let policy = RestartPolicyConfig(
-            startupGrace: 5,
-            initialBackoff: 1,
-            backoffMultiplier: 2,
-            maxBackoff: 60,
-            crashLoopThreshold: 3,
-            crashLoopWindow: 600,
-            failingProbeInterval: 30
-        )
-        let h = makeHarness(policy: policy)
-        // Readiness never succeeds; every spawned child dies immediately.
-        await h.engine.start()
+    private func failingPolicy() -> RestartPolicyConfig {
+        RestartPolicyConfig(startupGrace: 5, initialBackoff: 1, backoffMultiplier: 2, maxBackoff: 60,
+                            crashLoopThreshold: 3, crashLoopWindow: 600, failingProbeInterval: 30)
+    }
 
-        var guardCount = 0
-        while await h.engine.snapshot().phase != .failing && guardCount < 30 {
-            guardCount += 1
-            if let handle = h.processes.lastHandle {
-                h.processes.simulateExit(handle, exit: ProcessExit(code: 1), stderr: ["boom"])
-            }
-            let wait = await h.engine.stepOnce()        // detect death
-            h.clock.advance(by: wait + 0.01)
-            let phase = await h.engine.snapshot().phase
-            if phase == .down || phase == .failing {
-                _ = await h.engine.stepOnce()           // respawn
-            }
+    private func killCurrent(_ h: Harness) {
+        if let handle = h.processes.lastHandle {
+            h.processes.simulateExit(handle, exit: ProcessExit(code: 1), stderr: ["boom"])
         }
+    }
 
-        #expect(await h.engine.snapshot().phase == .failing)
-        let failingCount = await h.notifier.received.filter {
+    private func enteredFailingCount(_ h: Harness) async -> Int {
+        await h.notifier.received.filter {
             if case .enteredFailing = $0.event { return true }; return false
         }.count
-        #expect(failingCount == 1)
-        // It did not spawn a runaway number of children; it stopped thrashing.
-        #expect(h.processes.spawnCount <= 5)
+    }
+
+    /// Drive a never-serving runner through three crashes into the failing wait
+    /// state. Returns the wait the failing transition asked for.
+    @discardableResult
+    private func driveIntoFailing(_ h: Harness) async -> TimeInterval {
+        await h.engine.start()                          // spawn 1, starting
+        for backoff in [1.0, 2.0] {                     // two normal-backoff deaths
+            killCurrent(h)
+            _ = await h.engine.stepOnce()               // detect -> down
+            h.clock.advance(by: backoff + 0.01)
+            _ = await h.engine.stepOnce()               // respawn -> restarting
+        }
+        killCurrent(h)
+        return await h.engine.stepOnce()                // third death trips failing
+    }
+
+    @Test func rapidCrashesEnterFailingAndRetrySlowly() async {
+        let h = makeHarness(policy: failingPolicy())
+        let failingWait = await driveIntoFailing(h)
+
+        #expect(await h.engine.snapshot().phase == .failing)
+        #expect(failingWait == 30)                      // the slow cadence brake is on, not fast backoff
+        #expect(await enteredFailingCount(h) == 1)
+        let spawnsBefore = h.processes.spawnCount
+
+        // The slow timer fires: it keeps retrying (the old bug froze here forever)
+        // but moves through restarting so the fresh child is actually probed.
+        h.clock.advance(by: failingWait + 0.01)
+        _ = await h.engine.stepOnce()
+        #expect(await h.engine.snapshot().phase == .restarting)
+        #expect(h.processes.spawnCount == spawnsBefore + 1)
+    }
+
+    @Test func aCrashLoopedRunnerRecoversWhenItComesBack() async {
+        let h = makeHarness(policy: failingPolicy())
+        _ = await driveIntoFailing(h)
+        #expect(await h.engine.snapshot().phase == .failing)
+
+        // The runner comes back: stop killing it and let readiness succeed. This is
+        // the regression for the failing-trap bug: a crash loop that recovers must
+        // be detected, not left stuck forever.
+        makeServing(h)
+        h.clock.advance(by: 30.01)
+        _ = await h.engine.stepOnce()                   // slow retry -> restarting (fresh, serving child)
+        #expect(await h.engine.snapshot().phase == .restarting)
+        _ = await h.engine.stepOnce()                   // probe -> serving -> recover
+        #expect(await h.engine.snapshot().phase == .healthy)
+        let recovered = await h.notifier.received.filter { $0.event == .recovered }.count
+        #expect(recovered == 1)
     }
 
     @Test func stopReleasesPowerAndTerminatesChild() async {

@@ -118,14 +118,16 @@ struct SupervisorMachine {
     }
 
     /// The scheduled backoff or slow retry timer fired: spawn a fresh child and
-    /// move to restarting. Preserves the failing context, so a crash loop that
-    /// keeps crashing stays failing rather than escaping to fast retries.
+    /// move to restarting so the engine probes it. This holds even while failing:
+    /// the fresh child MUST be probed, or a crash loop could never recover. The
+    /// failing context is preserved in `failingSince`, so the slow retry cadence
+    /// and the `recovered` (not `becameHealthy`) event survive until it is healthy
+    /// again; the `.failing` phase is the wait between retries, `.restarting` is
+    /// each retry attempt being probed.
     mutating func respawnNow(now: Date) -> MachineOutput {
         restartCount += 1
         spawnTime = now
-        // While failing we keep the failing phase visible until the runner is
-        // actually healthy again; otherwise show restarting.
-        phase = (failingSince != nil) ? .failing : .restarting
+        phase = .restarting
         scheduledRespawnAt = .distantFuture
         lastTransition = now
         return MachineOutput(

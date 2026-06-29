@@ -181,8 +181,7 @@ DMG.
 There are two ways to configure Hearth, and they edit the same file. Open
 **Preferences** from the menubar (or press Cmd-comma) for a form covering the
 runner, notifications, the control endpoint, log rotation, and the timing knobs.
-Every key, its type, and its default is listed in the
-[configuration reference](docs/configuration.md). Or edit the JSON directly at:
+Or edit the JSON directly at:
 
 ```
 ~/Library/Application Support/Hearth/config.json
@@ -196,103 +195,42 @@ On first launch, if the file is missing, Hearth writes a starter template with
 the runner binary auto detected (it probes Homebrew, the Ollama.app install, and
 your PATH), so first run does not fail on a wrong path. If the runner still is not
 found, the menubar says so and offers a one-click fix. Every key is optional;
-anything you leave out falls back to the default below. A malformed file is
+anything you leave out falls back to its default. A malformed file is
 flagged loudly and your running setup is kept rather than silently reverted. To
 point Hearth at a config somewhere else, set the `HEARTH_CONFIG` environment
 variable to that path.
 
-Keys, defaults, and what they do:
+The keys most people touch:
 
-Runner
+- `runner` and `mode`: which runner (`ollama`, `lmstudio`, or `mlx`) and whether
+  Hearth launches it (`managed`) or only watches one you started (`attached`).
+- `ollamaBinaryPath` (or `lmStudioBinaryPath` / `mlxBinaryPath`): where the runner
+  binary is, if it is not at the default.
+- `host` and `port`: the address the runner serves on (default `127.0.0.1:11434`).
+- `ntfyTopic`: a long, unguessable ntfy topic for phone alerts.
+- `controlEnabled` and `controlToken`: turn on the HTTP control endpoint and set
+  the bearer token every request must carry.
+- `maintenanceRestartHours`: cycle a healthy runner this often (for example `24`)
+  to clear memory creep. Off by default.
 
-- `runner` (default `"ollama"`): which runner to supervise, `"ollama"`,
-  `"lmstudio"`, or `"mlx"`.
-- `mode` (default `"managed"`): `"managed"` means Hearth spawns and owns the
-  runner; `"attached"` means it only monitors an already running one (below).
-- `ollamaBinaryPath` (default `"/opt/homebrew/bin/ollama"`): the Ollama binary,
-  when `runner` is `ollama`.
-- `lmStudioBinaryPath` (default `"/usr/local/bin/lms"`): the LM Studio CLI, when
-  `runner` is `lmstudio`.
-- `mlxBinaryPath` (default `"/opt/homebrew/bin/mlx_lm.server"`): the mlx_lm
-  server, when `runner` is `mlx`.
-- `host` (default `"127.0.0.1"`): the address the runner listens on. For Ollama
-  this is set via `OLLAMA_HOST` at spawn. Use `"0.0.0.0"` to listen on all
-  interfaces (see the security note before you do).
-- `port` (default `11434`): the listen port. LM Studio's default is `1234`.
+Everything else has a sensible default: the probe and backoff timing, the
+crash-loop brake, the pressure-alert thresholds, log rotation, and the reboot
+escalation. The [configuration reference](docs/configuration.md) lists every key,
+its type, and its default.
 
-Health and restart policy
-
-- `probeTimeoutSeconds` (default `2`): how long a readiness request may take
-  before it counts as timed out. A timeout is the signature of a wedged runner.
-- `probeIntervalSeconds` (default `5`): how often to check health while healthy.
-  This is also roughly how fast a death is detected.
-- `startupGraceSeconds` (default `30`): after a spawn, how long "alive but not
-  answering yet" is treated as normal warm up rather than a failure.
-- `startupProbeIntervalSeconds` (default `1`): how often to check while starting
-  or restarting, before the runner is ready.
-- `initialBackoffSeconds` (default `1`): the first restart backoff.
-- `backoffMultiplier` (default `2`): each consecutive failure multiplies the
-  backoff by this.
-- `maxBackoffSeconds` (default `60`): the backoff never grows past this.
-- `crashLoopThreshold` (default `5`): this many failures inside the window trips
-  the failing state.
-- `crashLoopWindowSeconds` (default `60`): the sliding window over which failures
-  are counted for crash loop detection.
-- `failingProbeIntervalSeconds` (default `30`): the slow retry cadence used once
-  failing, instead of fast backoff.
-
-Notifications
-
-- `ntfyTopic` (default `null`): an ntfy topic to post notifications to, so a
-  headless Mac can reach your phone. `null` disables ntfy.
-- `ntfyServer` (default `"https://ntfy.sh"`): the ntfy server base URL.
-- `localNotifications` (default `true`): post to the local Notification Center
-  when running as a bundled app.
-
-Remote control
-
-- `controlEnabled` (default `false`): enable the HTTP control endpoint.
-- `controlHost` (default `"127.0.0.1"`): the address the control endpoint binds
-  to. Use your Tailscale or private interface address to reach it from a phone.
-- `controlPort` (default `11435`): the control endpoint port.
-- `controlToken` (default `null`): the bearer token every control request must
-  carry. The endpoint refuses to start without one.
-
-Runner log
-
-- `logMaxBytes` (default `5000000`): rotate the runner log once it reaches this
-  many bytes. Zero disables rotation.
-- `logKeepFiles` (default `3`): how many rotated logs to keep (`runner.log.1` ...
-  `runner.log.N`); the oldest is deleted.
-
-A complete example:
+A typical config:
 
 ```json
 {
   "runner": "ollama",
   "mode": "managed",
-  "ollamaBinaryPath": "/opt/homebrew/bin/ollama",
   "host": "127.0.0.1",
   "port": 11434,
-  "probeTimeoutSeconds": 2,
-  "probeIntervalSeconds": 5,
-  "startupGraceSeconds": 30,
-  "startupProbeIntervalSeconds": 1,
-  "initialBackoffSeconds": 1,
-  "backoffMultiplier": 2,
-  "maxBackoffSeconds": 60,
-  "crashLoopThreshold": 5,
-  "crashLoopWindowSeconds": 60,
-  "failingProbeIntervalSeconds": 30,
   "ntfyTopic": "my-private-hearth-topic-7f3a",
-  "ntfyServer": "https://ntfy.sh",
-  "localNotifications": true,
   "controlEnabled": true,
   "controlHost": "127.0.0.1",
   "controlPort": 11435,
-  "controlToken": "a-long-unguessable-secret",
-  "logMaxBytes": 5000000,
-  "logKeepFiles": 3
+  "controlToken": "a-long-unguessable-secret"
 }
 ```
 

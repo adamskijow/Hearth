@@ -16,11 +16,10 @@ Studio and mlx_lm support) alive and serving on a headless Mac.
 
 It is an availability layer, not an inference layer. Hearth watches the runner,
 restarts it when it dies or wedges, keeps the Mac awake while it is meant to be
-serving, and tells you when something goes wrong. It does not do inference. It
-does not pick models, set context length, write prompts, or do RAG or chat. It
-does not replace Ollama or LM Studio. The runner is an opaque child process that
-Hearth owns and supervises; Hearth reads the runner's API and logs only to judge
-whether it is healthy.
+serving, and tells you when something goes wrong. It is not a chat UI or a
+replacement for Ollama or LM Studio; it supervises the runner you already run. The
+runner is an opaque child process that Hearth owns; it reads the runner's API and
+logs only to judge whether it is healthy.
 
 ## Quickstart
 

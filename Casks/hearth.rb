@@ -1,15 +1,14 @@
 # SPDX-License-Identifier: MIT
 #
-# Homebrew cask for Hearth. This is a template until the first signed,
-# notarized release is published; fill in the sha256 from scripts/release.sh
-# output (or the release workflow) and bump the version per release.
+# Homebrew cask for Hearth. Bump the version and sha256 (the DMG's, from
+# scripts/release.sh output) for each release.
 #
-# Once a release exists you can install from this tap with:
+# Install from a tap with:
 #   brew install --cask adamskijow/tap/hearth
 # (after `brew tap adamskijow/tap`), or point brew straight at this file.
 cask "hearth" do
   version "0.1.0"
-  sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256 "26a69761d20631a0b3823a123f0379dd5e2259da94d19ec1fafeda3cbe5ef9c8"
 
   url "https://github.com/adamskijow/Hearth/releases/download/v#{version}/Hearth-#{version}.dmg"
   name "Hearth"

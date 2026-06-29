@@ -366,6 +366,12 @@ control surface, not a public API: bind it to localhost or a private interface (
 Tailscale address is ideal) and keep it behind a VPN. It refuses to start without
 a token, and rejects any request whose bearer token does not match.
 
+Opening the control URL in a browser (`http://HOST:11435/`) serves a small status
+page for phones: paste your token once (it is stored in that browser only, never
+in the URL) and it polls `/status` and shows the phase, uptime, and metrics. The
+page itself is unauthenticated but reveals nothing; the status fetch it makes
+carries the token.
+
 When Hearth detects a Tailscale address on the machine (an interface in the
 100.64.0.0/10 range), the menubar shows a "Phone access" line with the full
 control URL to use from your phone. Hearth only reads the interface list; it does

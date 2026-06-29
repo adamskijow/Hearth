@@ -15,11 +15,36 @@ struct ControlRoutingTests {
 
     @Test func routesKnownMethodsAndPaths() {
         #expect(ControlRouting.command(method: "GET", path: "/status") == .status)
-        #expect(ControlRouting.command(method: "GET", path: "/") == .status)
+        // GET / is the browser status page, handled before command(), not a command.
+        #expect(ControlRouting.command(method: "GET", path: "/") == nil)
         #expect(ControlRouting.command(method: "POST", path: "/start") == .start)
         #expect(ControlRouting.command(method: "POST", path: "/stop") == .stop)
         #expect(ControlRouting.command(method: "POST", path: "/restart") == .restart)
         #expect(ControlRouting.command(method: "GET", path: "/status?x=1") == .status)
+    }
+
+    @Test func rootServesTheBrowserPageUnauthenticated() {
+        // GET / returns the HTML shell with no token (it reveals nothing and
+        // fetches /status itself), while /status still needs the token.
+        let page = ControlRouting.handle(
+            method: "GET", path: "/", authorization: nil,
+            token: token, state: state, now: now
+        )
+        guard case .html(let data) = page else {
+            Issue.record("expected html outcome for GET /")
+            return
+        }
+        let body = String(decoding: data, as: UTF8.self)
+        #expect(body.contains("<title>Hearth</title>"))
+        #expect(body.contains("/status"))
+        // The page must not embed any token.
+        #expect(!body.contains(token))
+        // /status without a token is still rejected.
+        let status = ControlRouting.handle(
+            method: "GET", path: "/status", authorization: nil,
+            token: token, state: state, now: now
+        )
+        #expect(status == .unauthorized)
     }
 
     @Test func rejectsUnknownRoutes() {

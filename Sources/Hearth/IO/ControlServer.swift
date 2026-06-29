@@ -112,6 +112,7 @@ final class ControlServer: @unchecked Sendable {
 
             let status: Int
             let body: Data
+            var contentType = "application/json"
             switch outcome {
             case .unauthorized:
                 status = 401
@@ -122,6 +123,10 @@ final class ControlServer: @unchecked Sendable {
             case .status(let data):
                 status = 200
                 body = data
+            case .html(let data):
+                status = 200
+                body = data
+                contentType = "text/html; charset=utf-8"
             case .perform(let command):
                 await coordinator.perform(command)
                 status = 202
@@ -130,16 +135,16 @@ final class ControlServer: @unchecked Sendable {
             // If the server was torn down mid-request (the config-reload path),
             // close the connection now rather than leaving it for the deadline.
             if let self {
-                self.send(box, status: status, body: body)
+                self.send(box, status: status, body: body, contentType: contentType)
             } else {
                 box.connection.cancel()
             }
         }
     }
 
-    private func send(_ box: ConnectionBox, status: Int, body: Data) {
+    private func send(_ box: ConnectionBox, status: Int, body: Data, contentType: String = "application/json") {
         var header = "HTTP/1.1 \(status) \(Self.reason(status))\r\n"
-        header += "Content-Type: application/json\r\n"
+        header += "Content-Type: \(contentType)\r\n"
         header += "Content-Length: \(body.count)\r\n"
         header += "Connection: close\r\n\r\n"
         var response = Data(header.utf8)

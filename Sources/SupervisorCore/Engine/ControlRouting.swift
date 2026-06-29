@@ -20,6 +20,8 @@ public enum ControlOutcome: Sendable, Equatable {
     case notFound
     /// A 200 with this already shaped JSON body.
     case status(Data)
+    /// A 200 with an HTML body (the browser status page).
+    case html(Data)
     /// Perform this side effecting command, then answer 202.
     case perform(ControlCommand)
 }
@@ -41,6 +43,12 @@ public enum ControlRouting {
         if isHealthCheck(method: method, path: path) {
             return .status(Data(#"{"status":"ok"}"#.utf8))
         }
+        // The browser status page, served unauthenticated: it is a shell that
+        // reveals nothing and fetches /status itself with the token the user
+        // enters. Everything below still requires the token.
+        if method.uppercased() == "GET", trimmedPath(path) == "/" {
+            return .html(Data(ControlStatusPage.html.utf8))
+        }
         guard isAuthorized(authorization, token: token) else { return .unauthorized }
         guard let command = command(method: method, path: path) else { return .notFound }
         switch command {
@@ -51,17 +59,21 @@ public enum ControlRouting {
         }
     }
 
-    /// The unauthenticated liveness route: GET /healthz only.
-    public static func isHealthCheck(method: String, path: String) -> Bool {
-        let trimmedPath = String(path.split(separator: "?").first ?? Substring(path))
-        return method.uppercased() == "GET" && trimmedPath == "/healthz"
+    /// The path with any query string stripped.
+    static func trimmedPath(_ path: String) -> String {
+        String(path.split(separator: "?").first ?? Substring(path))
     }
 
-    /// Map an HTTP method and path (query string ignored) to a command.
+    /// The unauthenticated liveness route: GET /healthz only.
+    public static func isHealthCheck(method: String, path: String) -> Bool {
+        method.uppercased() == "GET" && trimmedPath(path) == "/healthz"
+    }
+
+    /// Map an HTTP method and path (query string ignored) to a command. GET / is
+    /// the browser status page, handled before this, not a status command.
     public static func command(method: String, path: String) -> ControlCommand? {
-        let trimmedPath = String(path.split(separator: "?").first ?? Substring(path))
-        switch (method.uppercased(), trimmedPath) {
-        case ("GET", "/"), ("GET", "/status"):
+        switch (method.uppercased(), trimmedPath(path)) {
+        case ("GET", "/status"):
             return .status
         case ("POST", "/start"):
             return .start

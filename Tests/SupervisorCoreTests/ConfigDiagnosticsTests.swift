@@ -59,6 +59,13 @@ struct ConfigDiagnosticsTests {
         #expect(errors(c).isEmpty)
     }
 
+    @Test func rebootOnWedgeWarnsAboutTheRootRequirement() {
+        let issues = ConfigDiagnostics.check(HearthConfig(rebootOnWedge: true))
+        #expect(issues.contains { $0.severity == .warning && $0.message.contains("runs as root") })
+        // Off by default: no such warning.
+        #expect(!ConfigDiagnostics.check(HearthConfig()).contains { $0.message.contains("runs as root") })
+    }
+
     @Test func suspectTimingsAreWarnings() {
         #expect(ConfigDiagnostics.check(HearthConfig(probeIntervalSeconds: 0)).contains {
             $0.severity == .warning && $0.message.contains("Probe interval")

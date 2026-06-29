@@ -72,6 +72,9 @@ public enum ConfigDiagnostics {
         if config.crashLoopThreshold < 1 {
             issues.append(.init(.warning, "Crash loop threshold below 1 trips the crash-loop brake immediately."))
         }
+        if config.rebootOnWedge {
+            issues.append(.init(.warning, "Reboot escalation (rebootOnWedge) only takes effect when Hearth runs as root, the headless LaunchDaemon; it is a no-op in the menubar app."))
+        }
 
         return issues
     }

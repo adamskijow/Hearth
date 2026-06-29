@@ -5,9 +5,18 @@ All notable changes to Hearth are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0] - 2026-06-28
+
+First public release: a Developer ID signed, notarized build.
 
 ### Added
+- Managed and attached supervision of Ollama, LM Studio, and mlx_lm on macOS 14+:
+  liveness plus readiness health (catching the alive-but-wedged runner a liveness
+  check misses), exponential capped backoff, crash-loop detection, IOKit sleep
+  prevention, the SMAppService login item, ntfy and local notifications, the
+  bearer-token control endpoint, hard-crash orphan recovery, and the `OLLAMA_HOST`
+  launchd env-trap fix. Not sandboxed (App Sandbox off, Hardened Runtime on).
+  Validated against a real Ollama; see [VALIDATION-REPORT.md](VALIDATION-REPORT.md).
 - Scheduled maintenance restart (`maintenanceRestartHours`): proactively cycle a
   healthy runner on an interval to clear the gradual memory creep and VRAM
   fragmentation that degrade a long-running Ollama, whose documented fix is "restart
@@ -63,13 +72,5 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   control commands, and state for up to a minute; requests now have a short
   timeout and are sent fire-and-forget. The topic is percent-encoded so an
   unusual character no longer silently drops the alert.
-
-## [0.1.0]
-
-First Developer ID signed, notarized build. Managed and attached supervision of
-Ollama, LM Studio, and mlx_lm on macOS 14+; liveness plus readiness health,
-exponential capped backoff, crash-loop detection, IOKit sleep prevention,
-SMAppService login item, ntfy and local notifications, the bearer-token control
-endpoint, hard-crash orphan recovery, and a not-sandboxed (App Sandbox off,
-Hardened Runtime on) distribution. Validated against a real Ollama; see
-[VALIDATION-REPORT.md](VALIDATION-REPORT.md).
+- Reboot escalation (`rebootOnWedge`) is flagged by `hearth doctor` as needing the
+  root daemon, so an enabled-but-ineffective setting is not silent.

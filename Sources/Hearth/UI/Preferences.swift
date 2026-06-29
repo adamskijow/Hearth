@@ -272,8 +272,13 @@ struct PreferencesView: View {
     }
 
     private func copyPhoneURL() {
-        let host = NetworkInterfaces.tailnetIPv4() ?? model.config.controlHost
-        let url = "http://\(host):\(model.config.controlPort)"
+        guard let url = PhoneAccess.url(
+            tailnetIPv4: NetworkInterfaces.tailnetIPv4(),
+            controlHost: model.config.controlHost,
+            controlPort: model.config.controlPort) else {
+            model.status = "Bind host is loopback, which a phone cannot reach. Use a Tailscale or private address."
+            return
+        }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(url, forType: .string)
         model.status = "Copied \(url)"

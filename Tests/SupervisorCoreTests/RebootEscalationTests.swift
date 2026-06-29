@@ -15,9 +15,11 @@ struct RebootEscalationTests {
                         everHealthy: Bool,
                         history: RebootHistory = RebootHistory(),
                         now: Date,
-                        enabled: Bool = true) -> RebootDecision {
+                        enabled: Bool = true,
+                        bootedAt: Date? = nil) -> RebootDecision {
         RebootEscalation.decide(policy: policy(enabled: enabled), phase: phase, failingSince: failingSince,
-                                everHealthyThisSession: everHealthy, history: history, now: now)
+                                everHealthyThisSession: everHealthy, history: history, now: now,
+                                systemBootedAt: bootedAt)
     }
 
     @Test func disabledNeverReboots() {
@@ -84,6 +86,20 @@ struct RebootEscalationTests {
         let r = decide(phase: .failing, failingSince: t0, everHealthy: true,
                        history: history, now: t0.addingTimeInterval(700))
         #expect(r == .reboot)
+    }
+
+    @Test func aRecentSystemBootDoesNotLoopEvenWithEmptyHistory() {
+        // The reboot history was lost across the reboot (empty file), but the Mac
+        // booted only 5 minutes ago: a reboot just happened and did not clear the
+        // wedge, so the boot-time backstop blocks a loop even with no history.
+        let looped = decide(phase: .failing, failingSince: t0.addingTimeInterval(-700),
+                            everHealthy: true, now: t0, bootedAt: t0.addingTimeInterval(-300))
+        #expect(looped == .exhausted)
+        // Booted two hours ago (past the 30-minute min interval): the backstop does
+        // not block a legitimate fresh reboot.
+        let fresh = decide(phase: .failing, failingSince: t0.addingTimeInterval(-700),
+                           everHealthy: true, now: t0, bootedAt: t0.addingTimeInterval(-7200))
+        #expect(fresh == .reboot)
     }
 
     @Test func historyRoundTripsThroughJSON() throws {

@@ -47,6 +47,21 @@ struct ControlRoutingTests {
         #expect(status == .unauthorized)
     }
 
+    @Test func earlyOutcomeResolvesEverythingButAuthenticatedStatus() {
+        // Routes that need no supervisor state are resolved without it, so the
+        // server can answer them without sampling metrics.
+        func early(_ method: String, _ path: String, auth: String? = nil) -> ControlOutcome? {
+            ControlRouting.earlyOutcome(method: method, path: path, authorization: auth, token: token)
+        }
+        if case .status = early("GET", "/healthz") {} else { Issue.record("healthz should resolve early") }
+        if case .html = early("GET", "/") {} else { Issue.record("/ should resolve to the page early") }
+        #expect(early("GET", "/status", auth: nil) == .unauthorized)
+        #expect(early("POST", "/start", auth: bearer(token)) == .perform(.start))
+        #expect(early("GET", "/nope", auth: bearer(token)) == .notFound)
+        // Only an authenticated /status needs live state, so it defers (nil).
+        #expect(early("GET", "/status", auth: bearer(token)) == nil)
+    }
+
     @Test func rejectsUnknownRoutes() {
         #expect(ControlRouting.command(method: "POST", path: "/status") == nil)
         #expect(ControlRouting.command(method: "GET", path: "/start") == nil)

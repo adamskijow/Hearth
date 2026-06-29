@@ -26,6 +26,13 @@ public enum ThermalState: String, Sendable, Equatable {
     public var isElevated: Bool {
         self == .serious || self == .critical
     }
+
+    /// A known, settled reading. `unknown` is neither elevated nor calm: it means
+    /// the thermal state could not be read, so an active alert should not be
+    /// cleared on it (that would flap and report an "eased to unknown").
+    public var isCalm: Bool {
+        self == .nominal || self == .fair
+    }
 }
 
 /// A point in time snapshot of system conditions relevant to keeping a runner

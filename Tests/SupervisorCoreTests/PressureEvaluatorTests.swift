@@ -41,6 +41,23 @@ struct PressureEvaluatorTests {
                 == [.thermalEased("nominal")])
     }
 
+    @Test func anUnknownThermalReadingDoesNotClearAnActiveAlert() {
+        // A transient `unknown` (the thermal state could not be read) must not be
+        // treated as an all-clear, or alerts would flap serious/eased/serious and
+        // push a misleading "eased to unknown".
+        var state = PressureMonitorState()
+        #expect(PressureEvaluator.evaluate(metrics(memory: nil, thermal: .serious), thresholds: thresholds, state: &state)
+                == [.thermalElevated("serious")])
+        // unknown -> no signal, alert still held.
+        #expect(PressureEvaluator.evaluate(metrics(memory: nil, thermal: .unknown), thresholds: thresholds, state: &state).isEmpty)
+        #expect(state.thermalAlerted)
+        // Back to serious -> still no new alert (never falsely eased).
+        #expect(PressureEvaluator.evaluate(metrics(memory: nil, thermal: .serious), thresholds: thresholds, state: &state).isEmpty)
+        // A genuine return to a calm, known state eases it.
+        #expect(PressureEvaluator.evaluate(metrics(memory: nil, thermal: .fair), thresholds: thresholds, state: &state)
+                == [.thermalEased("fair")])
+    }
+
     @Test func disabledChannelsStaySilent() {
         var state = PressureMonitorState()
         let off = PressureThresholds(memoryAlertPercent: 0, thermalAlerts: false)

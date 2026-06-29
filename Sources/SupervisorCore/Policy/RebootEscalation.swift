@@ -62,7 +62,8 @@ public enum RebootEscalation {
                               failingSince: Date?,
                               everHealthyThisSession: Bool,
                               history: RebootHistory,
-                              now: Date) -> RebootDecision {
+                              now: Date,
+                              systemBootedAt: Date? = nil) -> RebootDecision {
         guard policy.enabled else { return .wait }
         // Never reboot for a setup failure (a wrong binary path, a bad config).
         // Only a runner that was actually serving and then wedged past what a
@@ -70,6 +71,15 @@ public enum RebootEscalation {
         guard everHealthyThisSession else { return .wait }
         guard phase == .failing, let failingSince else { return .wait }
         guard now.timeIntervalSince(failingSince) >= policy.escalateAfterSeconds else { return .wait }
+
+        // Kernel boot-time backstop, independent of the on-disk history. If the
+        // Mac itself booted more recently than the minimum interval, a reboot just
+        // happened and did not clear the wedge, so do not loop. This holds even if
+        // the persisted reboot history was lost across the reboot (an unflushed or
+        // corrupt file), which a history-only guard would fail open on.
+        if let systemBootedAt, now.timeIntervalSince(systemBootedAt) < policy.minIntervalSeconds {
+            return .exhausted
+        }
 
         let dayAgo = now.addingTimeInterval(-86_400)
         let recent = history.recoveryReboots.filter { $0 >= dayAgo }
@@ -91,4 +101,7 @@ public enum RebootEscalation {
 public protocol SystemControlling: Sendable {
     /// Reboot the machine. Requires root (the headless LaunchDaemon).
     func reboot()
+    /// When the machine last booted, used as a loop-guard backstop that does not
+    /// depend on the persisted reboot history. nil if it cannot be read.
+    func bootedAt() -> Date?
 }

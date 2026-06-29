@@ -37,6 +37,23 @@ public enum ControlRouting {
                               state: SupervisorState,
                               now: Date,
                               metrics: SystemMetrics? = nil) -> ControlOutcome {
+        if let early = earlyOutcome(method: method, path: path, authorization: authorization, token: token) {
+            return early
+        }
+        // Only an authenticated /status reaches here; it is the one route that
+        // needs live supervisor state and a metrics sample.
+        return .status(statusJSON(state, now: now, metrics: metrics))
+    }
+
+    /// The outcome for every route that needs no supervisor state or metrics, so
+    /// the server can answer it without sampling. Returns nil only for an
+    /// authenticated GET /status, which the caller then fills with live state.
+    /// This keeps an unauthenticated /healthz poll (and a failed-auth request)
+    /// from driving a metrics read and an actor hop on every hit.
+    public static func earlyOutcome(method: String,
+                                    path: String,
+                                    authorization: String?,
+                                    token: String) -> ControlOutcome? {
         // Unauthenticated liveness: confirms Hearth itself is up, for an uptime
         // monitor or reverse proxy. It reveals nothing about the runner's state,
         // so it does not require the token.
@@ -53,7 +70,7 @@ public enum ControlRouting {
         guard let command = command(method: method, path: path) else { return .notFound }
         switch command {
         case .status:
-            return .status(statusJSON(state, now: now, metrics: metrics))
+            return nil
         case .start, .stop, .restart:
             return .perform(command)
         }

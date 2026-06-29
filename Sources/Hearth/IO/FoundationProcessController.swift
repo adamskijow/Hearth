@@ -209,7 +209,12 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
         // Take the whole runner tree down: serve plus the llama-server grandchild.
         killpg(pgid, SIGTERM)
         let grace = killGraceSeconds
-        DispatchQueue.global().asyncAfter(deadline: .now() + grace) { [weak self] in
+        // Capture self strongly: on a config reload the controller can be replaced
+        // and released within this grace window, and a weak ref would skip the
+        // reap, leaving the SIGKILLed leader a zombie until Hearth itself exits.
+        // The closure runs once and is then released, so this only extends the
+        // old controller's life by `grace`, with no retain cycle.
+        DispatchQueue.global().asyncAfter(deadline: .now() + grace) { [self] in
             // SIGKILL the group if anything in it is still alive (a wedged or
             // SIGSTOPped runner ignores SIGTERM; SIGKILL still lands).
             if killpg(pgid, 0) == 0 {
@@ -217,7 +222,7 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
             }
             // Reap the group leader so it is not left a zombie, and forget the
             // entry so the dictionary does not grow with every restart.
-            self?.reapAndRemove(id: id, pid: pid)
+            reapAndRemove(id: id, pid: pid)
         }
     }
 

@@ -34,7 +34,8 @@ final class RebootEscalator {
             failingSince: state.failingSince,
             everHealthyThisSession: everHealthy,
             history: RebootHistoryStore.load(),
-            now: now
+            now: now,
+            systemBootedAt: system.bootedAt()
         ) {
         case .wait:
             break

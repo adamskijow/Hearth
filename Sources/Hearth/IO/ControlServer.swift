@@ -99,16 +99,27 @@ final class ControlServer: @unchecked Sendable {
         let coordinator = self.coordinator
         let metrics = self.metrics
         Task { [weak self] in
-            let state = await coordinator.status()
-            let outcome = ControlRouting.handle(
-                method: request.method,
-                path: request.path,
-                authorization: request.value(for: "Authorization"),
-                token: token,
-                state: state,
-                now: Date(),
-                metrics: metrics?.sample()
-            )
+            let authorization = request.value(for: "Authorization")
+            // Answer the routes that need no supervisor state or metrics first, so
+            // an unauthenticated /healthz poll (or a failed-auth request) does not
+            // trigger a metrics sample and a coordinator hop.
+            let outcome: ControlOutcome
+            if let early = ControlRouting.earlyOutcome(
+                method: request.method, path: request.path,
+                authorization: authorization, token: token) {
+                outcome = early
+            } else {
+                let state = await coordinator.status()
+                outcome = ControlRouting.handle(
+                    method: request.method,
+                    path: request.path,
+                    authorization: authorization,
+                    token: token,
+                    state: state,
+                    now: Date(),
+                    metrics: metrics?.sample()
+                )
+            }
 
             let status: Int
             let body: Data

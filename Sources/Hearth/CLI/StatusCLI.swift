@@ -199,7 +199,7 @@ enum StatusCLI {
     static func printMetrics() -> Never {
         let history = MetricsHistoryStore.load()
         guard let summary = history.summary() else {
-            print("No metrics history yet. While running, Hearth records a sample every 30s.")
+            print("No metrics history yet. While running, Hearth records a sample about once a minute.")
             exit(0)
         }
         print("Hearth metrics history")

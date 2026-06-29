@@ -62,7 +62,10 @@ public enum PressureEvaluator {
             if !state.thermalAlerted, metrics.thermal.isElevated {
                 state.thermalAlerted = true
                 signals.append(.thermalElevated(metrics.thermal.label))
-            } else if state.thermalAlerted, !metrics.thermal.isElevated {
+            } else if state.thermalAlerted, metrics.thermal.isCalm {
+                // Clear only on a known calm reading. A transient `unknown` (the
+                // thermal state could not be read) is not an all-clear, so it
+                // holds the alert rather than flapping ease/alert/ease.
                 state.thermalAlerted = false
                 signals.append(.thermalEased(metrics.thermal.label))
             }

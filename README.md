@@ -15,6 +15,28 @@ does not replace Ollama or LM Studio. The runner is an opaque child process that
 Hearth owns and supervises; Hearth reads the runner's API and logs only to judge
 whether it is healthy.
 
+## Quickstart
+
+If you already run Ollama on this Mac:
+
+```
+brew install --cask adamskijow/tap/hearth   # or: git clone … && make install
+open /Applications/Hearth.app
+```
+
+A flame appears in the menubar. Hearth auto-detects Ollama at the Homebrew path,
+starts supervising it, and keeps the Mac awake while it serves. That is the whole
+setup. To check it from a terminal:
+
+```
+hearth doctor    # config and environment preflight
+hearth status    # phase, uptime, restarts, resident models
+```
+
+If your runner is elsewhere or you want LM Studio or mlx_lm, the remote control
+endpoint, or pressure alerts, see Configure below. If something looks off, jump to
+Troubleshooting.
+
 ## Why this exists
 
 If you run a local model server on a Mac you leave in a closet, the usual fix is a
@@ -411,6 +433,32 @@ collides with the runner port, backoff timings that cannot grow) and the
 environment (the runner binary exists and is executable, the runner port is free
 for a managed runner or already serving for an attached one, the log directory is
 writable), then prints each result and exits non-zero if anything is an error.
+
+## Troubleshooting
+
+Run `hearth doctor` first; it catches most of these and tells you which. The menu
+also shows a "config issues" line when it finds any.
+
+- **The menubar flame never goes green / "runner binary not found."** Hearth is
+  looking for the runner at the default path and not finding it. Set
+  `ollamaBinaryPath` (or `lmStudioBinaryPath` / `mlxBinaryPath`) to the output of
+  `which ollama`, in Preferences or the config. `hearth doctor` reports the path
+  it tried.
+- **LM Studio keeps restarting (down, restarting, down).** Managed mode does not
+  work with LM Studio: `lms server start` exits immediately. Set `mode` to
+  `attached` and start LM Studio's server yourself; Hearth will watch it.
+- **mlx_lm never reaches healthy.** `mlx_lm.server`'s `/v1/models` errors until at
+  least one MLX model is in your HuggingFace cache. Download any model once.
+- **Login item or notifications do nothing.** Those need the packaged, signed app
+  (`make install` or the cask), not `swift run Hearth`. Unbundled, they degrade
+  gracefully and the menu says so.
+- **`hearth status` says the control endpoint is unreachable.** Enable it
+  (`controlEnabled`, with a `controlToken`), and check `controlHost`/`controlPort`.
+  Bind it to localhost or a Tailscale address, never a public interface.
+- **A stray `ollama serve` is running after a restart.** Hearth records the
+  process group it owns and sweeps it on the next launch. If you deleted
+  `runner-state.json` by hand, that record is gone; kill the stray once and let
+  Hearth own the next one.
 
 ## Running headless
 

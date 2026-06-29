@@ -1,0 +1,71 @@
+name: Bug report
+description: Something Hearth did wrong (a runner not restarting, a wedge missed, a crash)
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please run `hearth doctor` first; it catches many setup issues and its output helps a lot here.
+  - type: input
+    id: hearth-version
+    attributes:
+      label: Hearth version
+      description: The release you installed (for example 0.1.0), or the commit if built from source.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: input
+    id: macos-version
+    attributes:
+      label: macOS version
+      placeholder: "14.5 (Sonoma)"
+    validations:
+      required: true
+  - type: dropdown
+    id: runner
+    attributes:
+      label: Runner
+      options:
+        - Ollama
+        - LM Studio
+        - mlx_lm
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Mode
+      options:
+        - managed (Hearth starts the runner)
+        - attached (Hearth watches an existing runner)
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what Hearth did instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: false
+  - type: textarea
+    id: doctor
+    attributes:
+      label: hearth doctor output
+      description: Paste the output of `hearth doctor`. Redact any tokens.
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: From `hearth logs` or `hearth events`. Redact anything sensitive.
+      render: text
+    validations:
+      required: false

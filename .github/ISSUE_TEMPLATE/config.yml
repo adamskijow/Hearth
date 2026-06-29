@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/adamskijow/Hearth/security/advisories/new
+    about: Please report security issues privately here, not as a public issue.
+  - name: Question or troubleshooting
+    url: https://github.com/adamskijow/Hearth#troubleshooting
+    about: Check the Troubleshooting section and run hearth doctor first.

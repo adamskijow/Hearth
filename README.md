@@ -4,6 +4,13 @@
 
 # Hearth
 
+<p align="center">
+  <a href="https://github.com/adamskijow/Hearth/actions/workflows/ci.yml"><img src="https://github.com/adamskijow/Hearth/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/adamskijow/Hearth/releases/latest"><img src="https://img.shields.io/github/v/release/adamskijow/Hearth?sort=semver" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/adamskijow/Hearth" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/macOS-14%2B-black?logo=apple&logoColor=white" alt="macOS 14+">
+</p>
+
 Hearth is a background supervisor that keeps a local LLM runner (Ollama, with LM
 Studio and mlx_lm support) alive and serving on a headless Mac.
 
@@ -68,6 +75,29 @@ spawn, so the listen address is correct by construction.
 
 Hearth exists to make a local runner behave like a real, always on service on a
 machine nobody is sitting at.
+
+## Hearth vs launchd KeepAlive vs brew services
+
+The usual ways to keep a runner up restart the process when it exits. They do not
+know whether it is actually answering, and they do nothing about sleep, the listen
+address, or telling you when something is wrong.
+
+| | Hearth | launchd `KeepAlive` | `brew services` |
+|---|:---:|:---:|:---:|
+| Restart when the process exits (crash) | yes | yes | yes |
+| Restart when it is **alive but wedged** (readiness) | yes | no | no |
+| Crash-loop backoff | yes | partial (`ThrottleInterval`) | partial |
+| Keep the Mac awake while serving | yes | no | no |
+| Correct listen address (no `OLLAMA_HOST` env trap) | yes | no | no |
+| Alerts (local and phone via ntfy) | yes | no | no |
+| Memory and thermal pressure warnings | yes | no | no |
+| Reboot escalation for driver/GPU wedges | yes (opt-in) | no | no |
+| Status CLI, control endpoint, browser status page | yes | no | no |
+| Zero third-party dependencies | yes | (built in) | (built in) |
+
+`brew services` is a thin wrapper over launchd, so it inherits the same blind
+spot: a runner that is up but not answering looks healthy to both. Hearth probes
+readiness, so it does not.
 
 ## Requirements
 

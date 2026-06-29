@@ -26,7 +26,7 @@ logs only to judge whether it is healthy.
 If you already run Ollama on this Mac:
 
 ```
-brew install --cask adamskijow/tap/hearth   # or: git clone … && make install
+brew install --cask adamskijow/tap/hearth   # or: git clone the repo, then make install
 open /Applications/Hearth.app
 ```
 
@@ -715,9 +715,9 @@ These are stated up front on purpose.
   [VALIDATION-REPORT.md](VALIDATION-REPORT.md)): cold start, external kill, the
   alive-but-wedged case via SIGSTOP, clean process group teardown with no
   orphaned `llama-server`, attached mode, and hard-crash orphan recovery (a
-  SIGKILLed Hearth's leaked runner group is swept on the next launch). LM Studio
-  and mlx_lm are covered by unit tests against captured payloads but have not yet
-  been exercised against live servers.
+  SIGKILLed Hearth's leaked runner group is swept on the next launch). mlx_lm has
+  since been validated in managed mode against a live `mlx_lm.server`, and LM
+  Studio in attached mode against a live server (the report has the details).
 - Out of memory classification is a heuristic and is UNVERIFIED against a real
   out of memory kill, which could not be induced on high unified-memory hardware.
   The signatures are confirmed absent from a healthy Ollama's output (so they do
@@ -733,9 +733,10 @@ These are stated up front on purpose.
   sleep on idle (a desktop, or a plugged in laptop with the lid open) awake and
   serving. Keeping a laptop serving with the lid closed on battery is a separate,
   privileged concern and is not implemented.
-- LM Studio's managed launch is best effort, because `lms server start` may
-  background the server rather than staying in the foreground. Attached mode is
-  the reliable path for LM Studio.
+- LM Studio works in attached mode only. `lms server start` exits immediately (the
+  server runs in LM Studio's own background process), so a managed runner thrashes;
+  `hearth doctor` and the menu flag it. Start LM Studio's server yourself and let
+  Hearth watch it.
 - The control endpoint is unauthenticated beyond a shared bearer token and is
   meant to live behind a VPN, not on the open internet.
 

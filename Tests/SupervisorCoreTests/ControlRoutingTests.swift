@@ -39,6 +39,11 @@ struct ControlRoutingTests {
         #expect(body.contains("/status"))
         // The page must not embed any token.
         #expect(!body.contains(token))
+        // Status values (model names from the runner) are escaped before they go
+        // into innerHTML, so a hostile model name cannot inject script on the page
+        // that holds the bearer token. Guard that the escaper exists and is used.
+        #expect(body.contains("function esc("))
+        #expect(body.contains("esc(v)"))
         // /status without a token is still rejected.
         let status = ControlRouting.handle(
             method: "GET", path: "/status", authorization: nil,

@@ -34,8 +34,9 @@ public enum ControlStatusPage {
       const tok = document.getElementById('token');
       tok.value = localStorage.getItem('hearthToken') || '';
       tok.addEventListener('input', () => localStorage.setItem('hearthToken', tok.value));
-      function row(k, v, cls) { return '<div class="row"><span class="k">' + k + '</span><span class="v ' + (cls||'') + '">' + v + '</span></div>'; }
-      function dur(s) { const h = Math.floor(s/3600), m = Math.floor(s%3600/60); return h ? (h + 'h ' + m + 'm') : (m + 'm'); }
+      function esc(s) { return String(s).replace(/[&<>"']/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+      function row(k, v, cls) { return '<div class="row"><span class="k">' + esc(k) + '</span><span class="v ' + esc(cls || '') + '">' + esc(v) + '</span></div>'; }
+      function dur(s) { if (s < 60) return Math.round(s) + 's'; const h = Math.floor(s/3600), m = Math.floor(s%3600/60); return h ? (h + 'h ' + m + 'm') : (m + 'm'); }
       async function refresh() {
         const t = tok.value.trim();
         if (!t) { document.getElementById('status').innerHTML = ''; return; }

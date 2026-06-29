@@ -173,7 +173,7 @@ enum StatusCLI {
     private static func isSomethingListening(host: String, port: Int) -> Bool {
         guard let url = URL(string: "http://\(host):\(port)/") else { return false }
         let (_, response, error) = syncGET(url, bearer: nil, timeout: 2)
-        return response != nil || !isConnectionRefused(error)
+        return response != nil || !isUnreachable(error)
     }
 
     private static func directoryIsWritable(_ url: URL) -> Bool {
@@ -269,7 +269,7 @@ enum StatusCLI {
         return "  \(padded)\(value)"
     }
 
-    private static func isConnectionRefused(_ error: Error?) -> Bool {
+    private static func isUnreachable(_ error: Error?) -> Bool {
         guard let error = error as NSError? else { return false }
         return error.domain == NSURLErrorDomain
             && [NSURLErrorCannotConnectToHost, NSURLErrorCannotFindHost,

@@ -13,6 +13,12 @@ cd "$(dirname "$0")/.."
 DEST="${HEARTH_INSTALL_DIR:-/Applications}"
 APP="dist/Hearth.app"
 
+# Guard a typo'd or bogus HEARTH_INSTALL_DIR before any rm -rf runs against it.
+if [ ! -d "$DEST" ]; then
+  echo "HEARTH_INSTALL_DIR=\"$DEST\" is not a directory." >&2
+  exit 1
+fi
+
 ./scripts/package-app.sh
 
 echo "Ad-hoc signing (stable local identity, not Developer ID, not notarized)..."

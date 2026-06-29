@@ -167,15 +167,15 @@ below for the signing pipeline.
 
 ### Homebrew cask
 
-A signed release can be installed with Homebrew once published:
+The signed release installs with Homebrew:
 
 ```
 brew install --cask adamskijow/tap/hearth
 ```
 
-The cask lives at `Casks/hearth.rb`. It is a template until the first signed
-release is attached to a GitHub release; the version and sha256 are filled in by
-the release pipeline.
+The cask lives at `Casks/hearth.rb` and is mirrored to the `adamskijow/homebrew-tap`
+tap. The release pipeline bumps its `version` and `sha256` to match each published
+DMG.
 
 ## Configure
 

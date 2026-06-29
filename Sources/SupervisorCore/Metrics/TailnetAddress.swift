@@ -17,3 +17,23 @@ public enum TailnetAddress {
         return values[0] == 100 && (64...127).contains(values[1])
     }
 }
+
+/// The control URL a phone could actually reach. Prefers the tailnet address;
+/// otherwise uses an explicit non-loopback control host. Returns nil when only a
+/// loopback or the 0.0.0.0 wildcard is available, since neither is dialable from a
+/// phone, so the menu does not advertise a "phone access" URL that cannot work.
+public enum PhoneAccess {
+    private static let unreachableHosts: Set<String> = ["127.0.0.1", "localhost", "::1", "0.0.0.0", ""]
+
+    public static func url(tailnetIPv4: String?, controlHost: String, controlPort: Int) -> String? {
+        let host: String
+        if let tailnetIPv4 {
+            host = tailnetIPv4
+        } else if unreachableHosts.contains(controlHost) {
+            return nil
+        } else {
+            host = controlHost
+        }
+        return "http://\(host):\(controlPort)"
+    }
+}

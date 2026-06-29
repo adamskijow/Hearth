@@ -270,16 +270,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let loaded = latestState.residentModels.map(StatusText.model).joined(separator: ", ")
             menu.addItem(infoRow(detailAttr("Loaded: \(loaded)")))
         }
-        if config.controlEnabled, controlServer != nil {
-            let host = NetworkInterfaces.tailnetIPv4() ?? config.controlHost
-            menu.addItem(infoRow(detailAttr("Phone access: http://\(host):\(config.controlPort)")))
+        if let url = phoneAccessURL() {
+            menu.addItem(phoneAccessItem(url: url))
         }
 
         menu.addItem(.separator())
         addAction("Start", #selector(startTapped), enabled: latestState.phase == .stopped)
-        addAction("Restart", #selector(restartTapped), enabled: latestState.phase != .stopped)
         addAction("Stop", #selector(stopTapped), enabled: latestState.phase != .stopped)
+        addAction("Restart", #selector(restartTapped), enabled: latestState.phase != .stopped)
         addAction("Open Logs", #selector(openLogsTapped), enabled: true)
+        addAction("Copy Diagnostics", #selector(copyDiagnosticsTapped), enabled: true)
 
         let recent = EventLogStore.recent(12)
         if !recent.isEmpty {
@@ -287,7 +287,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             for line in recent.reversed() {   // newest first
                 activity.addItem(disabled(line))
             }
-            let item = NSMenuItem(title: "Recent activity", action: nil, keyEquivalent: "")
+            let item = NSMenuItem(title: "Recent Activity", action: nil, keyEquivalent: "")
             item.submenu = activity
             menu.addItem(item)
         }
@@ -299,6 +299,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         login.target = self
         login.state = LoginItem.isRegistered ? .on : .off
         login.isEnabled = LoginItem.isAvailable
+        if !LoginItem.isAvailable {
+            login.toolTip = "Available in the installed, signed app, not when run unbundled."
+        }
         menu.addItem(login)
 
         menu.addItem(.separator())
@@ -356,6 +359,91 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(item)
     }
 
+    // MARK: - Phone access
+
+    /// The control URL a phone could actually reach, or nil if the endpoint is off
+    /// or only bound to loopback (which a phone cannot use). Prefers the Tailscale
+    /// address; an explicit non-loopback configured host is shown as-is.
+    private func phoneAccessURL() -> String? {
+        guard config.controlEnabled, controlServer != nil else { return nil }
+        return PhoneAccess.url(
+            tailnetIPv4: NetworkInterfaces.tailnetIPv4(),
+            controlHost: config.controlHost,
+            controlPort: config.controlPort)
+    }
+
+    /// A "Phone Access" submenu: the URL, a scannable QR code, and Copy URL.
+    private func phoneAccessItem(url: String) -> NSMenuItem {
+        let submenu = NSMenu()
+        submenu.addItem(infoRow(detailAttr(url)))
+        if let qr = QRCode.image(for: url, size: 150) {
+            submenu.addItem(qrItem(qr))
+        }
+        let copy = NSMenuItem(title: "Copy URL", action: #selector(copyPhoneURLTapped), keyEquivalent: "")
+        copy.target = self
+        submenu.addItem(copy)
+
+        let item = NSMenuItem(title: "Phone Access", action: nil, keyEquivalent: "")
+        item.submenu = submenu
+        return item
+    }
+
+    /// The QR on a white card with a quiet-zone border, so it scans regardless of
+    /// the menu's light or dark appearance.
+    private func qrItem(_ image: NSImage) -> NSMenuItem {
+        let item = NSMenuItem()
+        let pad: CGFloat = 12, leftInset: CGFloat = 21
+        let side = image.size.width + pad * 2
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: leftInset + side + 16, height: side))
+        let card = NSView(frame: NSRect(x: leftInset, y: 0, width: side, height: side))
+        card.wantsLayer = true
+        card.layer?.backgroundColor = NSColor.white.cgColor
+        card.layer?.cornerRadius = 6
+        let imageView = NSImageView(frame: NSRect(x: pad, y: pad, width: image.size.width, height: image.size.height))
+        imageView.image = image
+        imageView.imageScaling = .scaleNone
+        card.addSubview(imageView)
+        container.addSubview(card)
+        item.view = container
+        return item
+    }
+
+    /// A plain-text snapshot for bug reports: version, runner, status, metrics,
+    /// config diagnostics, and recent events, mirroring `hearth doctor`/`status`.
+    private func diagnosticsText() -> String {
+        let now = Date()
+        var lines: [String] = []
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
+        lines.append("Hearth \(version)")
+        lines.append("Runner: \(config.runner) (\(config.isManaged ? "managed" : "attached")) at \(config.host):\(config.port)")
+        lines.append("Status: \(StatusText.headline(latestState, now: now))")
+        lines.append(StatusText.contextLine(latestState, runnerName: runner.name, managed: config.isManaged, now: now))
+        let metrics = metricsProvider.sample()
+        if let summary = MetricsFormat.summary(metrics) {
+            var line = summary
+            if let resident = metrics.runnerResidentBytes {
+                line += " \u{00B7} Runner \(StatusText.byteString(resident))"
+            }
+            lines.append(line)
+        }
+        if !latestState.residentModels.isEmpty {
+            lines.append("Loaded: \(latestState.residentModels.map(StatusText.model).joined(separator: ", "))")
+        }
+        let diagnostics = ConfigDiagnostics.check(config)
+        if !diagnostics.isEmpty {
+            lines.append("Config issues:")
+            for diagnostic in diagnostics {
+                lines.append("  [\(diagnostic.severity.rawValue)] \(diagnostic.message)")
+            }
+        }
+        let recent = EventLogStore.recent(10)
+        if !recent.isEmpty {
+            lines.append("Recent events:")
+            for line in recent { lines.append("  \(line)") }
+        }
+        return lines.joined(separator: "\n")
+    }
+
     // MARK: - Actions
 
     @objc private func startTapped() { Task { await coordinator.begin() } }
@@ -395,6 +483,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             NSWorkspace.shared.open(AppPaths.logDirectory)
         }
+    }
+
+    @objc private func copyPhoneURLTapped() {
+        guard let url = phoneAccessURL() else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(url, forType: .string)
+    }
+
+    @objc private func copyDiagnosticsTapped() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(diagnosticsText(), forType: .string)
     }
 
     @objc private func toggleLoginItemTapped() {

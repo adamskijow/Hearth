@@ -656,11 +656,16 @@ export HEARTH_NOTARY_ISSUER="<issuer-uuid>"   # App Store Connect issuer ID
 ./scripts/release.sh
 ```
 
-Releasing is local: run it on your Mac, attach the DMG (and zip) to a GitHub
+Releasing can be local: run it on your Mac, attach the DMG (and zip) to a GitHub
 release, then set `Casks/hearth.rb` `version` and `sha256` to the DMG's. Once
 published from a tap, install with `brew install --cask adamskijow/tap/hearth`.
 For a quick local install without a release, `make install` ad-hoc signs and
 copies the app to `/Applications`.
+
+It can also be hosted: pushing a `v*` tag runs `.github/workflows/release.yml`,
+which gates on CI and, when the signing secrets are configured (the workflow
+header lists them), signs, notarizes, and publishes the release automatically.
+Without those secrets the tag still gets a release gate and you publish locally.
 
 ## Known limitations
 

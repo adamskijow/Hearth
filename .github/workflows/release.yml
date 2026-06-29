@@ -1,0 +1,91 @@
+# SPDX-License-Identifier: MIT
+#
+# Tag-triggered release. Pushing a v* tag (for example `git tag v0.2.0 && git push
+# --tags`) runs the CI gate, then, IF the signing secrets are configured, builds a
+# Developer ID signed and notarized .app, packages the DMG and ZIP, and attaches
+# them to a GitHub release.
+#
+# Without the secrets the signing and publish steps skip cleanly, so the tag still
+# gets a green "this commit is releasable" check and you can keep building the
+# signed artifacts locally with scripts/release.sh. To enable hosted releases, add
+# these repository secrets (Settings > Secrets and variables > Actions):
+#
+#   MACOS_CERTIFICATE_P12       base64 of your Developer ID Application .p12
+#                               (base64 -i cert.p12 | pbcopy)
+#   MACOS_CERTIFICATE_PASSWORD  the .p12 export password
+#   HEARTH_SIGN_IDENTITY        the identity string, e.g.
+#                               "Developer ID Application: Name (TEAMID)"
+#   NOTARY_KEY_P8               base64 of your App Store Connect AuthKey_XXXX.p8
+#   NOTARY_KEY_ID               the key ID (the XXXX in the filename)
+#   NOTARY_ISSUER               the App Store Connect issuer ID (a UUID)
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run the CI gate (build, tests, lint)
+        run: ./scripts/ci.sh
+
+      - name: Are signing secrets configured?
+        id: secrets
+        env:
+          CERT: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+        run: |
+          if [ -n "$CERT" ]; then
+            echo "present=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=no" >> "$GITHUB_OUTPUT"
+            echo "Signing secrets not set; gate only. See this workflow's header to enable hosted releases." >&2
+          fi
+
+      - name: Import the Developer ID certificate
+        if: steps.secrets.outputs.present == 'yes'
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/hearth-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          echo "$MACOS_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
+            -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
+          # Put the signing keychain first on the search list so codesign finds it.
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          rm -f "$RUNNER_TEMP/cert.p12"
+
+      - name: Build, sign, notarize, and package
+        if: steps.secrets.outputs.present == 'yes'
+        env:
+          HEARTH_SIGN_IDENTITY: ${{ secrets.HEARTH_SIGN_IDENTITY }}
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+          HEARTH_NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          HEARTH_NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER }}
+        run: |
+          set -euo pipefail
+          echo "$NOTARY_KEY_P8" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+          export HEARTH_NOTARY_KEY="$RUNNER_TEMP/notary.p8"
+          ./scripts/release.sh
+          rm -f "$RUNNER_TEMP/notary.p8"
+
+      - name: Publish the GitHub release
+        if: steps.secrets.outputs.present == 'yes'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            dist/*.dmg dist/*.zip

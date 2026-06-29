@@ -6,7 +6,9 @@
 # just on a developer's machine. Free for public repositories.
 #
 # The same script runs locally via the pre-push hook (scripts/install-hooks.sh).
-# Releasing stays local (scripts/release.sh) until a Developer ID is configured.
+# Tagged releases are handled by release.yml; it gates here too and signs and
+# publishes when the signing secrets are configured (otherwise release locally
+# with scripts/release.sh).
 name: CI
 
 on:

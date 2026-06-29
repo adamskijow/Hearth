@@ -4,7 +4,9 @@
 # Integration gate: drive the REAL Hearth agent against a REAL `ollama serve`
 # (not the fake runner) and prove the six lifecycle scenarios, including
 # hard-crash orphan recovery. Exits non-zero on any failed scenario. Captures
-# live fixtures into tests/Fixtures/real/.
+# live payloads into the gitignored dist/real-fixtures/ for inspection, so a gate
+# run never dirties the committed test fixtures. To refresh those on purpose, copy
+# the captures over Tests/Fixtures/real/ yourself.
 #
 # REQUIRES a real Ollama install with at least one small model pulled. Set
 # HEARTH_VALIDATE_MODEL to the model tag (default qwen2.5:0.5b).
@@ -23,7 +25,7 @@ TOKEN="validate-$$"
 BIN=".build/debug/Hearth"
 WORK="$(mktemp -d)"
 CONFIG="$WORK/config.json"
-FIXDIR="tests/Fixtures/real"
+FIXDIR="dist/real-fixtures"
 
 PASS=0; FAIL=0
 pass() { echo "  PASS: $1"; PASS=$((PASS+1)); }

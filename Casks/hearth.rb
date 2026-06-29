@@ -15,7 +15,7 @@ cask "hearth" do
   desc "Background supervisor that keeps a local LLM runner alive on a headless Mac"
   homepage "https://github.com/adamskijow/Hearth"
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "Hearth.app"
 

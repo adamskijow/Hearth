@@ -17,6 +17,8 @@ case "logs":
     StatusCLI.tailLogs(Array(arguments.dropFirst()))  // exits
 case "events":
     StatusCLI.tailEvents(Array(arguments.dropFirst()))  // exits
+case "metrics":
+    StatusCLI.printMetrics()  // exits
 case "doctor":
     StatusCLI.printDoctor()  // exits
 case "--help", "-h", "help":

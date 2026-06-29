@@ -19,6 +19,7 @@ enum StatusCLI {
           Hearth status             Print the current supervision status.
           Hearth logs [-n N] [-f]   Show the runner log (last N lines; -f to follow).
           Hearth events [-n N] [-f] Show Hearth's own event history (down, restart, recovered).
+          Hearth metrics            Show memory and thermal history over the retained window.
           Hearth doctor             Check the config and environment for problems.
           Hearth --help             Show this help.
 
@@ -184,6 +185,37 @@ enum StatusCLI {
     private static func recordedRunner() -> RunnerProcessIdentity? {
         guard let data = try? Data(contentsOf: RunnerStateStore.url) else { return nil }
         return try? JSONDecoder().decode(RunnerProcessIdentity.self, from: data)
+    }
+
+    // MARK: - metrics
+
+    private static let stamp: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "MMM d HH:mm"
+        return formatter
+    }()
+
+    static func printMetrics() -> Never {
+        let history = MetricsHistoryStore.load()
+        guard let summary = history.summary() else {
+            print("No metrics history yet. While running, Hearth records a sample every 30s.")
+            exit(0)
+        }
+        print("Hearth metrics history")
+        let span = summary.last.timeIntervalSince(summary.first)
+        print(row("window", "\(stamp.string(from: summary.first)) to \(stamp.string(from: summary.last))  (\(StatusText.duration(span)), \(summary.count) samples)"))
+        if let current = summary.currentMemoryPercent { print(row("memory now", "\(current)%")) }
+        if let average = summary.averageMemoryPercent { print(row("memory avg", "\(average)%")) }
+        if let peak = summary.peakMemoryPercent { print(row("memory peak", "\(peak)% (\(summary.memoryTrend.rawValue))")) }
+        let sparkline = history.memorySparkline(width: 48)
+        if !sparkline.isEmpty { print(row("memory", sparkline)) }
+        if let rss = summary.peakRunnerResidentBytes { print(row("runner peak RSS", StatusText.byteString(rss))) }
+        let thermals = summary.thermalCounts.sorted { $0.value > $1.value }
+            .map { "\($0.key) \(Int((Double($0.value) / Double(summary.count) * 100).rounded()))%" }
+            .joined(separator: ", ")
+        if !thermals.isEmpty { print(row("thermal", thermals)) }
+        exit(0)
     }
 
     // MARK: - logs and events

@@ -51,10 +51,14 @@ struct SupervisorAssembly {
             )
         }
 
+        // Record a metrics sample on every pressure tick so `hearth metrics` can
+        // show how memory and thermals moved over the retained window.
+        let metricsHistory = MetricsHistoryStore()
         let pressureMonitor = PressureMonitor(
             metrics: metricsProvider,
             thresholds: config.pressureThresholds(),
-            notify: { notification in Task.detached { await notifier.notify(notification) } }
+            notify: { notification in Task.detached { await notifier.notify(notification) } },
+            onSample: { sample in metricsHistory.record(sample) }
         )
 
         return SupervisorAssembly(

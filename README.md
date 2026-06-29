@@ -387,6 +387,7 @@ hearth status              # phase, uptime, restarts, metrics, resident models
 hearth logs -n 100         # last 100 lines of the runner log
 hearth logs -f             # follow the runner log
 hearth events              # Hearth's own event history (down, restart, recovered)
+hearth metrics             # memory and thermal history over the retained window
 hearth doctor              # check the config and environment for problems
 ```
 

@@ -13,6 +13,7 @@ final class PressureMonitor: @unchecked Sendable {
     private let thresholds: PressureThresholds
     private let interval: TimeInterval
     private let notify: @Sendable (HearthNotification) -> Void
+    private let onSample: (@Sendable (SystemMetrics) -> Void)?
     private let lock = NSLock()
     private var state = PressureMonitorState()
     private var timer: DispatchSourceTimer?
@@ -20,15 +21,18 @@ final class PressureMonitor: @unchecked Sendable {
     init(metrics: MetricsProviding,
          thresholds: PressureThresholds,
          interval: TimeInterval = 30,
-         notify: @escaping @Sendable (HearthNotification) -> Void) {
+         notify: @escaping @Sendable (HearthNotification) -> Void,
+         onSample: (@Sendable (SystemMetrics) -> Void)? = nil) {
         self.metrics = metrics
         self.thresholds = thresholds
         self.interval = interval
         self.notify = notify
+        self.onSample = onSample
     }
 
     func start() {
-        guard thresholds.memoryAlertPercent > 0 || thresholds.thermalAlerts else { return }
+        // Run if either we alert on pressure or we are recording history.
+        guard thresholds.memoryAlertPercent > 0 || thresholds.thermalAlerts || onSample != nil else { return }
         let timer = DispatchSource.makeTimerSource(queue: .global())
         timer.schedule(deadline: .now() + interval, repeating: interval)
         timer.setEventHandler { [weak self] in self?.tick() }
@@ -42,8 +46,10 @@ final class PressureMonitor: @unchecked Sendable {
     }
 
     private func tick() {
+        let reading = metrics.sample()
+        onSample?(reading)
         let signals = lock.withLock {
-            PressureEvaluator.evaluate(metrics.sample(), thresholds: thresholds, state: &state)
+            PressureEvaluator.evaluate(reading, thresholds: thresholds, state: &state)
         }
         for signal in signals {
             notify(Self.notification(for: signal))

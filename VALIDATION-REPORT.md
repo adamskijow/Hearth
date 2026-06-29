@@ -221,6 +221,52 @@ runner.log.3   3941 bytes
 
 The rotation decision and rename plan are unit tested (`LogRotationTests`).
 
+## LM Studio and mlx_lm (validated against live servers)
+
+Both were later run against real servers, not just captured payloads.
+
+### mlx_lm (managed, validated)
+
+`pip install mlx-lm`, then Hearth in managed mode (`mlxBinaryPath` pointed at the
+installed `mlx_lm.server`):
+
+```
+final /status: {"models":["mlx-community/Qwen2.5-0.5B-Instruct-4bit"],"phase":"healthy","restartCount":0,"runnerResidentBytes":100319232,...}
+SIGKILL the mlx server -> phase healthy, restarts 1   (Hearth detected and restarted it)
+clean stop -> no mlx_lm.server strays
+```
+
+Managed mlx_lm works: cold start to Healthy, resident model parsed from
+`/v1/models`, restart on external kill, clean teardown. One caveat: with an empty
+HuggingFace cache (no MLX model ever downloaded), `mlx_lm.server`'s `/v1/models`
+returns 200 then throws `CacheNotFound`, so readiness never passes. Any real mlx
+user has a model, so the cache exists; the empty-cache state is a non-issue in
+practice but is documented.
+
+### LM Studio (attached validated; managed does not work)
+
+Attached mode, against an externally started `lms server start`:
+
+```
+attached /status: {"phase":"healthy","restartCount":0,"models":[],...}
+Hearth spawned no server of its own (attached mode)
+```
+
+Attached works: Hearth reaches Healthy watching the external server (`/v1/models`
+and `/api/v0/models` both 200) and does not spawn or kill it.
+
+Managed mode does NOT work, and this is now flagged by `hearth doctor` and the
+menu. `lms server start` is a client command that tells LM Studio's background
+process to serve and then exits immediately, so Hearth's spawned child dies at
+once and the liveness check restarts it in a loop while the server is actually up:
+
+```
+Hearth managed /status: phase down, restarts 3
+the server itself:      GET /v1/models -> 200   (up the whole time)
+```
+
+There is no foreground flag for `lms server start`, so LM Studio is attached only.
+
 ## Still UNVERIFIED
 
 Honest gaps, with the steps to close each.
@@ -229,16 +275,6 @@ Honest gaps, with the steps to close each.
   - To verify: on a smaller-memory Mac, run a model far larger than RAM, or set
     a very large context, capture the runner stderr at the crash, and confirm
     `classifyExit` returns `.outOfMemory`. Add the captured lines as a fixture.
-- LM Studio runner. Not installed on this machine, so not validated.
-  - To verify: install LM Studio and its `lms` CLI, set `runner` to `lmstudio`
-    and `mode` to `attached`, point `host`/`port` at a running LM Studio server,
-    and run the equivalent of `validate-real.sh` (status, kill of the external
-    server, attached non-respawn). Capture `/v1/models` and `/api/v0/models`.
-- mlx_lm runner. The `mlx_lm.server` Python package is not installed (Homebrew's
-  ollama pulled the `mlx` C library as a dependency, which is unrelated).
-  - To verify: `pip install mlx-lm`, set `runner` to `mlx` and `mlxBinaryPath`
-    to the installed `mlx_lm.server`, and run the same lifecycle checks. Capture
-    `/v1/models`.
 
 ## How to reproduce
 

@@ -56,8 +56,14 @@ machine nobody is sitting at.
     location). If yours is elsewhere, for example `/usr/local/bin/ollama`, set
     `ollamaBinaryPath`.
   - LM Studio: set `runner` to `lmstudio` and `lmStudioBinaryPath` to your `lms`
-    CLI. LM Studio is best run in attached mode (below).
+    CLI, and use **attached** mode. Managed mode does not work, because
+    `lms server start` exits immediately (the server runs in LM Studio's own
+    background process), so a managed runner would thrash; `hearth doctor` and the
+    menu flag this. Start LM Studio's server yourself and let Hearth watch it.
   - mlx_lm: set `runner` to `mlx` and `mlxBinaryPath` to your `mlx_lm.server`.
+    Managed mode is validated. Note that `mlx_lm.server` needs at least one MLX
+    model in your HuggingFace cache (its `/v1/models` errors on an empty cache),
+    which any mlx user already has.
 - No third party Swift dependencies. Hearth builds against Apple system
   frameworks only (Foundation, AppKit, IOKit, Network, ServiceManagement, and
   UserNotifications), which keeps the dependency surface, and the licensing

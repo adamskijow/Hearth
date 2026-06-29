@@ -44,6 +44,12 @@ public enum ConfigDiagnostics {
         if mode != "managed" && mode != "attached" {
             issues.append(.init(.error, "Unknown mode \"\(config.mode)\"; expected managed or attached."))
         }
+        // LM Studio's `lms server start` exits immediately (the server runs in LM
+        // Studio's own background process), so a managed runner thrashes. Use
+        // attached mode and start the LM Studio server yourself.
+        if ["lmstudio", "lm-studio", "lm_studio"].contains(config.runner.lowercased()), mode == "managed" {
+            issues.append(.init(.warning, "LM Studio works only in attached mode; `lms server start` exits at once, so managed mode thrashes. Set mode to attached and start LM Studio's server yourself."))
+        }
 
         if config.controlEnabled {
             if (config.controlToken ?? "").isEmpty {

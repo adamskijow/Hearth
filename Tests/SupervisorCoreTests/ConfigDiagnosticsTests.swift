@@ -35,8 +35,9 @@ struct ConfigDiagnosticsTests {
     @Test func unknownRunnerAndModeAreErrors() {
         #expect(errors(HearthConfig(runner: "vllm")).contains { $0.message.contains("Unknown runner") })
         #expect(errors(HearthConfig(mode: "supervised")).contains { $0.message.contains("Unknown mode") })
-        // The accepted spellings pass.
-        #expect(messages(HearthConfig(runner: "lm-studio")).isEmpty)
+        // The accepted spellings are recognized (no unknown-runner error). LM
+        // Studio uses attached mode here to avoid the managed-mode warning.
+        #expect(messages(HearthConfig(runner: "lm-studio", mode: "attached")).isEmpty)
         #expect(messages(HearthConfig(runner: "mlx_lm")).isEmpty)
     }
 
@@ -57,6 +58,14 @@ struct ConfigDiagnosticsTests {
         // No token, colliding port, but control is off: not flagged.
         let c = HearthConfig(controlEnabled: false, controlToken: nil)
         #expect(errors(c).isEmpty)
+    }
+
+    @Test func lmStudioManagedWarnsToUseAttached() {
+        let managed = ConfigDiagnostics.check(HearthConfig(runner: "lmstudio", mode: "managed"))
+        #expect(managed.contains { $0.severity == .warning && $0.message.contains("attached mode") })
+        // Attached LM Studio, and managed Ollama, are fine.
+        #expect(!ConfigDiagnostics.check(HearthConfig(runner: "lmstudio", mode: "attached")).contains { $0.message.contains("attached mode") })
+        #expect(!ConfigDiagnostics.check(HearthConfig(runner: "ollama", mode: "managed")).contains { $0.message.contains("attached mode") })
     }
 
     @Test func rebootOnWedgeWarnsAboutTheRootRequirement() {

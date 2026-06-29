@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var latestState = SupervisorState()
     private var configNote: String?
     private var configProblem = false
+    private var configDiagnostics: [Diagnostic] = []
     private var binaryMissingPath: String?
     private var suggestedBinaryPath: String?
     private var signalSources: [DispatchSourceSignal] = []
@@ -103,6 +104,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         config = loaded.config
         configNote = loaded.note
         configProblem = loaded.isProblem
+        configDiagnostics = ConfigDiagnostics.check(loaded.config)
         binaryMissingPath = nil
         suggestedBinaryPath = nil
         if config.isManaged, !FileManager.default.isExecutableFile(atPath: config.selectedBinaryPath) {
@@ -204,6 +206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let button = statusItem.button else { return }
         let phase = latestState.phase
         let needsAttention = configProblem || binaryMissingPath != nil
+            || configDiagnostics.contains { $0.severity == .error }
         let symbol = needsAttention ? "exclamationmark.triangle.fill" : MenuFormat.symbolName(for: phase)
         let label = "Hearth: \(phase.rawValue)"
         button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
@@ -233,6 +236,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if configProblem, let note = configNote {
             menu.addItem(infoRow(headlineAttr("\u{26A0} Config problem", color: .systemYellow)))
             menu.addItem(infoRow(detailAttr("   \(note)")))
+            menu.addItem(.separator())
+        }
+        if !configDiagnostics.isEmpty {
+            let errorCount = configDiagnostics.filter { $0.severity == .error }.count
+            let color: NSColor = errorCount > 0 ? .systemRed : .systemYellow
+            let label = configDiagnostics.count == 1 ? "1 config issue" : "\(configDiagnostics.count) config issues"
+            menu.addItem(infoRow(headlineAttr("\u{26A0} \(label)", color: color)))
+            for diagnostic in configDiagnostics {
+                menu.addItem(infoRow(detailAttr("   \(diagnostic.message)")))
+            }
             menu.addItem(.separator())
         }
 

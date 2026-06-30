@@ -29,8 +29,22 @@ default:
         || ProcessInfo.processInfo.environment["HEARTH_HEADLESS"] == "1"
 
     if headless {
+        // Wait as a hot standby if another Hearth already supervises this config,
+        // and take over only if it exits, rather than fighting it or respawn-looping
+        // under launchd KeepAlive.
+        SingleInstance.acquire(wait: true, onWait: {
+            FileHandle.standardError.write(Data(
+                "Hearth: another instance is supervising this config; standing by to take over if it exits.\n".utf8))
+        })
         HeadlessRunner(config: ConfigStore.load().config).run()
     } else {
+        // The menubar app must not hang waiting; if another Hearth already
+        // supervises, bow out rather than starting a second instance that fights it.
+        guard SingleInstance.acquire(wait: false) else {
+            FileHandle.standardError.write(Data(
+                "Hearth is already running; this menubar instance will exit.\n".utf8))
+            exit(0)
+        }
         let application = NSApplication.shared
         let delegate = AppDelegate()
         application.delegate = delegate

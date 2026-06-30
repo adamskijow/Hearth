@@ -79,6 +79,21 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def do_POST(self):
+        # Inference endpoints. The "inference wedge" (FAKE_INFERENCE_WEDGE set, or a
+        # full wedge) hangs here while /api/version keeps answering above, the exact
+        # case a shallow readiness probe misses: the HTTP server is fine, but the
+        # model runner is deadlocked.
+        if wedged or os.environ.get("FAKE_INFERENCE_WEDGE"):
+            time.sleep(600)
+            return
+        body = json.dumps({"model": "fake-model:latest", "response": "ok", "done": True}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
 
 # Threaded so a wedged (hanging) request never blocks the accept loop: the process
 # keeps accepting connections, it just never answers.

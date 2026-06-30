@@ -7,8 +7,8 @@
 #   brew install --cask adamskijow/tap/hearth
 # (after `brew tap adamskijow/tap`), or point brew straight at this file.
 cask "hearth" do
-  version "0.5.0"
-  sha256 "2b5c919e44673365862de1b7ef6e7854a4397ede9aa1b3be2ec7d7a6794a40d1"
+  version "0.6.0"
+  sha256 "3eb93bfb68394e058e68fea116da7e441c5f12c5e95bb3c43fb6e05edb8e8716"
 
   url "https://github.com/adamskijow/Hearth/releases/download/v#{version}/Hearth-#{version}.dmg"
   name "Hearth"

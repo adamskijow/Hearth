@@ -21,7 +21,6 @@ final class PreferencesController: NSObject, NSWindowDelegate {
 
     func show(config: HearthConfig) {
         model.config = config
-        model.runnerEnvText = RunnerEnvText.format(config.runnerEnv)
         if window == nil {
             let view = PreferencesView(
                 model: model,
@@ -54,20 +53,14 @@ final class PreferencesController: NSObject, NSWindowDelegate {
 final class PreferencesModel: ObservableObject {
     @Published var config: HearthConfig
     @Published var status: String = ""
-    /// The runner environment as editable KEY=VALUE text, kept separate from the
-    /// config so typing (a blank line, a half-written entry) is not reformatted
-    /// out from under the cursor. Parsed back into the config on Save.
-    @Published var runnerEnvText: String
-    init(_ config: HearthConfig) {
-        self.config = config
-        self.runnerEnvText = RunnerEnvText.format(config.runnerEnv)
-    }
+    init(_ config: HearthConfig) { self.config = config }
 }
 
 struct PreferencesView: View {
     @ObservedObject var model: PreferencesModel
     let onSave: (HearthConfig) -> Void
     let onClose: () -> Void
+    @State private var showingEnvEditor = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -85,16 +78,25 @@ struct PreferencesView: View {
                 Text(model.status).foregroundStyle(.secondary).font(.callout)
                 Spacer()
                 Button("Close", action: onClose)
-                Button("Save") {
-                    model.config.runnerEnv = RunnerEnvText.parse(model.runnerEnvText)
-                    onSave(model.config)
-                    model.status = "Saved and reloaded."
-                }
-                .keyboardShortcut(.defaultAction)
+                Button("Save") { onSave(model.config); model.status = "Saved and reloaded." }
+                    .keyboardShortcut(.defaultAction)
             }
             .padding(12)
         }
         .frame(minWidth: 460, minHeight: 560)
+        .sheet(isPresented: $showingEnvEditor) {
+            EnvEditorView(
+                env: model.config.runnerEnv,
+                onDone: { model.config.runnerEnv = $0; showingEnvEditor = false },
+                onCancel: { showingEnvEditor = false }
+            )
+        }
+    }
+
+    /// A short summary of the configured runner environment for the Preferences row.
+    private var envSummary: String {
+        let count = model.config.runnerEnv.count
+        return count == 0 ? "None" : "\(count) variable\(count == 1 ? "" : "s")"
     }
 
     // MARK: Sections
@@ -129,10 +131,13 @@ struct PreferencesView: View {
                 .help("Address the runner serves on. 127.0.0.1 keeps it on this machine.")
             TextField("Port", value: $model.config.port, format: .number.grouping(.never))
                 .help("Port the runner serves on. Ollama's default is 11434.")
-            TextField("Environment (KEY=VALUE per line)", text: $model.runnerEnvText, axis: .vertical)
-                .lineLimit(2...6)
-                .font(.system(.callout, design: .monospaced))
-                .help("Extra environment variables for a managed runner, one KEY=VALUE per line, e.g. OLLAMA_LOAD_TIMEOUT=10m. Hearth sets OLLAMA_HOST itself from the host and port.")
+            HStack {
+                Text("Environment")
+                Spacer()
+                Text(envSummary).foregroundStyle(.secondary)
+                Button("Set Env\u{2026}") { showingEnvEditor = true }
+            }
+            .help("Extra environment variables set on a managed runner at launch, for example OLLAMA_LOAD_TIMEOUT. Click Set Env to add or remove variables.")
         }
     }
 

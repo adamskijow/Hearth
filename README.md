@@ -21,8 +21,7 @@ replacement for Ollama or LM Studio; it supervises the runner you already run. T
 runner is an opaque child process that Hearth owns; it reads the runner's API and
 logs only to judge whether it is healthy.
 
-<details>
-<summary><b>Contents</b></summary>
+## Contents
 
 **Start here** &nbsp; [Quickstart](#quickstart) · [Why this exists](#why-this-exists) · [Hearth vs launchd / brew services](#hearth-vs-launchd-keepalive-vs-brew-services) · [Requirements](#requirements) · [Install and build](#install-and-build)
 
@@ -31,8 +30,6 @@ logs only to judge whether it is healthy.
 **Run it headless** &nbsp; [Running headless](#running-headless) · [Apps that depend on a local runner](#apps-that-depend-on-a-local-runner) · [Recovering a wedge a restart cannot](#recovering-a-wedge-a-restart-cannot) · [Exposing the runner](#exposing-the-runner)
 
 **Project** &nbsp; [Architecture](#architecture) · [Known limitations](#known-limitations) · [Security note](#security-note) · [Roadmap](#roadmap) · [Contributing](#contributing) · [Development](docs/development.md) · [License](#license)
-
-</details>
 
 ## Quickstart
 

@@ -225,12 +225,17 @@ The keys most people touch:
   Hearth launches it (`managed`) or only watches one you started (`attached`).
 - `ollamaBinaryPath` (or `lmStudioBinaryPath` / `mlxBinaryPath`): where the runner
   binary is, if it is not at the default.
-- `host` and `port`: the address the runner serves on (default `127.0.0.1:11434`).
+- `host` and `port`: the address the runner serves on (default `127.0.0.1:11434`;
+  set `host` to `0.0.0.0` to reach it from another machine on your LAN, see
+  [Troubleshooting](#troubleshooting)).
 - `ntfyTopic`: a long, unguessable ntfy topic for phone alerts.
 - `controlEnabled` and `controlToken`: turn on the HTTP control endpoint and set
   the bearer token every request must carry.
 - `maintenanceRestartHours`: cycle a healthy runner this often (for example `24`)
   to clear memory creep. Off by default.
+- `runnerEnv`: extra environment variables for a managed runner (for example
+  `OLLAMA_LOAD_TIMEOUT` or `OLLAMA_KEEP_ALIVE`), set from the **Set Env** button in
+  Preferences or as a config map. Hearth sets `OLLAMA_HOST` itself from `host`/`port`.
 
 Everything else has a sensible default: the probe and backoff timing, the
 crash-loop brake, the pressure-alert thresholds, log rotation, and the reboot
@@ -593,10 +598,14 @@ look.
 
 ## Exposing the runner
 
-Hearth keeps the runner alive but does not put it on the network. If you want to
-reach the runner's API from another machine, do not set the runner's `host` to
-`0.0.0.0` and expose it raw. Keep it on `127.0.0.1` and put an authenticating
-reverse proxy in front, bound to a private (Tailscale) address. Proxying
+Hearth keeps the runner alive but is conservative about putting it on the network.
+For another machine on a network you trust (a home LAN behind a firewall), setting
+`host` to `0.0.0.0` is the simple path: `hearth doctor` reports the URL to use and
+the firewall caveat (see [Troubleshooting](#troubleshooting)). What you should not
+do is set `host` to `0.0.0.0` on an untrusted network or expose the runner to the
+internet raw, since it has no authentication of its own. For that, keep it on
+`127.0.0.1` and put an authenticating reverse proxy in front, bound to a private
+(Tailscale) address. Proxying
 inference traffic is a job for a battle tested proxy, not something Hearth should
 reimplement. The [reverse-proxy guide](docs/reverse-proxy.md) has Caddy and nginx
 examples for the runner and the control endpoint, plus the unauthenticated

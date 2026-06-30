@@ -21,6 +21,12 @@ case "metrics":
     StatusCLI.printMetrics()  // exits
 case "doctor":
     StatusCLI.printDoctor()  // exits
+case "wait-ready":
+    StatusCLI.waitReady(Array(arguments.dropFirst()))  // exits
+case "install-agent":
+    AgentInstaller.install()  // exits
+case "uninstall-agent":
+    AgentInstaller.uninstall()  // exits
 case "--help", "-h", "help":
     StatusCLI.printUsage()
     exit(0)

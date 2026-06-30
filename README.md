@@ -378,6 +378,9 @@ hearth logs -f             # follow the runner log
 hearth events              # Hearth's own event history (down, restart, recovered)
 hearth metrics             # memory and thermal history over the retained window
 hearth doctor              # check the config and environment for problems
+hearth wait-ready [-t S]   # block until the runner answers, then exit 0 (1 on timeout)
+hearth install-agent       # install a login agent that keeps Hearth running (no sudo)
+hearth uninstall-agent     # remove that login agent
 ```
 
 `hearth status` reads the config (at `HEARTH_CONFIG` or the standard location)
@@ -439,9 +442,33 @@ same.
 hearth --headless          # or set HEARTH_HEADLESS=1
 ```
 
-To run it before anyone logs in, install it as a root LaunchDaemon. The files are
-in `deploy/` and the installer is `scripts/install-daemon.sh`. It modifies your
-system (writes to `/usr/local/bin`, `/etc/hearth`, and
+### Keep it running at login (one command)
+
+The easy way to run Hearth headless and keep it alive is a per-user login agent,
+installed in one step (no sudo):
+
+```
+hearth install-agent
+```
+
+This writes `~/Library/LaunchAgents/com.hearth.headless.plist` pointing at the
+Hearth binary you ran it from and your config, then loads it with `launchctl`.
+Hearth now starts headless at login and is kept alive. Remove it any time with
+`hearth uninstall-agent`.
+
+It is safe to run even if the menubar app also launches at login: the
+single-instance guard means whichever starts first supervises and the other stands
+by, so they never fight. This is the recommended setup for an app or agent that
+depends on a local runner staying up; see
+[Integrating with Hearth](docs/integrating.md), which also covers
+`hearth wait-ready` for gating an app's startup on the runner being ready.
+
+### Before anyone logs in (root daemon)
+
+A login agent only runs once you are logged in. To run Hearth before any login (a
+Mac in a closet that reboots unattended), install it as a root LaunchDaemon. The
+files are in `deploy/` and the installer is `scripts/install-daemon.sh`. It
+modifies your system (writes to `/usr/local/bin`, `/etc/hearth`, and
 `/Library/LaunchDaemons`), so read it first and run it with sudo:
 
 ```
@@ -456,6 +483,22 @@ as root, so its config lives at `/etc/hearth/config.json` (pointed to by the
 plist's `HEARTH_CONFIG`) and its logs at `/var/log/hearth.out.log` and
 `/var/log/hearth.err.log`. After editing the config, apply it without restarting
 by sending SIGHUP: `sudo launchctl kill HUP system/com.hearth.daemon`.
+
+## Apps that depend on a local runner
+
+If you are building an app or agent that needs a local runner to stay up, you do
+not integrate with Hearth's API; you depend on the runner and let Hearth keep it
+alive. One Hearth supervises the one shared runner (the single-instance guard
+makes that safe even if several apps each try to start it), and your app talks to
+the runner directly. The two commands that make this turnkey:
+
+```
+hearth install-agent       # one shared Hearth, kept alive at login
+hearth wait-ready && my-app # start once the runner actually answers
+```
+
+The full contract (what to do, what not to do, graceful degradation, the Hob
+example) is in [Integrating with Hearth](docs/integrating.md).
 
 ## Recovering a wedge a restart cannot
 

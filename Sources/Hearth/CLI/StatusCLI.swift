@@ -21,10 +21,15 @@ enum StatusCLI {
           Hearth events [-n N] [-f] Show Hearth's own event history (down, restart, recovered).
           Hearth metrics            Show memory and thermal history over the retained window.
           Hearth doctor             Check the config and environment for problems.
+          Hearth wait-ready [-t S]  Block until the runner answers (exit 0), or time out (exit 1).
+          Hearth install-agent      Install a login agent that keeps Hearth running (no sudo).
+          Hearth uninstall-agent    Remove that login agent.
           Hearth --help             Show this help.
 
         Status reads the config at HEARTH_CONFIG or the standard location and uses
         the control endpoint when it is enabled; otherwise it does a reduced probe.
+        An app that depends on a local runner can gate its startup on `wait-ready`
+        and ensure supervision with `install-agent`; see docs/integrating.md.
         """)
     }
 
@@ -90,6 +95,38 @@ enum StatusCLI {
         print("")
         print("Enable the control endpoint (Preferences, or controlEnabled in the")
         print("config) for full status: phase, restarts, metrics, and resident models.")
+    }
+
+    // MARK: - wait-ready
+
+    /// Block until the runner answers its readiness endpoint, then exit 0; exit 1
+    /// on timeout. Lets a dependent app gate its startup on the runner being up
+    /// (`hearth wait-ready && start-my-app`) without reinventing a retry loop. It
+    /// probes the runner directly, so it does not require Hearth itself to be up,
+    /// only the runner Hearth keeps alive.
+    static func waitReady(_ args: [String]) -> Never {
+        var timeout = 120.0
+        var i = 0
+        while i < args.count {
+            if args[i] == "-t" || args[i] == "--timeout", i + 1 < args.count, let value = Double(args[i + 1]) {
+                timeout = value
+                i += 1
+            }
+            i += 1
+        }
+
+        let config = ConfigStore.load().config
+        let url = config.makeRunner().readinessEndpoint
+        let deadline = Date().addingTimeInterval(timeout)
+        repeat {
+            let (_, response, _) = syncGET(url, bearer: nil, timeout: 3)
+            if (response as? HTTPURLResponse)?.statusCode == 200 { exit(0) }
+            Thread.sleep(forTimeInterval: 1)
+        } while Date() < deadline
+
+        FileHandle.standardError.write(Data(
+            "Hearth: runner at \(config.host):\(config.port) was not ready within \(Int(timeout))s.\n".utf8))
+        exit(1)
     }
 
     // MARK: - doctor

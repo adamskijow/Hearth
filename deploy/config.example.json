@@ -14,7 +14,7 @@
   "crashLoopWindowSeconds": 60,
   "failingProbeIntervalSeconds": 30,
   "localNotifications": false,
-  "ntfyTopic": "CHANGE-ME-to-a-long-random-string",
+  "ntfyTopic": null,
   "ntfyServer": "https://ntfy.sh",
   "controlEnabled": true,
   "controlHost": "127.0.0.1",

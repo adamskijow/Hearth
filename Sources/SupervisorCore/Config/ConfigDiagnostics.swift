@@ -61,8 +61,11 @@ public enum ConfigDiagnostics {
         }
 
         if config.controlEnabled {
-            if (config.controlToken ?? "").isEmpty {
+            let token = config.controlToken ?? ""
+            if token.isEmpty {
                 issues.append(.init(.error, "Control endpoint is enabled but has no token; it will refuse to start."))
+            } else if token.localizedCaseInsensitiveContains("CHANGE-ME") || token.count < 16 {
+                issues.append(.init(.warning, "Control token is the placeholder or shorter than 16 characters; the start/stop/restart surface is only as strong as this token. Use a long, unguessable secret (Preferences has a Generate button)."))
             }
             if !isValidPort(config.controlPort) {
                 issues.append(.init(.error, "Control port \(config.controlPort) is out of range (1-65535)."))
@@ -70,6 +73,16 @@ public enum ConfigDiagnostics {
             if config.controlPort == config.port {
                 issues.append(.init(.error, "Control port and runner port are both \(config.port); they must differ."))
             }
+            // 0.0.0.0 exposes the control surface on every interface, including any
+            // public one; a specific private/Tailscale address is the intended bind.
+            let controlHost = config.controlHost.trimmingCharacters(in: .whitespaces)
+            if controlHost == "0.0.0.0" || controlHost == "::" {
+                issues.append(.init(.warning, "Control endpoint is bound to \(controlHost) (all interfaces); its start/stop/restart surface is reachable from any network this Mac joins. Bind controlHost to 127.0.0.1 or a specific private (Tailscale) address."))
+            }
+        }
+
+        if let topic = config.ntfyTopic, topic.localizedCaseInsensitiveContains("CHANGE-ME") {
+            issues.append(.init(.warning, "ntfyTopic is still the placeholder; status would post to a guessable public topic. Set a long, unguessable topic, or null to disable ntfy."))
         }
 
         if config.probeIntervalSeconds <= 0 {

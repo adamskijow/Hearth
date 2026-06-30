@@ -33,6 +33,23 @@ struct ConfigDiagnosticsTests {
         #expect(messages(HearthConfig(runnerEnv: ["OLLAMA_LOAD_TIMEOUT": "10m"])).isEmpty)
     }
 
+    @Test func exposedControlAndWeakSecretsAreWarned() {
+        let strong = "a-long-enough-unguessable-secret"
+        // 0.0.0.0 control bind exposes the start/stop/restart surface.
+        #expect(messages(HearthConfig(controlEnabled: true, controlHost: "0.0.0.0", controlToken: strong))
+                .contains { $0.contains("all interfaces") })
+        #expect(!messages(HearthConfig(controlEnabled: true, controlHost: "127.0.0.1", controlToken: strong))
+                .contains { $0.contains("all interfaces") })
+        // Placeholder or short control token.
+        #expect(messages(HearthConfig(controlEnabled: true, controlToken: "CHANGE-ME-to-a-long-random-secret"))
+                .contains { $0.contains("placeholder or shorter") })
+        #expect(messages(HearthConfig(controlEnabled: true, controlToken: "short"))
+                .contains { $0.contains("placeholder or shorter") })
+        // Placeholder ntfy topic would post to a guessable public topic.
+        #expect(messages(HearthConfig(ntfyTopic: "CHANGE-ME-to-a-long-random-string"))
+                .contains { $0.contains("ntfyTopic is still the placeholder") })
+    }
+
     @Test func aMalformedHostIsAnError() {
         // A space (or other URL-invalid character) would have crashed the runner's
         // force-unwrapped endpoint; it is now caught here.

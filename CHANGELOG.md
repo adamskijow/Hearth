@@ -5,6 +5,22 @@ All notable changes to Hearth are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- The deep readiness probe no longer sends `keep_alive`, so the probed model's
+  residency follows the runner's own `OLLAMA_KEEP_ALIVE` policy rather than a five
+  minutes the probe imposed.
+
+### Fixed
+- The root-daemon installer writes `/etc/hearth/config.json` as mode `600` (it holds
+  the control token) and re-tightens an already-existing one.
+- `hearth doctor` now warns when the control endpoint is bound to `0.0.0.0`, when the
+  control token is the placeholder or under 16 characters, and when `ntfyTopic` is
+  still the placeholder. The example config ships `ntfyTopic: null`, so a verbatim
+  copy cannot post to a public relay.
+- The integrating guide's example link pointed Hob at Hearth's own repo.
+
 ## [0.6.0] - 2026-06-30
 
 A deeper health check: an optional probe that runs a real one-token generation, so a
@@ -18,8 +34,10 @@ hang) is caught and restarted, not just a frozen process.
   Set `probeModel` and Hearth periodically runs a one-token generation against it,
   so an inference-level wedge is caught and restarted, while a working runner still
   passes. Off by default (it names a model and does GPU work); tuned with
-  `deepProbeIntervalSeconds` and `deepProbeTimeoutSeconds`. Validated end to end
-  against a runner that answers `/api/version` but hangs `/api/generate`.
+  `deepProbeIntervalSeconds` and `deepProbeTimeoutSeconds`. Covered by a unit test
+  through the engine and a live run against a stand-in runner that answers
+  `/api/version` but hangs `/api/generate`; not yet validated against a real wedged
+  Ollama.
 
 ## [0.5.0] - 2026-06-30
 

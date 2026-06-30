@@ -73,7 +73,7 @@ the runner alive underneath you.
 
 ## Example: Hob
 
-[Hob](https://github.com/adamskijow/Hearth) (a morning-digest agent) depends on
+[Hob](https://github.com/adamskijow/Hob) (a morning-digest agent) depends on
 Ollama. Its integration is exactly the model above: install Hearth, run
 `hearth install-agent` so Ollama stays up, and Hob talks to Ollama on localhost.
 If Ollama wedges, Hearth restarts it; Hob degrades gracefully during the gap and

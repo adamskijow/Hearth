@@ -29,10 +29,13 @@ install -m 755 "$BIN" /usr/local/bin/hearth
 echo "Preparing /etc/hearth ..."
 install -d -m 755 /etc/hearth
 if [ ! -f /etc/hearth/config.json ]; then
-  install -m 644 deploy/config.example.json /etc/hearth/config.json
+  install -m 600 deploy/config.example.json /etc/hearth/config.json
   echo "Wrote /etc/hearth/config.json from the example."
   echo "EDIT IT (set your tokens and runner path) before relying on it."
 fi
+# The config holds the control token (and ntfy topic), so keep it root-only even if
+# it already existed from an earlier install.
+chmod 600 /etc/hearth/config.json
 
 echo "Installing the LaunchDaemon ..."
 install -m 644 deploy/com.hearth.daemon.plist /Library/LaunchDaemons/com.hearth.daemon.plist

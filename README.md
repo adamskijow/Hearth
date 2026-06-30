@@ -21,6 +21,13 @@ replacement for Ollama or LM Studio; it supervises the runner you already run. T
 runner is an opaque child process that Hearth owns; it reads the runner's API and
 logs only to judge whether it is healthy.
 
+Why a Mac-specific tool, and not Docker? On Apple Silicon you run Ollama natively:
+[Docker on macOS has no GPU passthrough and runs CPU-only](https://github.com/ollama/ollama/blob/main/docs/faq.mdx#how-do-i-use-ollama-with-gpu-acceleration-in-docker),
+throwing away the Metal GPU and unified memory that are the whole reason to run
+locally. A native runner has none of the container world's health-probe and restart
+machinery, so the readiness-based recovery you would get from Kubernetes has to come
+from somewhere. Hearth is that layer.
+
 ## Contents
 
 **Start here** &nbsp; [Quickstart](#quickstart) · [Why this exists](#why-this-exists) · [Requirements](#requirements) · [Install and build](#install-and-build)

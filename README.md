@@ -84,7 +84,9 @@ the GPU stops responding and "the service needs to be rebooted"
 or Ollama silently reverts to CPU and spins for hours
 ([ollama#8594](https://github.com/ollama/ollama/issues/8594)). The process is up the
 whole time, so a **liveness** check ("is the PID there?") is satisfied and launchd
-does nothing.
+does nothing. The fixes people reach for are blind to it too (a `KeepAlive` plist,
+a cron restart on a timer) or homemade and brittle (a hand-rolled watchdog script),
+because there is no off-the-shelf Mac tool for this.
 
 Hearth probes **readiness** ("does the API actually answer in time?"), so it catches
 the wedge, not just the crash: launchd restarts the runner when it dies, Hearth also
@@ -344,7 +346,9 @@ uptime, restart count, last restart reason, and the system metrics (thermal
 state, memory used percent, runner resident bytes). `/metrics` returns the same
 data as a Prometheus text exposition (also behind the token), so you can scrape
 Hearth into Grafana or Uptime Kuma; and the unauthenticated `/healthz` returns
-`200` when Hearth is up, for an uptime monitor. The control endpoint is a control
+`200` when Hearth is up, for an uptime monitor. Ready-made Prometheus, Grafana, and
+Uptime Kuma recipes (including a dashboard) are in
+[deploy/monitoring.md](deploy/monitoring.md). The control endpoint is a control
 surface, not a public API: bind it to localhost or a private interface (a
 Tailscale address is ideal) and keep it behind a VPN. It refuses to start without
 a token, and rejects any request whose bearer token does not match.

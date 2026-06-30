@@ -27,9 +27,9 @@ logs only to judge whether it is healthy.
 
 **Use it** &nbsp; [Configure](#configure) · [How it works](#how-it-works) · [Keeping a 24/7 runner fresh](#keeping-a-247-runner-fresh) · [Remote control](#remote-control) · [Troubleshooting](#troubleshooting)
 
-**Run it headless** &nbsp; [Running headless](#running-headless) · [Apps that depend on a local runner](#apps-that-depend-on-a-local-runner) · [Recovering a wedge a restart cannot](#recovering-a-wedge-a-restart-cannot) · [Exposing the runner](#exposing-the-runner)
+**Run it headless** &nbsp; [Running headless](#running-headless) · [Recovering a wedge a restart cannot](#recovering-a-wedge-a-restart-cannot) · [Security and exposing the runner](#security-and-exposing-the-runner)
 
-**Project** &nbsp; [Architecture](#architecture) · [Known limitations](#known-limitations) · [Security note](#security-note) · [Roadmap](#roadmap) · [Contributing](#contributing) · [License](#license)
+**Project** &nbsp; [Architecture](#architecture) · [Known limitations](#known-limitations) · [Roadmap](#roadmap) · [Contributing](#contributing) · [License](#license)
 
 ## Documentation
 
@@ -481,10 +481,16 @@ Hearth now starts headless at login and is kept alive. Remove it any time with
 
 It is safe to run even if the menubar app also launches at login: the
 single-instance guard means whichever starts first supervises and the other stands
-by, so they never fight. This is the recommended setup for an app or agent that
-depends on a local runner staying up; see
-[Integrating with Hearth](docs/integrating.md), which also covers
-`hearth wait-ready` for gating an app's startup on the runner being ready.
+by, so they never fight. This is the recommended setup for an app that depends on a
+local runner staying up. Such an app does not integrate with Hearth's API; it
+depends on the runner directly and gates its own startup on the runner answering:
+
+```
+hearth wait-ready && my-app   # start once the runner actually answers
+```
+
+The full contract (what to do, what not, graceful degradation, the Hob example) is
+in [Integrating with Hearth](docs/integrating.md).
 
 ### Before anyone logs in (root daemon)
 
@@ -506,22 +512,6 @@ as root, so its config lives at `/etc/hearth/config.json` (pointed to by the
 plist's `HEARTH_CONFIG`) and its logs at `/var/log/hearth.out.log` and
 `/var/log/hearth.err.log`. After editing the config, apply it without restarting
 by sending SIGHUP: `sudo launchctl kill HUP system/com.hearth.daemon`.
-
-## Apps that depend on a local runner
-
-If you are building an app or agent that needs a local runner to stay up, you do
-not integrate with Hearth's API; you depend on the runner and let Hearth keep it
-alive. One Hearth supervises the one shared runner (the single-instance guard
-makes that safe even if several apps each try to start it), and your app talks to
-the runner directly. The two commands that make this turnkey:
-
-```
-hearth install-agent       # one shared Hearth, kept alive at login
-hearth wait-ready && my-app # start once the runner actually answers
-```
-
-The full contract (what to do, what not to do, graceful degradation, the Hob
-example) is in [Integrating with Hearth](docs/integrating.md).
 
 ## Recovering a wedge a restart cannot
 
@@ -565,21 +555,27 @@ A reboot cannot fix a hardware or thermal fault, so the give-up-and-notify path 
 the honest floor: if even a reboot does not restore the runner, a human needs to
 look.
 
-## Exposing the runner
+## Security and exposing the runner
 
-Hearth keeps the runner alive but is conservative about putting it on the network.
-For another machine on a network you trust (a home LAN behind a firewall), setting
-`host` to `0.0.0.0` is the simple path: `hearth doctor` reports the URL to use and
-the firewall caveat (see [Troubleshooting](#troubleshooting)). What you should not
-do is set `host` to `0.0.0.0` on an untrusted network or expose the runner to the
-internet raw, since it has no authentication of its own. For that, keep it on
-`127.0.0.1` and put an authenticating reverse proxy in front, bound to a private
-(Tailscale) address. Proxying
-inference traffic is a job for a battle tested proxy, not something Hearth should
-reimplement. The [reverse-proxy guide](docs/reverse-proxy.md) has Caddy and nginx
-examples for the runner and the control endpoint, plus the unauthenticated
-`/healthz` route for uptime monitors. Hearth's own control endpoint is separate
-and is only for supervision (status, start, stop, restart), never inference.
+Hearth runs unsandboxed, by necessity: supervising another process is exactly what
+the App Sandbox forbids, so it ships with the App Sandbox off and the Hardened
+Runtime on, as a Developer ID notarized build. It spawns and owns the runner child
+and reads that runner's local API to judge health. It sends only short status text
+to notifiers; no prompts, model data, or runner content ever leave the machine.
+
+It is also conservative about putting the runner on the network. By default the
+runner listens on `127.0.0.1`, reachable only from this Mac. For another machine on
+a network you trust (a home LAN behind a firewall), setting `host` to `0.0.0.0` is
+the simple path: `hearth doctor` reports the URL to use and the firewall caveat (see
+[Troubleshooting](#troubleshooting)). What you should not do is expose it raw to an
+untrusted network or the internet, since the runner has no authentication of its
+own. For that, keep it on `127.0.0.1` and put an authenticating reverse proxy in
+front, bound to a private (Tailscale) address; proxying inference traffic is a job
+for a battle-tested proxy, not something Hearth should reimplement. The
+[reverse-proxy guide](docs/reverse-proxy.md) has Caddy and nginx examples, plus the
+unauthenticated `/healthz` route for uptime monitors. Hearth's own control endpoint
+is separate: off by default, a bearer token required when on, bound to a private
+interface, and only for supervision (status, start, stop, restart), never inference.
 
 ## Architecture
 
@@ -605,16 +601,12 @@ state.
 These are stated up front on purpose.
 
 - Restarting the runner clears a process-level wedge, not a driver- or GPU-level
-  one. Some hangs need a full reboot, not a process restart: people report that
-  "stopping and restarting ollama doesn't resolve the issue, only a full restart
-  works" ([ollama#8594](https://github.com/ollama/ollama/issues/8594)). Hearth
-  kills and respawns the runner's process group, which recovers the common cases
-  (a hung serve, a deadlocked model load, a wedged child); a GPU stuck at the
-  driver level is beyond what any process supervisor can fix. On Apple Silicon and
-  Metal a respawn clears more of these than on the discrete-GPU setups in those
-  reports, but it is not a cure-all. For a headless daemon, the opt-in reboot
-  escalation ("Recovering a wedge a restart cannot") can automate the reboot that
-  does clear it, with a loop guard and a give-up-and-notify floor.
+  one ([ollama#8594](https://github.com/ollama/ollama/issues/8594)); those need a
+  full reboot. A respawn clears more on Apple Silicon and Metal than on the
+  discrete-GPU setups in those reports, but it is not a cure-all. For a headless
+  box, the opt-in reboot escalation
+  ([Recovering a wedge a restart cannot](#recovering-a-wedge-a-restart-cannot))
+  automates the reboot that does, with a loop guard and a give-up-and-notify floor.
 - Validated against a real Ollama 0.30.11 (see
   [VALIDATION-REPORT.md](VALIDATION-REPORT.md)): cold start, external kill, the
   alive-but-wedged case via SIGSTOP, clean process group teardown with no
@@ -643,22 +635,6 @@ These are stated up front on purpose.
   Hearth watch it.
 - The control endpoint is unauthenticated beyond a shared bearer token and is
   meant to live behind a VPN, not on the open internet.
-
-## Security note
-
-Hearth runs unsandboxed, by necessity. Supervising another process is exactly
-what the App Sandbox forbids, so Hearth ships with the App Sandbox off and the
-Hardened Runtime on, distributed as a Developer ID notarized build. It spawns and
-owns a child process, the runner, and reads that runner's local API to judge
-health.
-
-Hearth never exposes the runner beyond what you configure. By default the runner
-listens on `127.0.0.1`, reachable only from the same machine. If you set `host`
-to `0.0.0.0` you are choosing to expose the runner on your network, and securing
-that (a firewall, a VPN such as Tailscale, or an authenticating reverse proxy) is
-up to you. The control endpoint is off by default; when on, it requires a bearer
-token and should be bound to a private interface. Hearth sends only short status
-text to notifiers; no prompts, model data, or runner content leave the machine.
 
 ## Roadmap
 

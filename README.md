@@ -29,7 +29,16 @@ logs only to judge whether it is healthy.
 
 **Run it headless** &nbsp; [Running headless](#running-headless) · [Apps that depend on a local runner](#apps-that-depend-on-a-local-runner) · [Recovering a wedge a restart cannot](#recovering-a-wedge-a-restart-cannot) · [Exposing the runner](#exposing-the-runner)
 
-**Project** &nbsp; [Architecture](#architecture) · [Known limitations](#known-limitations) · [Security note](#security-note) · [Roadmap](#roadmap) · [Contributing](#contributing) · [Development](docs/development.md) · [License](#license)
+**Project** &nbsp; [Architecture](#architecture) · [Known limitations](#known-limitations) · [Security note](#security-note) · [Roadmap](#roadmap) · [Contributing](#contributing) · [License](#license)
+
+## Documentation
+
+The README is the tour. Deeper detail lives in `docs/`:
+
+- **[Configuration reference](docs/configuration.md):** every config key, its default, and what it does.
+- **[Integrating with Hearth](docs/integrating.md):** for an app that wants to depend on a local runner being up.
+- **[Reverse proxy and TLS](docs/reverse-proxy.md):** reaching the runner or the control endpoint securely from off this machine.
+- **[Development](docs/development.md):** running the test suite and cutting a release.
 
 ## Quickstart
 

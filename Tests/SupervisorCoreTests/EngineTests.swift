@@ -60,6 +60,37 @@ struct EngineTests {
         #expect(state.healthySince != nil)
     }
 
+    @Test func restartsWhenTheRunnerBinaryIsUpgraded() async {
+        let h = makeHarness(policy: RestartPolicyConfig(startupGrace: 30, restartOnBinaryChange: true))
+        makeServing(h)
+        await h.engine.start()                       // spawn #1, fingerprint "v1"
+        _ = await h.engine.stepOnce()                // -> healthy
+        #expect(await h.engine.snapshot().phase == .healthy)
+        #expect(h.processes.spawnCount == 1)
+
+        // brew upgrade replaced the binary on disk.
+        h.processes.setExecutableFingerprint("v2")
+        _ = await h.engine.stepOnce()                // healthy + binary changed -> maintenance restart
+        #expect(h.processes.spawnCount == 2)         // respawned to adopt the new binary
+
+        // The respawn recorded "v2", so it does not loop on a now-steady binary.
+        _ = await h.engine.stepOnce()                // restarting -> healthy
+        _ = await h.engine.stepOnce()
+        #expect(h.processes.spawnCount == 2)
+    }
+
+    @Test func doesNotRestartOnBinaryChangeWhenDisabled() async {
+        let h = makeHarness()   // restartOnBinaryChange is off by default
+        makeServing(h)
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+        #expect(await h.engine.snapshot().phase == .healthy)
+
+        h.processes.setExecutableFingerprint("v2")
+        _ = await h.engine.stepOnce()
+        #expect(h.processes.spawnCount == 1)   // no restart when the feature is off
+    }
+
     @Test func externalKillIsDetectedRestartedAndRecoveryNotified() async throws {
         let h = makeHarness()
         makeServing(h)

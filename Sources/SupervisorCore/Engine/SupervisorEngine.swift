@@ -23,6 +23,8 @@ public actor SupervisorEngine {
 
     private var machine: SupervisorMachine
     private var currentHandle: ProcessHandleID?
+    /// The runner binary's fingerprint at the last spawn, to notice an upgrade.
+    private var spawnedBinaryFingerprint: String?
     private var currentModels: [ResidentModel] = []
     private var current: SupervisorState = SupervisorState()
     private var lastSpawnError: String?
@@ -116,11 +118,12 @@ public actor SupervisorEngine {
             if machine.phase == .stopped { return 0 }
             let output = machine.observe(report, now: now)
             await apply(output, models: report.models)
-            // Proactive maintenance restart: cycle a long-healthy managed runner to
-            // clear the memory creep and VRAM fragmentation that degrade a 24/7
-            // runner. Off unless configured.
+            // Proactive maintenance restart, both off unless configured: cycle a
+            // long-healthy managed runner to clear the memory creep and VRAM
+            // fragmentation that degrade a 24/7 runner, or adopt a runner binary
+            // that was upgraded on disk rather than serving the old one forever.
             if managed, machine.phase == .healthy,
-               policy.maintenanceRestartDue(healthySince: machine.healthySince, now: now) {
+               policy.maintenanceRestartDue(healthySince: machine.healthySince, now: now) || binaryWasUpgraded() {
                 let maintenance = machine.maintenanceRestart(now: now)
                 await apply(maintenance, models: nil)
                 return maintenance.nextWait
@@ -210,6 +213,16 @@ public actor SupervisorEngine {
         publishState()
     }
 
+    /// Whether the runner binary on disk differs from the one we spawned, when
+    /// opted in. Fingerprints that cannot be read (nil) never trigger a restart.
+    private func binaryWasUpgraded() -> Bool {
+        guard policy.restartOnBinaryChange,
+              let spawned = spawnedBinaryFingerprint,
+              let current = processes.executableFingerprint(at: runner.processSpec().executableURL)
+        else { return false }
+        return current != spawned
+    }
+
     private func spawnChild() {
         // Sweep the previous runner tree before starting a new one. A crash or an
         // external kill of the runner can orphan its grandchildren (an Ollama
@@ -221,6 +234,7 @@ public actor SupervisorEngine {
         }
         do {
             currentHandle = try processes.spawn(runner.processSpec())
+            spawnedBinaryFingerprint = processes.executableFingerprint(at: runner.processSpec().executableURL)
             lastSpawnError = nil
         } catch {
             // A failed spawn funnels into the normal failure path: the next probe

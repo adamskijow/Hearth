@@ -57,4 +57,9 @@ struct MaintenanceRestartTests {
         // A tiny value is floored to one hour so it cannot loop.
         #expect(HearthConfig(maintenanceRestartHours: 0.001).policy().maintenanceRestartInterval == 3600)
     }
+
+    @Test func restartOnBinaryChangeMapsFromConfig() {
+        #expect(!HearthConfig().policy().restartOnBinaryChange)                       // off by default
+        #expect(HearthConfig(restartOnBinaryChange: true).policy().restartOnBinaryChange)
+    }
 }

@@ -247,6 +247,16 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
         }
     }
 
+    /// Size, modification time, and inode of the executable on disk. `stat`
+    /// follows symlinks, so a Homebrew binary fingerprints its Cellar target,
+    /// whose inode changes when `brew upgrade` relinks it.
+    func executableFingerprint(at url: URL) -> String? {
+        var info = stat()
+        let result = url.path.withCString { stat($0, &info) }
+        guard result == 0 else { return nil }
+        return "\(info.st_size):\(info.st_mtimespec.tv_sec):\(info.st_mtimespec.tv_nsec):\(info.st_ino)"
+    }
+
     /// Resident size of the most recently spawned child, for the metrics readout.
     func latestResidentBytes() -> Int64? {
         let pid: pid_t? = lock.withLock { latestPID }

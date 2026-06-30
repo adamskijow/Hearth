@@ -32,6 +32,10 @@ public struct RestartPolicyConfig: Sendable, Equatable {
     /// Cycle a long-healthy runner this often to clear the memory creep and VRAM
     /// fragmentation that degrade a 24/7 runner. Zero disables it.
     public var maintenanceRestartInterval: TimeInterval
+    /// Restart the runner when its binary changes on disk (an upgrade), so a
+    /// supervised runner adopts the new version instead of serving the old one
+    /// forever. Off by default.
+    public var restartOnBinaryChange: Bool
 
     public init(probeInterval: TimeInterval = 5,
                 probeTimeout: TimeInterval = 2,
@@ -43,7 +47,8 @@ public struct RestartPolicyConfig: Sendable, Equatable {
                 crashLoopThreshold: Int = 5,
                 crashLoopWindow: TimeInterval = 60,
                 failingProbeInterval: TimeInterval = 30,
-                maintenanceRestartInterval: TimeInterval = 0) {
+                maintenanceRestartInterval: TimeInterval = 0,
+                restartOnBinaryChange: Bool = false) {
         self.probeInterval = probeInterval
         self.probeTimeout = probeTimeout
         self.startupGrace = startupGrace
@@ -55,6 +60,7 @@ public struct RestartPolicyConfig: Sendable, Equatable {
         self.crashLoopWindow = crashLoopWindow
         self.failingProbeInterval = failingProbeInterval
         self.maintenanceRestartInterval = maintenanceRestartInterval
+        self.restartOnBinaryChange = restartOnBinaryChange
     }
 
     /// Whether a periodic maintenance restart is due for a runner healthy since

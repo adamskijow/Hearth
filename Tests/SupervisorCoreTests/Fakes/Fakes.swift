@@ -91,6 +91,15 @@ final class FakeProcessController: ProcessControlling, @unchecked Sendable {
     func isAlive(_ id: ProcessHandleID) -> Bool {
         lock.withLock { statuses[id]?.isAlive ?? false }
     }
+
+    private var _fingerprint: String? = "v1"
+    /// Set the on-disk fingerprint the engine sees, to simulate a binary upgrade.
+    func setExecutableFingerprint(_ value: String?) {
+        lock.withLock { _fingerprint = value }
+    }
+    func executableFingerprint(at url: URL) -> String? {
+        lock.withLock { _fingerprint }
+    }
 }
 
 /// A scriptable HTTP client. Returns the outcome set for a URL, or a default.

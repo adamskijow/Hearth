@@ -79,4 +79,10 @@ public protocol ProcessControlling: Sendable {
     /// Ask the process to terminate. Best effort; liveness is confirmed later
     /// through `status`.
     func terminate(_ id: ProcessHandleID)
+
+    /// A cheap fingerprint of the executable on disk (size, modification time,
+    /// inode), so the engine can notice the binary was upgraded and adopt the new
+    /// version. nil if it cannot be read. Follows symlinks: a Homebrew binary is a
+    /// symlink into the Cellar, which retargets on upgrade.
+    func executableFingerprint(at url: URL) -> String?
 }

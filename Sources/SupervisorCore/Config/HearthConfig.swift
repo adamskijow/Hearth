@@ -32,6 +32,10 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     /// Cycle a long-healthy runner this often (in hours) to clear memory creep.
     /// Zero disables it; a common value for a 24/7 server is 24.
     public var maintenanceRestartHours: Double
+    /// Restart the runner when its binary changes on disk (an upgrade), so a
+    /// managed runner adopts the new version instead of serving the old one. Off
+    /// by default.
+    public var restartOnBinaryChange: Bool
 
     // Notifications
     public var ntfyTopic: String?
@@ -78,6 +82,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 crashLoopWindowSeconds: Double = 60,
                 failingProbeIntervalSeconds: Double = 30,
                 maintenanceRestartHours: Double = 0,
+                restartOnBinaryChange: Bool = false,
                 ntfyTopic: String? = nil,
                 ntfyServer: String = "https://ntfy.sh",
                 localNotifications: Bool = true,
@@ -111,6 +116,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.crashLoopWindowSeconds = crashLoopWindowSeconds
         self.failingProbeIntervalSeconds = failingProbeIntervalSeconds
         self.maintenanceRestartHours = maintenanceRestartHours
+        self.restartOnBinaryChange = restartOnBinaryChange
         self.ntfyTopic = ntfyTopic
         self.ntfyServer = ntfyServer
         self.localNotifications = localNotifications
@@ -165,6 +171,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         crashLoopWindowSeconds = try value(.crashLoopWindowSeconds, defaults.crashLoopWindowSeconds)
         failingProbeIntervalSeconds = try value(.failingProbeIntervalSeconds, defaults.failingProbeIntervalSeconds)
         maintenanceRestartHours = try value(.maintenanceRestartHours, defaults.maintenanceRestartHours)
+        restartOnBinaryChange = try value(.restartOnBinaryChange, defaults.restartOnBinaryChange)
         ntfyTopic = try c.decodeIfPresent(String.self, forKey: .ntfyTopic)
         ntfyServer = try value(.ntfyServer, defaults.ntfyServer)
         localNotifications = try value(.localNotifications, defaults.localNotifications)
@@ -209,7 +216,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
             failingProbeInterval: max(0.1, failingProbeIntervalSeconds),
             // Enabled values are floored at one hour so a tiny setting cannot make
             // Hearth restart the runner in a tight loop.
-            maintenanceRestartInterval: maintenanceRestartHours <= 0 ? 0 : max(3600, maintenanceRestartHours * 3600)
+            maintenanceRestartInterval: maintenanceRestartHours <= 0 ? 0 : max(3600, maintenanceRestartHours * 3600),
+            restartOnBinaryChange: restartOnBinaryChange
         )
     }
 

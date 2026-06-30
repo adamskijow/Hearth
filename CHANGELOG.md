@@ -5,6 +5,77 @@ All notable changes to Hearth are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-06-30
+
+A large follow-up focused on multi-app use, observability, and a smoother first
+run, on top of everything in 0.1.0.
+
+### Added
+- Single-instance guard: only one Hearth supervises a given config at a time. The
+  menubar app bows out if another instance is already supervising, and a headless
+  launch agent waits as a hot standby and takes over only if the holder exits, so
+  two Hearths (or the menubar app alongside a login agent) never fight over the
+  runner.
+- `hearth setup`: one command to detect the runner, point the config at it, install
+  a login agent, and wait for the runner to be ready.
+- `hearth install-agent` / `hearth uninstall-agent`: install or remove a per-user
+  LaunchAgent that keeps Hearth running headless at login, no sudo. This replaces
+  the hand-rolled plists an app would otherwise ship to depend on Hearth.
+- `hearth wait-ready`: block until the runner answers, then exit 0 (1 on timeout),
+  so a dependent app can gate its own startup on the runner being up.
+- `hearth status --json`: machine-readable status with a top-level `healthy`
+  boolean, for an agent verifying a setup.
+- A Prometheus `/metrics` endpoint on the control endpoint (behind the token), so
+  Hearth can be scraped into Grafana or Uptime Kuma.
+- Generic webhook notifier (`webhookURL`): POST a small JSON status body on each
+  event, to wire Hearth into your own automation alongside ntfy.
+- Restart on runner binary upgrade (`restartOnBinaryChange`): a managed runner
+  adopts a new binary after a `brew upgrade` instead of serving the old one forever.
+  Off by default.
+- Competing-manager detection: `hearth doctor` and the menu flag another launchd
+  job (such as `brew services`) keeping the same runner alive, which would fight a
+  managed Hearth the way a second Hearth would.
+- Metrics history and `hearth metrics`: a retained ring of memory and thermal
+  samples with a trend and a sparkline, so the slow creep a maintenance restart
+  exists to clear is visible.
+- A browser status page at the control endpoint's `GET /`, plus a scannable
+  phone-access QR in the menu, for checking status from a phone with no app.
+- A first-run welcome window: it orients a new user to the menubar, confirms what
+  was found (or makes a missing runner actionable with a copyable install command),
+  and asks for notification permission with context instead of a cold prompt at
+  launch.
+- An "Integrating with Hearth" guide (`docs/integrating.md`) for apps that depend on
+  a local runner.
+- Project-health files (a security policy, code of conduct, issue and PR templates),
+  README badges, and a comparison table against launchd KeepAlive and brew services.
+- A tag-triggered release workflow.
+- LM Studio (attached) and mlx_lm (managed) validated against live servers, with
+  config diagnostics surfaced in the menu.
+
+### Changed
+- The menu got a polish pass: a scannable phone-access QR gated on a genuinely
+  reachable address (it no longer advertises a localhost URL a phone cannot use), a
+  "Copy Diagnostics" action, the conventional Start / Stop / Restart order, and
+  capitalization fixes.
+- First launch no longer fires a cold notification-permission prompt; the welcome
+  window asks with context.
+- The README was tightened: a leaner intro, the full inline config dump deferred to
+  the reference, and corrected validation claims.
+
+### Fixed
+- A pre-publication audit fixed a stored XSS on the browser status page (runner
+  model names went into innerHTML unescaped, on the surface that holds the bearer
+  token) and several stale docs and scripts.
+- An adversarial sweep fixed five bugs: a thermal "unknown" reading clearing an
+  active alert and flapping; a runner left a zombie when the process controller was
+  deallocated during a config reload; supervisor state and metrics sampled before
+  the auth check on every request; the reboot loop guard failing open on a lost
+  history file (now backstopped by a kernel boot-time check); and a misleading
+  metrics cadence message.
+- The runner model parsers are hardened against malformed, truncated, and
+  wrong-type responses.
+- Preferences "Copy phone URL" no longer copies an unreachable localhost URL.
+
 ## [0.1.0] - 2026-06-28
 
 First public release: a Developer ID signed, notarized build.

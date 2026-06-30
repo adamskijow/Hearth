@@ -16,9 +16,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `runnerEnv`: a config map of extra environment variables for a managed runner
   (`OLLAMA_LOAD_TIMEOUT`, `OLLAMA_KEEP_ALIVE`, and the like), so a hand-tuned setup
   is a config key rather than a launchd plist edit. Editable in Preferences via a
-  "Set Env" editor (add and remove variables as rows) or the config file. Hearth
-  still derives `OLLAMA_HOST` from `host`/`port`, and `hearth doctor` warns if
-  `runnerEnv` tries to set it.
+  "Set Env" editor where the variable name is a dropdown of the runner's known
+  variables (with a Custom entry for anything off-list) and a one-line description,
+  or by hand in the config file. Hearth still derives `OLLAMA_HOST` from
+  `host`/`port`, and `hearth doctor` warns if `runnerEnv` tries to set it.
 
 ## [0.2.0] - 2026-06-30
 

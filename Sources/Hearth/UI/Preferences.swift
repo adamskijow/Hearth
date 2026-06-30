@@ -87,6 +87,7 @@ struct PreferencesView: View {
         .sheet(isPresented: $showingEnvEditor) {
             EnvEditorView(
                 env: model.config.runnerEnv,
+                runner: model.config.runner,
                 onDone: { model.config.runnerEnv = $0; showingEnvEditor = false },
                 onCancel: { showingEnvEditor = false }
             )

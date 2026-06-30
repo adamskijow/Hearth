@@ -19,22 +19,26 @@ public struct LMStudioRunner: Runner {
     private let binaryPath: String
     private let host: String
     private let port: Int
+    private let extraEnvironment: [String: String]
     private let oomSignatures: [String]
 
     public init(binaryPath: String,
                 host: String = "127.0.0.1",
                 port: Int = 1234,
+                extraEnvironment: [String: String] = [:],
                 oomSignatures: [String] = RunnerHeuristics.oomSignatures) {
         self.binaryPath = binaryPath
         self.host = host
         self.port = port
+        self.extraEnvironment = extraEnvironment
         self.oomSignatures = oomSignatures
     }
 
     public func processSpec() -> ProcessSpec {
         ProcessSpec(
             executableURL: URL(fileURLWithPath: binaryPath),
-            arguments: ["server", "start", "--port", "\(port)"]
+            arguments: ["server", "start", "--port", "\(port)"],
+            environmentOverrides: extraEnvironment
         )
     }
 

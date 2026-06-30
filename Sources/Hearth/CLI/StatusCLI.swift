@@ -232,6 +232,20 @@ enum StatusCLI {
             report(Diagnostic(.warning, "Attached mode, but nothing is serving on \(config.host):\(config.port) yet."))
         }
 
+        // Reachability: can another machine on the network reach the runner, or is
+        // it loopback-only? Loopback-only is the default and correct for a single
+        // machine, so this is informational guidance, not a warning.
+        let reachAddress = NetworkInterfaces.lanIPv4() ?? NetworkInterfaces.tailnetIPv4()
+        if RunnerReachability.isLoopbackOnly(host: config.host) {
+            print(mark(nil) + " runner bound to \(config.host) (reachable only from this Mac)")
+            let dest = reachAddress ?? "this-mac-ip"
+            print("       to reach it from another computer: set host to 0.0.0.0, open the firewall for port \(config.port), then connect to http://\(dest):\(config.port)")
+        } else if let url = RunnerReachability.url(host: config.host, port: config.port, resolvedAddress: reachAddress) {
+            print(mark(nil) + " runner reachable from your network at \(url)")
+        } else {
+            print(mark(nil) + " runner bound to \(config.host) (open to the network), but no LAN or tailnet address was found to advertise")
+        }
+
         // Another manager (brew services) keeping the same runner alive?
         if let conflict = RunnerManagerConflict.warning(
             runner: config.runner, mode: config.mode, loadedLabels: LaunchdLabels.loaded()) {

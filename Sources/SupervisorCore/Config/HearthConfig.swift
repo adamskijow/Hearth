@@ -17,6 +17,12 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     public var mlxBinaryPath: String
     public var host: String
     public var port: Int
+    /// Extra environment variables to set on a managed runner process, so a
+    /// hand-tuned setup (OLLAMA_LOAD_TIMEOUT, OLLAMA_KEEP_ALIVE, OLLAMA_NUM_PARALLEL
+    /// and the like) is a config key, not a launchd plist edit. Merged into the
+    /// child's environment at spawn. Hearth still derives the bind address itself,
+    /// so a value for OLLAMA_HOST here is ignored in favor of host and port.
+    public var runnerEnv: [String: String]
 
     // Health and restart policy
     public var probeTimeoutSeconds: Double
@@ -74,6 +80,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 mlxBinaryPath: String = HearthConfig.defaultMLXBinaryPath,
                 host: String = "127.0.0.1",
                 port: Int = 11434,
+                runnerEnv: [String: String] = [:],
                 probeTimeoutSeconds: Double = 2,
                 probeIntervalSeconds: Double = 5,
                 startupGraceSeconds: Double = 30,
@@ -109,6 +116,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.mlxBinaryPath = mlxBinaryPath
         self.host = host
         self.port = port
+        self.runnerEnv = runnerEnv
         self.probeTimeoutSeconds = probeTimeoutSeconds
         self.probeIntervalSeconds = probeIntervalSeconds
         self.startupGraceSeconds = startupGraceSeconds
@@ -165,6 +173,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         mlxBinaryPath = try value(.mlxBinaryPath, defaults.mlxBinaryPath)
         host = try value(.host, defaults.host)
         port = try value(.port, defaults.port)
+        runnerEnv = try value(.runnerEnv, defaults.runnerEnv)
         probeTimeoutSeconds = try value(.probeTimeoutSeconds, defaults.probeTimeoutSeconds)
         probeIntervalSeconds = try value(.probeIntervalSeconds, defaults.probeIntervalSeconds)
         startupGraceSeconds = try value(.startupGraceSeconds, defaults.startupGraceSeconds)
@@ -252,9 +261,9 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     public func makeRunner() -> any Runner {
         switch runner.lowercased() {
         case "lmstudio", "lm-studio", "lm_studio":
-            return LMStudioRunner(binaryPath: lmStudioBinaryPath, host: host, port: port)
+            return LMStudioRunner(binaryPath: lmStudioBinaryPath, host: host, port: port, extraEnvironment: runnerEnv)
         case "mlx", "mlx_lm", "mlx-lm":
-            return MLXRunner(binaryPath: mlxBinaryPath, host: host, port: port)
+            return MLXRunner(binaryPath: mlxBinaryPath, host: host, port: port, extraEnvironment: runnerEnv)
         default:
             return makeOllamaRunner()
         }
@@ -263,7 +272,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     /// The Ollama runner these settings describe. Kept distinct for tests and for
     /// the default path.
     public func makeOllamaRunner() -> OllamaRunner {
-        OllamaRunner(binaryPath: ollamaBinaryPath, host: host, port: port)
+        OllamaRunner(binaryPath: ollamaBinaryPath, host: host, port: port, extraEnvironment: runnerEnv)
     }
 
     /// The path to the binary the selected runner launches, for the menubar

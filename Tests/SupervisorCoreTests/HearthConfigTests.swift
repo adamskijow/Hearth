@@ -99,6 +99,23 @@ struct HearthConfigTests {
         #expect(runner.name == "Ollama")
     }
 
+    @Test func runnerEnvDecodesAndReachesTheRunner() throws {
+        let json = Data("""
+        {"runnerEnv": {"OLLAMA_LOAD_TIMEOUT": "10m", "OLLAMA_KEEP_ALIVE": "30m"}}
+        """.utf8)
+        let config = try JSONDecoder().decode(HearthConfig.self, from: json)
+        #expect(config.runnerEnv["OLLAMA_LOAD_TIMEOUT"] == "10m")
+        // It flows through to the spawned runner's environment.
+        let env = config.makeOllamaRunner().processSpec().environmentOverrides
+        #expect(env["OLLAMA_LOAD_TIMEOUT"] == "10m")
+        #expect(env["OLLAMA_KEEP_ALIVE"] == "30m")
+    }
+
+    @Test func runnerEnvDefaultsToEmpty() throws {
+        let config = try JSONDecoder().decode(HearthConfig.self, from: Data("{}".utf8))
+        #expect(config.runnerEnv.isEmpty)
+    }
+
     @Test func runnerSelectionPicksLMStudio() {
         let config = HearthConfig(runner: "lmstudio")
         #expect(config.makeRunner().name == "LM Studio")

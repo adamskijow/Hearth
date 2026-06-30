@@ -12,6 +12,7 @@ public struct OllamaRunner: Runner {
     private let binaryPath: String
     private let host: String
     private let port: Int
+    private let extraEnvironment: [String: String]
     private let oomSignatures: [String]
 
     /// Default out of memory stderr signatures. Shared across runners because a
@@ -22,10 +23,12 @@ public struct OllamaRunner: Runner {
     public init(binaryPath: String,
                 host: String = "127.0.0.1",
                 port: Int = 11434,
+                extraEnvironment: [String: String] = [:],
                 oomSignatures: [String] = OllamaRunner.defaultOOMSignatures) {
         self.binaryPath = binaryPath
         self.host = host
         self.port = port
+        self.extraEnvironment = extraEnvironment
         self.oomSignatures = oomSignatures
     }
 
@@ -33,13 +36,16 @@ public struct OllamaRunner: Runner {
     public var hostPort: String { "\(host):\(port)" }
 
     public func processSpec() -> ProcessSpec {
-        ProcessSpec(
+        // Start from the user's extra environment, then set the listen address
+        // last so the host-derived OLLAMA_HOST always wins: managed mode owns the
+        // bind address, and the child's environment being ours to define is the
+        // whole point (the launchd env trap never gets a chance to bite).
+        var environment = extraEnvironment
+        environment["OLLAMA_HOST"] = hostPort
+        return ProcessSpec(
             executableURL: URL(fileURLWithPath: binaryPath),
             arguments: ["serve"],
-            // Set the listen address at spawn. This is the whole point of
-            // managed mode: the child's environment is ours to define, so the
-            // launchd env trap never gets a chance to bite.
-            environmentOverrides: ["OLLAMA_HOST": hostPort]
+            environmentOverrides: environment
         )
     }
 

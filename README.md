@@ -458,6 +458,16 @@ also shows a "config issues" line when it finds any.
 - **`hearth status` says the control endpoint is unreachable.** Enable it
   (`controlEnabled`, with a `controlToken`), and check `controlHost`/`controlPort`.
   Bind it to localhost or a Tailscale address, never a public interface.
+- **Another computer can't reach the runner (connection refused).** By default
+  Ollama binds to `127.0.0.1`, so it is reachable only from the Mac it runs on. Set
+  `host` to `0.0.0.0` to open it to your LAN: managed Hearth then launches the runner
+  bound correctly, with no `launchctl setenv OLLAMA_HOST` ritual. Open the firewall
+  for the port, then connect from the other machine to `http://<this-mac-lan-ip>:11434`.
+  `hearth doctor` prints the exact URL and the firewall reminder, and the menu shows
+  a "Reachable at" line once it is open. For access beyond your LAN, use Tailscale
+  rather than exposing the port. To carry hand-tuned runner settings
+  (`OLLAMA_LOAD_TIMEOUT` and the like) along with the bind change, set them in
+  `runnerEnv` so they live in the config instead of a launchd plist.
 - **A stray `ollama serve` is running after a restart.** Hearth records the
   process group it owns and sweeps it on the next launch. If you deleted
   `runner-state.json` by hand, that record is gone; kill the stray once and let

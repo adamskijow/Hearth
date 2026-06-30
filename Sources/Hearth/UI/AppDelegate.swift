@@ -312,6 +312,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             // timeout); say so rather than leaving a blank where models would be.
             menu.addItem(infoRow(detailAttr("No model loaded")))
         }
+        // When the runner is up and bound to a routable address, show where another
+        // machine on the network can reach it (the runner endpoint itself, distinct
+        // from the control endpoint's Phone Access below).
+        if latestState.phase == .healthy,
+           let reachURL = RunnerReachability.url(
+               host: config.host, port: config.port,
+               resolvedAddress: NetworkInterfaces.lanIPv4() ?? NetworkInterfaces.tailnetIPv4()) {
+            menu.addItem(infoRow(detailAttr("Reachable at \(reachURL)")))
+        }
         if let url = phoneAccessURL() {
             menu.addItem(phoneAccessItem(url: url))
         }

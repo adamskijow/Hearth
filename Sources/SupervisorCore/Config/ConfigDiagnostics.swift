@@ -50,6 +50,15 @@ public enum ConfigDiagnostics {
         if ["lmstudio", "lm-studio", "lm_studio"].contains(config.runner.lowercased()), mode == "managed" {
             issues.append(.init(.warning, "LM Studio works only in attached mode; `lms server start` exits at once, so managed mode thrashes. Set mode to attached and start LM Studio's server yourself."))
         }
+        // Hearth derives OLLAMA_HOST from host and port, so a runnerEnv value for it
+        // is overwritten at spawn; flag it rather than letting it silently lose.
+        // Anything that is not LM Studio or mlx runs as Ollama (the default path).
+        let isLMStudio = ["lmstudio", "lm-studio", "lm_studio"].contains(config.runner.lowercased())
+        let isMLX = ["mlx", "mlx_lm", "mlx-lm"].contains(config.runner.lowercased())
+        let isOllama = !isLMStudio && !isMLX
+        if isOllama, config.runnerEnv.keys.contains("OLLAMA_HOST") {
+            issues.append(.init(.warning, "runnerEnv sets OLLAMA_HOST, but Hearth derives it from host and port; the runnerEnv value is ignored. Set host instead to change the bind address."))
+        }
 
         if config.controlEnabled {
             if (config.controlToken ?? "").isEmpty {

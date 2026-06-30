@@ -14,6 +14,19 @@ struct OllamaRunnerTests {
         #expect(spec.environmentOverrides["OLLAMA_HOST"] == "0.0.0.0:1234")
     }
 
+    @Test func extraEnvironmentIsPassedThroughButHostStaysAuthoritative() {
+        // A hand-tuned setup keeps its knobs, while the host-derived OLLAMA_HOST
+        // always wins over any OLLAMA_HOST the user put in runnerEnv.
+        let runner = OllamaRunner(
+            binaryPath: "/opt/homebrew/bin/ollama",
+            host: "0.0.0.0", port: 11434,
+            extraEnvironment: ["OLLAMA_LOAD_TIMEOUT": "10m", "OLLAMA_KEEP_ALIVE": "30m", "OLLAMA_HOST": "127.0.0.1:99"])
+        let env = runner.processSpec().environmentOverrides
+        #expect(env["OLLAMA_LOAD_TIMEOUT"] == "10m")
+        #expect(env["OLLAMA_KEEP_ALIVE"] == "30m")
+        #expect(env["OLLAMA_HOST"] == "0.0.0.0:11434")   // host wins, not the runnerEnv value
+    }
+
     @Test func endpoints() {
         let runner = OllamaRunner(binaryPath: "/x", host: "127.0.0.1", port: 11434)
         #expect(runner.readinessEndpoint.absoluteString == "http://127.0.0.1:11434/api/version")

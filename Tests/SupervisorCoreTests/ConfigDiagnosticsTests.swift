@@ -25,6 +25,14 @@ struct ConfigDiagnosticsTests {
         #expect(errors(HearthConfig(host: "   ")).contains { $0.message.contains("Host is empty") })
     }
 
+    @Test func runnerEnvOllamaHostIsWarned() {
+        // Hearth owns OLLAMA_HOST (from host/port), so setting it in runnerEnv is a
+        // no-op worth flagging. Other runnerEnv keys are fine.
+        #expect(messages(HearthConfig(runnerEnv: ["OLLAMA_HOST": "0.0.0.0:11434"]))
+                .contains { $0.contains("runnerEnv sets OLLAMA_HOST") })
+        #expect(messages(HearthConfig(runnerEnv: ["OLLAMA_LOAD_TIMEOUT": "10m"])).isEmpty)
+    }
+
     @Test func aMalformedHostIsAnError() {
         // A space (or other URL-invalid character) would have crashed the runner's
         // force-unwrapped endpoint; it is now caught here.

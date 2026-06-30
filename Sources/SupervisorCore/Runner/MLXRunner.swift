@@ -15,22 +15,26 @@ public struct MLXRunner: Runner {
     private let binaryPath: String
     private let host: String
     private let port: Int
+    private let extraEnvironment: [String: String]
     private let oomSignatures: [String]
 
     public init(binaryPath: String,
                 host: String = "127.0.0.1",
                 port: Int = 8080,
+                extraEnvironment: [String: String] = [:],
                 oomSignatures: [String] = RunnerHeuristics.oomSignatures) {
         self.binaryPath = binaryPath
         self.host = host
         self.port = port
+        self.extraEnvironment = extraEnvironment
         self.oomSignatures = oomSignatures
     }
 
     public func processSpec() -> ProcessSpec {
         ProcessSpec(
             executableURL: URL(fileURLWithPath: binaryPath),
-            arguments: ["--host", host, "--port", "\(port)"]
+            arguments: ["--host", host, "--port", "\(port)"],
+            environmentOverrides: extraEnvironment
         )
     }
 

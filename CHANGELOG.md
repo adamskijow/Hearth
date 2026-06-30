@@ -5,16 +5,29 @@ All notable changes to Hearth are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0] - 2026-06-30
+
+Tooling and observability: ready-made monitoring recipes, a reproducible
+wedge-recovery demo, isolated test and demo instances, and a reorganized README.
 
 ### Added
+- Ready-made monitoring recipes in `deploy/`: an importable Grafana dashboard built
+  against Hearth's `/metrics`, a Prometheus scrape config with alert rules (the
+  wedge and memory pressure), and two Uptime Kuma monitors (`/healthz` liveness and
+  a `/status` readiness keyword).
 - `HEARTH_DATA_DIR`: an environment override that moves all of Hearth's state and
-  logs under one directory, so a throwaway, demo, or test instance is fully
-  isolated from a real one (the support and log locations are otherwise fixed under
-  the home directory and shared across instances). Pairs with `HEARTH_CONFIG`.
+  logs under one directory, so a throwaway, demo, or test instance is fully isolated
+  from a real one (the support and log locations are otherwise fixed under the home
+  directory and shared across instances). Pairs with `HEARTH_CONFIG`.
 - `make demo`: a narrated, isolated wedge-recovery demo against the stand-in runner
   (freeze it alive with `SIGUSR1`, watch Hearth catch it by readiness and recover),
-  the source for the README's wedge-recovery recording.
+  with a VHS tape (`assets/wedge-recovery.tape`) to record it as the README's GIF.
+
+### Changed
+- The README was reorganized and shortened: a visible table of contents and a docs
+  index, overlapping sections merged, Testing, Releasing, and Known limitations
+  moved into `docs/`, and the intro now answers why a Mac-native tool (Docker on
+  macOS is CPU-only) rather than a launchd plist or a hand-rolled watchdog.
 
 ## [0.3.0] - 2026-06-30
 

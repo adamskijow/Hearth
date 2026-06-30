@@ -25,11 +25,11 @@ logs only to judge whether it is healthy.
 
 **Start here** &nbsp; [Quickstart](#quickstart) · [Why this exists](#why-this-exists) · [Requirements](#requirements) · [Install and build](#install-and-build)
 
-**Use it** &nbsp; [Configure](#configure) · [How it works](#how-it-works) · [Keeping a 24/7 runner fresh](#keeping-a-247-runner-fresh) · [Remote control](#remote-control) · [Troubleshooting](#troubleshooting)
+**Use it** &nbsp; [Configure](#configure) · [How it works](#how-it-works) · [Remote control](#remote-control) · [Troubleshooting](#troubleshooting)
 
 **Run it headless** &nbsp; [Running headless](#running-headless) · [Recovering a wedge a restart cannot](#recovering-a-wedge-a-restart-cannot) · [Security and exposing the runner](#security-and-exposing-the-runner)
 
-**Project** &nbsp; [Architecture](#architecture) · [Known limitations](#known-limitations) · [Roadmap](#roadmap) · [Contributing](#contributing) · [License](#license)
+**Project** &nbsp; [Architecture](#architecture) · [Roadmap](#roadmap) · [Contributing](#contributing) · [License](#license)
 
 ## Documentation
 
@@ -39,6 +39,7 @@ The README is the tour. Deeper detail lives in `docs/`:
 - **[Integrating with Hearth](docs/integrating.md):** for an app that wants to depend on a local runner being up.
 - **[Reverse proxy and TLS](docs/reverse-proxy.md):** reaching the runner or the control endpoint securely from off this machine.
 - **[Development](docs/development.md):** running the test suite and cutting a release.
+- **[Known limitations and design choices](docs/limitations.md):** what Hearth does not do, and why.
 
 ## Quickstart
 
@@ -149,8 +150,8 @@ Hearth ships as a Developer ID signed and notarized build, not through the Mac
 App Store. This is not a preference; the App Store requires the App Sandbox, and
 the sandbox forbids a process from spawning and supervising another process,
 which is the entire job. So the distribution path is Developer ID plus
-notarization with the Hardened Runtime on and the App Sandbox off. See Releasing
-below for the signing pipeline.
+notarization with the Hardened Runtime on and the App Sandbox off. See
+[Development](docs/development.md) for the signing pipeline.
 
 ### Homebrew cask
 
@@ -305,34 +306,14 @@ observability, not inference. The actions are Start, Stop, Restart, and Open
 Logs. The child's stdout and stderr are captured to
 `~/Library/Logs/Hearth/runner.log`.
 
-## Keeping a 24/7 runner fresh
-
-A few opt-in features address what degrades a runner left up for days, not what
-crashes it.
-
-A widely reported problem with a long-running Ollama is gradual memory creep and
-VRAM fragmentation: over a day or two, response times slide from a couple of
-seconds to ten or more, and the documented fix everywhere is "restart it daily."
-Hearth can do that for you. Set `maintenanceRestartHours` (for example `24`) and
-it cycles a healthy runner on that interval, clearing the creep. It is a clean
-restart counted off the runner's healthy uptime, so a reactive restart resets the
-clock too, and the return to healthy is quiet (no "recovered" alert for a routine
-cycle). Off by default.
-
-When you `brew upgrade ollama`, the running serve is still the old binary until
-something restarts it, and Hearth would otherwise keep the old version alive
-forever. Set `restartOnBinaryChange` and Hearth notices the runner binary changed
-on disk (it follows the Homebrew symlink into the Cellar) and adopts the new
-version through the same quiet maintenance restart. Off by default; managed mode
-only.
-
-Hearth already samples the thermal state and memory pressure for the menubar; it
-can also alert on them. When system memory crosses `memoryAlertPercent` (default
-90), which on a unified-memory Mac is the precursor to macOS killing the runner as
-its biggest memory user, or when thermals go serious or critical
-(`thermalAlerts`), Hearth sends a heads-up (and an all-clear when it eases) so you
-learn about pressure before it turns into a crash. On by default; both reuse the
-metrics already collected.
+Beyond reacting to failures, a few opt-in settings address slow degradation.
+`maintenanceRestartHours` cycles a healthy runner on an interval (for example `24`)
+to clear the memory creep that slows a long-running Ollama, quietly, with no
+"recovered" alert. `restartOnBinaryChange` adopts a new binary after a
+`brew upgrade` instead of serving the old one forever (managed mode). And the same
+memory and thermal samples behind the menubar readout can alert: when system memory
+crosses `memoryAlertPercent` (default 90) or thermals go serious, Hearth sends a
+heads-up, and an all-clear when it eases, before pressure becomes a crash.
 
 ## Remote control
 
@@ -517,7 +498,7 @@ by sending SIGHUP: `sudo launchctl kill HUP system/com.hearth.daemon`.
 
 Killing and respawning the runner clears a process-level wedge. Some hangs are at
 the driver or GPU level and survive a process restart; only a reboot of the Mac
-clears them (see Known limitations). On a headless box you would otherwise have to
+clears them (see [Known limitations](docs/limitations.md)). On a headless box you would otherwise have to
 notice and reboot it by hand. The recovery ladder closes that gap as an opt-in
 last resort:
 
@@ -595,46 +576,6 @@ auth, and the metrics and tailnet helpers also live here as pure, tested code.
 spawning (`posix_spawn` in a dedicated process group), URLSession, IOKit, the
 Network framework, SMAppService, and UserNotifications, and renders the published
 state.
-
-## Known limitations
-
-These are stated up front on purpose.
-
-- Restarting the runner clears a process-level wedge, not a driver- or GPU-level
-  one ([ollama#8594](https://github.com/ollama/ollama/issues/8594)); those need a
-  full reboot. A respawn clears more on Apple Silicon and Metal than on the
-  discrete-GPU setups in those reports, but it is not a cure-all. For a headless
-  box, the opt-in reboot escalation
-  ([Recovering a wedge a restart cannot](#recovering-a-wedge-a-restart-cannot))
-  automates the reboot that does, with a loop guard and a give-up-and-notify floor.
-- Validated against a real Ollama 0.30.11 (see
-  [VALIDATION-REPORT.md](VALIDATION-REPORT.md)): cold start, external kill, the
-  alive-but-wedged case via SIGSTOP, clean process group teardown with no
-  orphaned `llama-server`, attached mode, and hard-crash orphan recovery (a
-  SIGKILLed Hearth's leaked runner group is swept on the next launch). mlx_lm has
-  since been validated in managed mode against a live `mlx_lm.server`, and LM
-  Studio in attached mode against a live server (the report has the details).
-- Out of memory classification is a heuristic and is UNVERIFIED against a real
-  out of memory kill, which could not be induced on high unified-memory hardware.
-  The signatures are confirmed absent from a healthy Ollama's output (so they do
-  not false-positive), but not confirmed to fire on a real Metal OOM.
-- If Hearth itself is killed without the chance to run its teardown (a hard
-  SIGKILL of the agent), the runner process group it spawned keeps running until
-  Hearth next launches. On launch Hearth recognizes the leaked group by its
-  recorded PID and process start time and sweeps it before starting a fresh
-  runner, so the leak self-heals on restart rather than accumulating. The
-  residual gap is only the window between the crash and the next launch. A clean
-  quit, a SIGTERM, or a normal restart reaps the whole group immediately.
-- The power assertion prevents idle sleep, which keeps a Mac that would otherwise
-  sleep on idle (a desktop, or a plugged in laptop with the lid open) awake and
-  serving. Keeping a laptop serving with the lid closed on battery is a separate,
-  privileged concern and is not implemented.
-- LM Studio works in attached mode only. `lms server start` exits immediately (the
-  server runs in LM Studio's own background process), so a managed runner thrashes;
-  `hearth doctor` and the menu flag it. Start LM Studio's server yourself and let
-  Hearth watch it.
-- The control endpoint is unauthenticated beyond a shared bearer token and is
-  meant to live behind a VPN, not on the open internet.
 
 ## Roadmap
 

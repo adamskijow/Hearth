@@ -67,6 +67,22 @@ struct ControlRoutingTests {
         #expect(early("GET", "/status", auth: bearer(token)) == nil)
     }
 
+    @Test func metricsRequiresAuthAndReturnsPrometheus() {
+        // Like /status, /metrics needs the token.
+        #expect(ControlRouting.handle(method: "GET", path: "/metrics", authorization: nil,
+                                      token: token, state: state, now: now) == .unauthorized)
+        let outcome = ControlRouting.handle(method: "GET", path: "/metrics", authorization: bearer(token),
+                                            token: token, state: state, now: now)
+        guard case .prometheus(let data) = outcome else {
+            Issue.record("expected a prometheus outcome")
+            return
+        }
+        let body = String(decoding: data, as: UTF8.self)
+        #expect(body.contains("hearth_up 1"))
+        #expect(body.contains("hearth_phase{phase=\"healthy\"} 1"))
+        #expect(body.contains("# TYPE hearth_restarts_total counter"))
+    }
+
     @Test func rejectsUnknownRoutes() {
         #expect(ControlRouting.command(method: "POST", path: "/status") == nil)
         #expect(ControlRouting.command(method: "GET", path: "/start") == nil)

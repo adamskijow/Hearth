@@ -138,6 +138,10 @@ final class ControlServer: @unchecked Sendable {
                 status = 200
                 body = data
                 contentType = "text/html; charset=utf-8"
+            case .prometheus(let data):
+                status = 200
+                body = data
+                contentType = "text/plain; version=0.0.4; charset=utf-8"
             case .perform(let command):
                 await coordinator.perform(command)
                 status = 202

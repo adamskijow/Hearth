@@ -22,6 +22,8 @@ public enum ControlOutcome: Sendable, Equatable {
     case status(Data)
     /// A 200 with an HTML body (the browser status page).
     case html(Data)
+    /// A 200 with a Prometheus text exposition body.
+    case prometheus(Data)
     /// Perform this side effecting command, then answer 202.
     case perform(ControlCommand)
 }
@@ -40,8 +42,11 @@ public enum ControlRouting {
         if let early = earlyOutcome(method: method, path: path, authorization: authorization, token: token) {
             return early
         }
-        // Only an authenticated /status reaches here; it is the one route that
-        // needs live supervisor state and a metrics sample.
+        // Only authenticated reads that need live state and a metrics sample reach
+        // here: /status (JSON) and /metrics (Prometheus exposition).
+        if trimmedPath(path) == "/metrics" {
+            return .prometheus(prometheusText(state, now: now, metrics: metrics))
+        }
         return .status(statusJSON(state, now: now, metrics: metrics))
     }
 
@@ -67,6 +72,9 @@ public enum ControlRouting {
             return .html(Data(ControlStatusPage.html.utf8))
         }
         guard isAuthorized(authorization, token: token) else { return .unauthorized }
+        // Prometheus metrics: authenticated and needs live state, so defer to
+        // handle() rather than answering here.
+        if method.uppercased() == "GET", trimmedPath(path) == "/metrics" { return nil }
         guard let command = command(method: method, path: path) else { return .notFound }
         switch command {
         case .status:
@@ -126,6 +134,36 @@ public enum ControlRouting {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         return (try? encoder.encode(payload)) ?? Data("{}".utf8)
+    }
+
+    /// A Prometheus text exposition of the same status, so the homelab crowd can
+    /// scrape Hearth into Grafana or Uptime Kuma alongside everything else.
+    public static func prometheusText(_ state: SupervisorState, now: Date, metrics: SystemMetrics? = nil) -> Data {
+        var lines: [String] = []
+        func metric(_ name: String, _ help: String, _ type: String, _ value: String, labels: String = "") {
+            lines.append("# HELP \(name) \(help)")
+            lines.append("# TYPE \(name) \(type)")
+            lines.append("\(name)\(labels) \(value)")
+        }
+        metric("hearth_up", "Whether Hearth is up and answering.", "gauge", "1")
+        metric("hearth_healthy", "Whether the runner is healthy (1) or not (0).", "gauge", state.phase == .healthy ? "1" : "0")
+        metric("hearth_phase", "Current supervisor phase, 1 for the active one.", "gauge", "1", labels: "{phase=\"\(state.phase.rawValue)\"}")
+        metric("hearth_restarts_total", "Restarts this session.", "counter", String(state.restartCount))
+        metric("hearth_consecutive_failures", "Consecutive failed probes.", "gauge", String(state.consecutiveFailures))
+        if let uptime = state.uptime(asOf: now) {
+            metric("hearth_uptime_seconds", "Seconds the runner has been continuously healthy.", "gauge", String(Int(uptime.rounded())))
+        }
+        metric("hearth_resident_models", "Models the runner currently holds resident.", "gauge", String(state.residentModels.count))
+        if let fraction = metrics?.memoryUsedFraction {
+            metric("hearth_memory_used_percent", "System memory in use, percent.", "gauge", String(Int((fraction * 100).rounded())))
+        }
+        if let rss = metrics?.runnerResidentBytes {
+            metric("hearth_runner_resident_bytes", "Resident memory of the runner process, bytes.", "gauge", String(rss))
+        }
+        if let sample = metrics, sample.thermal != .unknown {
+            metric("hearth_thermal", "Thermal state, 1 for the active one.", "gauge", "1", labels: "{state=\"\(sample.thermal.rawValue)\"}")
+        }
+        return Data((lines.joined(separator: "\n") + "\n").utf8)
     }
 
     private static func constantTimeEquals(_ a: String, _ b: String) -> Bool {

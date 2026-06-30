@@ -23,7 +23,7 @@ logs only to judge whether it is healthy.
 
 ## Contents
 
-**Start here** &nbsp; [Quickstart](#quickstart) · [Why this exists](#why-this-exists) · [Why not launchd / brew services](#why-not-just-launchd-or-brew-services) · [Requirements](#requirements) · [Install and build](#install-and-build)
+**Start here** &nbsp; [Quickstart](#quickstart) · [Why this exists](#why-this-exists) · [Requirements](#requirements) · [Install and build](#install-and-build)
 
 **Use it** &nbsp; [Configure](#configure) · [How it works](#how-it-works) · [Keeping a 24/7 runner fresh](#keeping-a-247-runner-fresh) · [Remote control](#remote-control) · [Troubleshooting](#troubleshooting)
 
@@ -65,45 +65,26 @@ Troubleshooting.
 ## Why this exists
 
 If you run a local model server on a Mac you leave in a closet, the usual fix is a
-launchd plist (or `brew services`) with `KeepAlive`, which relaunches the runner
-when the process exits. That handles a clean crash. It does not handle the failure
-that actually wastes your afternoon: the runner is still running, but no longer
-answering.
+launchd plist or `brew services` with `KeepAlive`, which relaunches the runner when
+the process exits. That handles a clean crash. It does not handle the failure that
+actually wastes your afternoon: the runner is still running, but no longer answering.
 
-That "alive but wedged" state is common and well reported. The model runner hangs
-after a few requests with no error and has to be killed by hand
-([ollama#6616](https://github.com/ollama/ollama/issues/6616)); the GPU stops
-responding and "the service needs to be rebooted"
-([Framework](https://community.frame.work/t/ollama-model-runner-unexpectedly-stopped-gpu-hang/76220));
-or Ollama silently reverts to CPU and spins for hours without ever replying
-([ollama#8594](https://github.com/ollama/ollama/issues/8594)). The process is up
-the whole time, so a **liveness** check ("is the PID there?") is satisfied and
-launchd does nothing.
+That "alive but wedged" state is common and well reported: the runner hangs after a
+few requests with no error ([ollama#6616](https://github.com/ollama/ollama/issues/6616)),
+the GPU stops responding and "the service needs to be rebooted"
+([Framework](https://community.frame.work/t/ollama-model-runner-unexpectedly-stopped-gpu-hang/76220)),
+or Ollama silently reverts to CPU and spins for hours
+([ollama#8594](https://github.com/ollama/ollama/issues/8594)). The process is up the
+whole time, so a **liveness** check ("is the PID there?") is satisfied and launchd
+does nothing.
 
-Hearth probes **readiness** instead ("does the API actually answer in time?"), so
-it catches the wedge, not just the crash. Put simply: **launchd restarts the
-runner when it dies; Hearth also restarts it when it wedges.**
-
-Two more things quietly break the "always available" promise, and Hearth handles
-both. The Mac goes to sleep and stops serving, so Hearth holds an IOKit power
-assertion. And the `OLLAMA_HOST` env trap, where a launchd-started daemon does not
-inherit the shell environment you expected and ends up on the wrong address or
-only on localhost, is sidestepped because Hearth sets the runner's environment at
-spawn, so the listen address is correct by construction.
-
-Hearth exists to make a local runner behave like a real, always on service on a
-machine nobody is sitting at.
-
-## Why not just launchd or brew services?
-
-Because they answer a different question. launchd `KeepAlive` and `brew services`
-restart the process when it exits, and they are good at that. What they cannot see
-is a runner that is still running but has stopped answering: to a liveness check, a
-wedged Ollama looks healthy. Hearth probes readiness, so it catches that case, and
-it handles what a process supervisor was never meant to (keeping the Mac awake
-while serving, the `OLLAMA_HOST` listen-address trap, memory and thermal warnings,
-and telling you when something breaks). It runs on top of them, not instead of
-them: the login agent that keeps Hearth itself alive is a launchd job.
+Hearth probes **readiness** ("does the API actually answer in time?"), so it catches
+the wedge, not just the crash: launchd restarts the runner when it dies, Hearth also
+restarts it when it wedges. It also handles what a process supervisor was never meant
+to: keeping the Mac awake while serving, sidestepping the `OLLAMA_HOST` listen-address
+trap, and alerting you when something breaks. And it runs on top of launchd, not
+instead of it (the login agent that keeps Hearth alive is a launchd job), to make a
+local runner behave like a real, always-on service on a machine nobody is sitting at.
 
 ## Requirements
 

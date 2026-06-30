@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var configProblem = false
     private var configDiagnostics: [Diagnostic] = []
     private var competingManagerWarning: String?
+    private var preexistingRunnerWarning: String?
     private var binaryMissingPath: String?
     private var suggestedBinaryPath: String?
     private var signalSources: [DispatchSourceSignal] = []
@@ -142,6 +143,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         subscribeToEvents()
         updateStatusButton()
         await coordinator.begin()
+
+        // After supervision starts, check whether a runner Hearth did not spawn
+        // already holds the port (the Ollama app is the common case). In managed
+        // mode that fights Hearth; the menu and the welcome surface the fix.
+        let foreign = await RunnerCollision.foreignRunnerServing(config: config)
+        preexistingRunnerWarning = PreexistingRunner.warning(
+            runner: config.runner, mode: config.mode, foreignRunnerServing: foreign)
     }
 
     private func firstRunGuidance(_ loaded: ConfigLoad) {
@@ -156,6 +164,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             runner: config.runner,
             foundPath: foundPath,
             installHint: Self.installHint(for: config.runner),
+            collisionWarning: preexistingRunnerWarning,
             onEnableNotifications: { LocalNotifier.requestAuthorization() },
             onOpenPreferences: { [weak self] in self?.openPreferencesTapped() }
         )
@@ -278,6 +287,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let conflict = competingManagerWarning {
             menu.addItem(infoRow(headlineAttr("\u{26A0} Competing manager", color: .systemYellow)))
             menu.addItem(infoRow(detailAttr("   \(conflict)")))
+            menu.addItem(.separator())
+        }
+        if let warning = preexistingRunnerWarning {
+            menu.addItem(infoRow(headlineAttr("\u{26A0} Already running", color: .systemYellow)))
+            menu.addItem(infoRow(detailAttr("   \(warning)")))
             menu.addItem(.separator())
         }
 

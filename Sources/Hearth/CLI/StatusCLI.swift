@@ -224,7 +224,9 @@ enum StatusCLI {
             } else if let identity = recordedRunner(), kill(identity.pid, 0) == 0 {
                 print(mark(nil) + " runner port \(config.host):\(config.port) served by Hearth's runner (pid \(identity.pid))")
             } else {
-                report(Diagnostic(.warning, "Something other than Hearth's runner is listening on \(config.host):\(config.port); a managed runner may fail to bind."))
+                report(Diagnostic(.warning, PreexistingRunner.warning(
+                    runner: config.runner, mode: config.mode, foreignRunnerServing: true)
+                    ?? "Something other than Hearth's runner is listening on \(config.host):\(config.port); a managed runner may fail to bind."))
             }
         } else if serving {
             print(mark(nil) + " attached target is serving on \(config.host):\(config.port)")

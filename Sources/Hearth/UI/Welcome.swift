@@ -18,12 +18,14 @@ final class WelcomeController: NSObject, NSWindowDelegate {
     func show(runner: String,
               foundPath: String?,
               installHint: String,
+              collisionWarning: String?,
               onEnableNotifications: @escaping () -> Void,
               onOpenPreferences: @escaping () -> Void) {
         let view = WelcomeView(
             runner: runner,
             foundPath: foundPath,
             installHint: installHint,
+            collisionWarning: collisionWarning,
             onEnableNotifications: onEnableNotifications,
             onOpenPreferences: { [weak self] in self?.window?.close(); onOpenPreferences() },
             onDone: { [weak self] in self?.window?.close() }
@@ -56,6 +58,7 @@ struct WelcomeView: View {
     let runner: String
     let foundPath: String?
     let installHint: String
+    let collisionWarning: String?
     let onEnableNotifications: () -> Void
     let onOpenPreferences: () -> Void
     let onDone: () -> Void
@@ -85,6 +88,14 @@ struct WelcomeView: View {
             }
 
             statusBlock
+
+            if let collisionWarning {
+                collisionBlock(collisionWarning)
+            } else if foundPath != nil {
+                Label("Your apps need no changes: they keep talking to the runner as they do now, and Hearth keeps it alive. Several apps and models can share the one runner.", systemImage: "checkmark.seal")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             HStack(spacing: 10) {
                 Label("Get alerted when the runner goes down.", systemImage: "bell")
@@ -143,6 +154,24 @@ struct WelcomeView: View {
                         .help("Copy")
                     }
                 }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+    }
+
+    @ViewBuilder private func collisionBlock(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: 11) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(.yellow).font(.title3)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(runnerLabel) is already running").fontWeight(.medium)
+                Text(message)
+                    .font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }

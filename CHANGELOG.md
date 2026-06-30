@@ -5,6 +5,18 @@ All notable changes to Hearth are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- First-run collision detection. When a runner Hearth did not start is already
+  serving the port (most often the official Ollama app, which auto-runs the server),
+  managed mode would silently fight it for the port. The welcome window, the menu,
+  and `hearth doctor` now flag it with the fix: switch to attached mode to watch the
+  running one, or quit it so Hearth can manage its own.
+- The welcome window now reassures a new user that their apps need no changes, they
+  keep talking to the runner as they do now, and several apps and models can share
+  the one runner.
+
 ## [0.4.0] - 2026-06-30
 
 Tooling and observability: ready-made monitoring recipes, a reproducible

@@ -90,11 +90,14 @@ because there is no off-the-shelf Mac tool for this.
 
 Hearth probes **readiness** ("does the API actually answer in time?"), so it catches
 the wedge, not just the crash: launchd restarts the runner when it dies, Hearth also
-restarts it when it wedges. It also handles what a process supervisor was never meant
-to: keeping the Mac awake while serving, sidestepping the `OLLAMA_HOST` listen-address
-trap, and alerting you when something breaks. And it runs on top of launchd, not
-instead of it (the login agent that keeps Hearth alive is a launchd job), to make a
-local runner behave like a real, always-on service on a machine nobody is sitting at.
+restarts it when it stops answering. An optional [deep probe](#configure) goes one
+level further, running a tiny generation on an interval so it catches the harder
+case too: the HTTP server still answers while the model runner or GPU is hung. It
+also handles what a process supervisor was never meant to: keeping the Mac awake
+while serving, sidestepping the `OLLAMA_HOST` listen-address trap, and alerting you
+when something breaks. And it runs on top of launchd, not instead of it (the login
+agent that keeps Hearth alive is a launchd job), to make a local runner behave like
+a real, always-on service on a machine nobody is sitting at.
 
 ## Requirements
 
@@ -212,6 +215,9 @@ The keys most people touch:
   the bearer token every request must carry.
 - `maintenanceRestartHours`: cycle a healthy runner this often (for example `24`)
   to clear memory creep. Off by default.
+- `probeModel`: turn on the deep readiness probe by naming a model. Hearth then runs
+  a one-token generation against it on an interval, catching a model or GPU hang the
+  shallow `/api/version` probe misses. Off by default; it does GPU work.
 - `runnerEnv`: extra environment variables for a managed runner (for example
   `OLLAMA_LOAD_TIMEOUT` or `OLLAMA_KEEP_ALIVE`), set from the **Set Env** button in
   Preferences or as a config map. Hearth sets `OLLAMA_HOST` itself from `host`/`port`.
@@ -274,6 +280,13 @@ Readiness asks whether the runner's version endpoint actually answers within the
 probe timeout. Readiness is the important half: it catches the alive but wedged
 runner that a liveness check alone would call healthy, and treats it as down. (In
 attached mode there is no child to inspect, so readiness is the whole signal.)
+
+That shallow readiness check catches a runner that has stopped answering, but not
+one whose HTTP server still answers while the model itself is wedged (a GPU or
+model-load hang). For that, set `probeModel`: Hearth then also runs a one-token
+generation against it on a slower interval, so an inference-level wedge is caught
+and restarted. It is off by default because it names a model and does GPU work; the
+shallow probe stays the default.
 
 When the runner stops serving, whether it crashed or wedged, Hearth restarts it
 (in managed mode) on an exponential backoff capped at `maxBackoffSeconds`. If

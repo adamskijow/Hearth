@@ -21,6 +21,7 @@ enum StatusCLI {
           Hearth events [-n N] [-f] Show Hearth's own event history (down, restart, recovered).
           Hearth metrics            Show memory and thermal history over the retained window.
           Hearth doctor             Check the config and environment for problems.
+          Hearth setup              Turnkey: detect the runner, install the login agent, wait for ready.
           Hearth wait-ready [-t S]  Block until the runner answers (exit 0), or time out (exit 1).
           Hearth install-agent      Install a login agent that keeps Hearth running (no sudo).
           Hearth uninstall-agent    Remove that login agent.
@@ -162,17 +163,23 @@ enum StatusCLI {
         }
 
         let config = ConfigStore.load().config
+        if isRunnerReady(config: config, timeout: timeout) { exit(0) }
+        FileHandle.standardError.write(Data(
+            "Hearth: runner at \(config.host):\(config.port) was not ready within \(Int(timeout))s.\n".utf8))
+        exit(1)
+    }
+
+    /// Poll the runner's readiness endpoint until it answers (200) or the timeout
+    /// elapses. Shared by `wait-ready` and `setup`.
+    static func isRunnerReady(config: HearthConfig, timeout: TimeInterval) -> Bool {
         let url = config.makeRunner().readinessEndpoint
         let deadline = Date().addingTimeInterval(timeout)
         repeat {
             let (_, response, _) = syncGET(url, bearer: nil, timeout: 3)
-            if (response as? HTTPURLResponse)?.statusCode == 200 { exit(0) }
+            if (response as? HTTPURLResponse)?.statusCode == 200 { return true }
             Thread.sleep(forTimeInterval: 1)
         } while Date() < deadline
-
-        FileHandle.standardError.write(Data(
-            "Hearth: runner at \(config.host):\(config.port) was not ready within \(Int(timeout))s.\n".utf8))
-        exit(1)
+        return false
     }
 
     // MARK: - doctor

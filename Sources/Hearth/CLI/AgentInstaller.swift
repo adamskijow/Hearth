@@ -17,6 +17,14 @@ enum AgentInstaller {
     }
 
     static func install() -> Never {
+        let result = performInstall()
+        for line in result.lines { print(line) }
+        exit(result.ok ? 0 : 1)
+    }
+
+    /// Do the install and return the outcome plus the lines to show, so `setup`
+    /// can drive it and keep going rather than exiting.
+    static func performInstall() -> (ok: Bool, lines: [String]) {
         let exe = Bundle.main.executablePath ?? CommandLine.arguments[0]
         let config = AppPaths.configFile.path
         let outLog = AppPaths.logDirectory.appendingPathComponent("headless.out.log").path
@@ -40,7 +48,7 @@ enum AgentInstaller {
             let data = try PropertyListSerialization.data(fromPropertyList: job, format: .xml, options: 0)
             try data.write(to: plistURL, options: .atomic)
         } catch {
-            fail("Could not write \(plistURL.path): \(error.localizedDescription)")
+            return (false, ["Could not write \(plistURL.path): \(error.localizedDescription)"])
         }
 
         // Reload cleanly: bootout any existing copy (ignore failure), then bootstrap.
@@ -48,25 +56,27 @@ enum AgentInstaller {
         _ = run("/bin/launchctl", ["bootout", "\(domain)/\(label)"])
         let loaded = run("/bin/launchctl", ["bootstrap", domain, plistURL.path])
 
-        print("Installed the Hearth headless LaunchAgent.")
-        print("  runs:   \(exe) --headless")
-        print("  config: \(config)")
-        print("  plist:  \(plistURL.path)")
-        print("  logs:   \(outLog)")
+        var lines = [
+            "Installed the Hearth headless LaunchAgent.",
+            "  runs:   \(exe) --headless",
+            "  config: \(config)",
+            "  plist:  \(plistURL.path)",
+            "  logs:   \(outLog)",
+        ]
         if loaded.ok {
-            print("Loaded and started; Hearth now runs headless at login and stays alive.")
+            lines.append("Loaded and started; Hearth now runs headless at login and stays alive.")
         } else {
-            print("Wrote the plist, but launchctl bootstrap reported:")
-            print("  \(loaded.output)")
-            print("Load it yourself with: launchctl bootstrap \(domain) \(plistURL.path)")
+            lines.append("Wrote the plist, but launchctl bootstrap reported:")
+            lines.append("  \(loaded.output)")
+            lines.append("Load it yourself with: launchctl bootstrap \(domain) \(plistURL.path)")
         }
         if exe.contains("/.build/") || exe.contains("/DerivedData/") {
-            print("Note: this points at a build directory, which is not stable. Install Hearth")
-            print("(make install or the cask) and run `hearth install-agent` from there.")
+            lines.append("Note: this points at a build directory, which is not stable. Install Hearth")
+            lines.append("(make install or the cask) and run `hearth install-agent` from there.")
         }
-        print("If the menubar app also launches, that is fine: whichever starts first supervises")
-        print("and the other stands by (single-instance guard). Remove this with `hearth uninstall-agent`.")
-        exit(loaded.ok ? 0 : 1)
+        lines.append("If the menubar app also launches, that is fine: whichever starts first supervises")
+        lines.append("and the other stands by (single-instance guard). Remove this with `hearth uninstall-agent`.")
+        return (loaded.ok, lines)
     }
 
     static func uninstall() -> Never {
@@ -100,10 +110,5 @@ enum AgentInstaller {
         } catch {
             return (false, error.localizedDescription)
         }
-    }
-
-    private static func fail(_ message: String) -> Never {
-        FileHandle.standardError.write(Data("Hearth: \(message)\n".utf8))
-        exit(1)
     }
 }

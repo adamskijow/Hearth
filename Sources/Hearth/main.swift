@@ -23,6 +23,8 @@ case "doctor":
     StatusCLI.printDoctor()  // exits
 case "wait-ready":
     StatusCLI.waitReady(Array(arguments.dropFirst()))  // exits
+case "setup":
+    SetupCLI.run()  // exits
 case "install-agent":
     AgentInstaller.install()  // exits
 case "uninstall-agent":

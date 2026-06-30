@@ -5,6 +5,18 @@ All notable changes to Hearth are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Optional deep readiness probe (`probeModel`). The default `/api/version` probe
+  only proves the HTTP server answers; it misses a wedged model runner that still
+  responds there (a GPU or model-load hang, the failure most people actually hit).
+  Set `probeModel` and Hearth periodically runs a one-token generation against it,
+  so an inference-level wedge is caught and restarted, while a working runner still
+  passes. Off by default (it names a model and does GPU work); tuned with
+  `deepProbeIntervalSeconds` and `deepProbeTimeoutSeconds`. Validated end to end
+  against a runner that answers `/api/version` but hangs `/api/generate`.
+
 ## [0.5.0] - 2026-06-30
 
 Onboarding: the most common newcomer, who already runs the official Ollama app, now

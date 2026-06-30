@@ -106,6 +106,18 @@ public enum RunnerHeuristics {
     }
 }
 
+/// A request that exercises real inference, for the optional deep readiness probe.
+/// The shallow readiness endpoint only proves the HTTP server answers; a deep probe
+/// proves the model runner is not wedged.
+public struct DeepProbeRequest: Sendable, Equatable {
+    public var url: URL
+    public var body: Data
+    public init(url: URL, body: Data) {
+        self.url = url
+        self.body = body
+    }
+}
+
 /// The seam that keeps each runner's specifics in one place. Ollama is the first
 /// implementation; LM Studio and mlx_lm can be added later without the engine or
 /// the decision logic learning anything Ollama specific. Every Ollama string,
@@ -131,4 +143,13 @@ public protocol Runner: Sendable {
     /// Pure: same inputs always yield the same verdict, so it is testable from
     /// fixture log lines with no real process.
     func classifyExit(_ exit: ProcessExit?, stderr: [String]) -> ExitReason
+
+    /// A request that runs a tiny inference against the named model, for the
+    /// optional deep readiness probe. nil when the runner cannot build one (an empty
+    /// model, or a runner without an inference endpoint Hearth knows). Default: nil.
+    func deepReadinessRequest(model: String) -> DeepProbeRequest?
+}
+
+public extension Runner {
+    func deepReadinessRequest(model: String) -> DeepProbeRequest? { nil }
 }

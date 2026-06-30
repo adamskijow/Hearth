@@ -124,6 +124,10 @@ final class FakeHTTPClient: HTTPClient, @unchecked Sendable {
     func get(_ url: URL, timeout: TimeInterval) async -> HTTPOutcome {
         lock.withLock { outcomes[url.absoluteString] ?? _default }
     }
+
+    func post(_ url: URL, body: Data, timeout: TimeInterval) async -> HTTPOutcome {
+        lock.withLock { outcomes[url.absoluteString] ?? _default }
+    }
 }
 
 /// Records the notifications the engine decides to send.

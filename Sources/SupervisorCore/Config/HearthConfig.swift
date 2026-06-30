@@ -42,6 +42,13 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     /// managed runner adopts the new version instead of serving the old one. Off
     /// by default.
     public var restartOnBinaryChange: Bool
+    /// Optional deep readiness probe. When `probeModel` is set, Hearth periodically
+    /// runs a one-token generation against that model, on top of the cheap shallow
+    /// probe, to catch a wedged model runner that still answers the shallow
+    /// endpoint. Off by default (no probe model).
+    public var probeModel: String?
+    public var deepProbeIntervalSeconds: Double
+    public var deepProbeTimeoutSeconds: Double
 
     // Notifications
     public var ntfyTopic: String?
@@ -93,6 +100,9 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 failingProbeIntervalSeconds: Double = 30,
                 maintenanceRestartHours: Double = 0,
                 restartOnBinaryChange: Bool = false,
+                probeModel: String? = nil,
+                deepProbeIntervalSeconds: Double = 60,
+                deepProbeTimeoutSeconds: Double = 30,
                 ntfyTopic: String? = nil,
                 ntfyServer: String = "https://ntfy.sh",
                 webhookURL: String? = nil,
@@ -129,6 +139,9 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.failingProbeIntervalSeconds = failingProbeIntervalSeconds
         self.maintenanceRestartHours = maintenanceRestartHours
         self.restartOnBinaryChange = restartOnBinaryChange
+        self.probeModel = probeModel
+        self.deepProbeIntervalSeconds = deepProbeIntervalSeconds
+        self.deepProbeTimeoutSeconds = deepProbeTimeoutSeconds
         self.ntfyTopic = ntfyTopic
         self.ntfyServer = ntfyServer
         self.webhookURL = webhookURL
@@ -186,6 +199,9 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         failingProbeIntervalSeconds = try value(.failingProbeIntervalSeconds, defaults.failingProbeIntervalSeconds)
         maintenanceRestartHours = try value(.maintenanceRestartHours, defaults.maintenanceRestartHours)
         restartOnBinaryChange = try value(.restartOnBinaryChange, defaults.restartOnBinaryChange)
+        probeModel = try c.decodeIfPresent(String.self, forKey: .probeModel)
+        deepProbeIntervalSeconds = try value(.deepProbeIntervalSeconds, defaults.deepProbeIntervalSeconds)
+        deepProbeTimeoutSeconds = try value(.deepProbeTimeoutSeconds, defaults.deepProbeTimeoutSeconds)
         ntfyTopic = try c.decodeIfPresent(String.self, forKey: .ntfyTopic)
         webhookURL = try c.decodeIfPresent(String.self, forKey: .webhookURL)
         ntfyServer = try value(.ntfyServer, defaults.ntfyServer)
@@ -234,6 +250,16 @@ public struct HearthConfig: Codable, Sendable, Equatable {
             maintenanceRestartInterval: maintenanceRestartHours <= 0 ? 0 : max(3600, maintenanceRestartHours * 3600),
             restartOnBinaryChange: restartOnBinaryChange
         )
+    }
+
+    /// The deep readiness probe these settings describe, or nil when disabled (no
+    /// probe model). Floors keep a misconfiguration from busy-probing.
+    public func deepProbe() -> DeepProbeConfig? {
+        guard let model = probeModel?.trimmingCharacters(in: .whitespaces), !model.isEmpty else { return nil }
+        return DeepProbeConfig(
+            model: model,
+            interval: max(5, deepProbeIntervalSeconds),
+            timeout: max(1, deepProbeTimeoutSeconds))
     }
 
     /// The memory and thermal pressure alert thresholds these settings describe.

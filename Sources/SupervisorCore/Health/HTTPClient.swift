@@ -22,4 +22,8 @@ public enum HTTPOutcome: Sendable, Equatable {
 /// implementation returns scripted outcomes per URL with no network.
 public protocol HTTPClient: Sendable {
     func get(_ url: URL, timeout: TimeInterval) async -> HTTPOutcome
+    /// POST a JSON body, mapped to the same coarse outcomes as `get`. Used only by
+    /// the optional deep readiness probe, which exercises real inference to catch a
+    /// wedged model runner the shallow endpoint misses.
+    func post(_ url: URL, body: Data, timeout: TimeInterval) async -> HTTPOutcome
 }

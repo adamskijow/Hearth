@@ -36,7 +36,8 @@ struct SupervisorAssembly {
             power: IOKitPowerManager(),
             notifier: notifier,
             policy: config.policy(),
-            managed: config.isManaged
+            managed: config.isManaged,
+            deepProbe: config.deepProbe()
         )
         let coordinator = SupervisionCoordinator(engine: engine)
 

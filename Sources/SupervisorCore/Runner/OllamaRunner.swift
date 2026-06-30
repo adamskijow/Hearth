@@ -71,6 +71,22 @@ public struct OllamaRunner: Runner {
     public func classifyExit(_ exit: ProcessExit?, stderr: [String]) -> ExitReason {
         RunnerHeuristics.classify(exit, stderr: stderr, oomSignatures: oomSignatures)
     }
+
+    /// A one-token `/api/generate` against the named model. This actually runs the
+    /// model, so it catches a wedged runner that still answers `/api/version`.
+    public func deepReadinessRequest(model: String) -> DeepProbeRequest? {
+        let trimmed = model.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return nil }
+        let payload: [String: Any] = [
+            "model": trimmed,
+            "prompt": "ping",
+            "stream": false,
+            "keep_alive": "5m",
+            "options": ["num_predict": 1],
+        ]
+        guard let body = try? JSONSerialization.data(withJSONObject: payload) else { return nil }
+        return DeepProbeRequest(url: runnerEndpoint(host: host, port: port, path: "/api/generate"), body: body)
+    }
 }
 
 // MARK: - Ollama /api/ps JSON shape

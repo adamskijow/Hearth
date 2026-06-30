@@ -27,6 +27,17 @@ struct OllamaRunnerTests {
         #expect(env["OLLAMA_HOST"] == "0.0.0.0:11434")   // host wins, not the runnerEnv value
     }
 
+    @Test func deepReadinessRequestIsAOneTokenGenerate() throws {
+        let runner = OllamaRunner(binaryPath: "/x", host: "127.0.0.1", port: 11434)
+        let req = try #require(runner.deepReadinessRequest(model: "llama3:8b"))
+        #expect(req.url.absoluteString == "http://127.0.0.1:11434/api/generate")
+        let json = try JSONSerialization.jsonObject(with: req.body) as? [String: Any]
+        #expect(json?["model"] as? String == "llama3:8b")
+        #expect(json?["stream"] as? Bool == false)
+        // An empty or blank model means no deep probe.
+        #expect(runner.deepReadinessRequest(model: "   ") == nil)
+    }
+
     @Test func endpoints() {
         let runner = OllamaRunner(binaryPath: "/x", host: "127.0.0.1", port: 11434)
         #expect(runner.readinessEndpoint.absoluteString == "http://127.0.0.1:11434/api/version")

@@ -18,7 +18,8 @@ struct EngineTests {
         let runner: OllamaRunner
     }
 
-    private func makeHarness(policy: RestartPolicyConfig = RestartPolicyConfig(startupGrace: 30)) -> Harness {
+    private func makeHarness(policy: RestartPolicyConfig = RestartPolicyConfig(startupGrace: 30),
+                             deepProbe: DeepProbeConfig? = nil) -> Harness {
         let clock = ManualClock(now: Date(timeIntervalSince1970: 0))
         let processes = FakeProcessController()
         let http = FakeHTTPClient()
@@ -32,7 +33,8 @@ struct EngineTests {
             runner: runner,
             power: power,
             notifier: notifier,
-            policy: policy
+            policy: policy,
+            deepProbe: deepProbe
         )
         return Harness(engine: engine, clock: clock, processes: processes, http: http,
                        power: power, notifier: notifier, runner: runner)
@@ -276,5 +278,39 @@ struct EngineTests {
         // so a crash-orphaned grandchild cannot stack up across a restart loop.
         #expect(h.processes.terminatedHandles.contains(first))
         #expect(h.processes.spawnCount == 2)
+    }
+
+    // MARK: - Deep readiness probe
+
+    /// The inference-only wedge: /api/version answers, but /api/generate hangs.
+    /// Without a deep probe, Hearth cannot see it and stays healthy.
+    @Test func shallowProbeMissesAnInferenceWedge() async {
+        let h = makeHarness()                       // no deep probe
+        makeServing(h)
+        h.http.set(h.runner.deepReadinessRequest(model: "llama3:8b")!.url, .timedOut)
+
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+        #expect(await h.engine.snapshot().phase == .healthy)   // blind to the wedge
+    }
+
+    /// With a deep probe, the same wedge is caught: the deep request times out, so
+    /// the runner is treated as not ready and restarted, unlike the shallow case.
+    @Test func deepProbeCatchesAnInferenceWedge() async {
+        let h = makeHarness(deepProbe: DeepProbeConfig(model: "llama3:8b", interval: 60, timeout: 30))
+        makeServing(h)
+        let deepURL = h.runner.deepReadinessRequest(model: "llama3:8b")!.url
+        h.http.set(deepURL, .ok(Data("{}".utf8)))   // inference works at first
+
+        await h.engine.start()
+        _ = await h.engine.stepOnce()                // shallow + deep ok -> healthy
+        #expect(await h.engine.snapshot().phase == .healthy)
+
+        // The model runner wedges: /api/generate now hangs, /api/version still answers.
+        h.http.set(deepURL, .timedOut)
+        h.clock.advance(by: 61)                       // the deep probe is due again
+        _ = await h.engine.stepOnce()
+
+        #expect(await h.engine.snapshot().phase != .healthy)   // caught it
     }
 }

@@ -20,6 +20,9 @@ public actor SupervisorEngine {
     /// and notifies on transitions, but never spawns or kills a process it does
     /// not own.
     private let managed: Bool
+    /// The optional deep readiness probe (a periodic real inference), or nil when
+    /// only the shallow `/api/version` probe is used.
+    private let deepProbe: DeepProbeConfig?
 
     private var machine: SupervisorMachine
     private var currentHandle: ProcessHandleID?
@@ -28,6 +31,9 @@ public actor SupervisorEngine {
     private var currentModels: [ResidentModel] = []
     private var current: SupervisorState = SupervisorState()
     private var lastSpawnError: String?
+    /// When the deep probe last ran, so it runs on its own slower cadence. Reset at
+    /// each spawn so a fresh runner is deep-probed once it is shallow-ready.
+    private var lastDeepProbeAt: Date?
     private var looping = false
 
     /// Continuous published state. One consumer; the app reads `snapshot()` for
@@ -45,7 +51,8 @@ public actor SupervisorEngine {
                 power: PowerManaging,
                 notifier: Notifier,
                 policy: RestartPolicyConfig,
-                managed: Bool = true) {
+                managed: Bool = true,
+                deepProbe: DeepProbeConfig? = nil) {
         self.clock = clock
         self.processes = processes
         self.http = http
@@ -54,6 +61,7 @@ public actor SupervisorEngine {
         self.notifier = notifier
         self.policy = policy
         self.managed = managed
+        self.deepProbe = deepProbe
         self.machine = SupervisorMachine(config: policy)
 
         let (stateStream, stateCont) = AsyncStream.makeStream(of: SupervisorState.self)
@@ -148,7 +156,10 @@ public actor SupervisorEngine {
             // treats it as a failure without trying to kill a process we do not
             // own (the kill effect is skipped anyway).
             let outcome = await http.get(runner.readinessEndpoint, timeout: policy.probeTimeout)
-            let readiness = Readiness.from(outcome)
+            var readiness = Readiness.from(outcome)
+            if readiness == .ready, !(await deepProbePassed(now: now)) {
+                readiness = .timedOut   // the HTTP server answers, but inference is wedged
+            }
             guard readiness == .ready else {
                 return HealthReport(isAlive: false, readiness: readiness, exitReason: .unknown)
             }
@@ -169,7 +180,10 @@ public actor SupervisorEngine {
                                 recentStderr: status.recentStderr)
         }
         let outcome = await http.get(runner.readinessEndpoint, timeout: policy.probeTimeout)
-        let readiness = Readiness.from(outcome)
+        var readiness = Readiness.from(outcome)
+        if readiness == .ready, !(await deepProbePassed(now: now)) {
+            readiness = .timedOut   // the HTTP server answers, but inference is wedged
+        }
         var models = currentModels
         if readiness == .ready, let fetched = await fetchModels() {
             models = fetched
@@ -185,6 +199,19 @@ public actor SupervisorEngine {
         let outcome = await http.get(runner.modelsEndpoint, timeout: policy.probeTimeout)
         guard case .ok(let data) = outcome else { return nil }
         return try? runner.parseResidentModels(data)
+    }
+
+    /// The optional deep readiness probe, run on its own slower cadence. Returns true
+    /// when it is not enabled, not yet due, or it passed; false when a real inference
+    /// request fails or times out, which means the model runner is wedged even though
+    /// the shallow endpoint still answers.
+    private func deepProbePassed(now: Date) async -> Bool {
+        guard let deep = deepProbe else { return true }
+        if let last = lastDeepProbeAt, now.timeIntervalSince(last) < deep.interval { return true }
+        guard let request = runner.deepReadinessRequest(model: deep.model) else { return true }
+        lastDeepProbeAt = now
+        if case .ok = await http.post(request.url, body: request.body, timeout: deep.timeout) { return true }
+        return false
     }
 
     // MARK: - Effect interpretation
@@ -232,6 +259,7 @@ public actor SupervisorEngine {
         if let previous = currentHandle {
             processes.terminate(previous)
         }
+        lastDeepProbeAt = nil   // deep-probe the fresh runner once it is shallow-ready
         do {
             currentHandle = try processes.spawn(runner.processSpec())
             spawnedBinaryFingerprint = processes.executableFingerprint(at: runner.processSpec().executableURL)

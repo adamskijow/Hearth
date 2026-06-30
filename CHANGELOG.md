@@ -5,7 +5,11 @@ All notable changes to Hearth are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.0] - 2026-06-30
+
+A deeper health check: an optional probe that runs a real one-token generation, so a
+wedged model runner that still answers the shallow endpoint (a GPU or model-load
+hang) is caught and restarted, not just a frozen process.
 
 ### Added
 - Optional deep readiness probe (`probeModel`). The default `/api/version` probe

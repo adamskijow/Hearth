@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
     private var preferences: PreferencesController?
+    private var welcome: WelcomeController?
 
     private var latestState = SupervisorState()
     private var configNote: String?
@@ -37,7 +38,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
-        LocalNotifier.requestAuthorization()
+        // Ask for notification permission only once the user has seen the welcome
+        // (which asks for it with context). On a first-ever launch the welcome
+        // window handles it, so there is no cold prompt the instant Hearth opens.
+        if UserDefaults.standard.bool(forKey: WelcomeController.shownKey) {
+            LocalNotifier.requestAuthorization()
+        }
         // Recover from a previous hard crash: sweep any leaked runner group before
         // we start a new one.
         if let swept = RunnerStateStore.sweepOrphan() {
@@ -137,11 +143,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func firstRunGuidance(_ loaded: ConfigLoad) {
-        if let missing = binaryMissingPath {
-            let suffix = suggestedBinaryPath.map { " Found one at \($0) (open Preferences to use it)." } ?? " Set the runner binary in Preferences."
-            LocalNotifier.post(title: "Hearth: runner not found", body: "\(runner.name) is not at \(missing).\(suffix)")
-        } else if loaded.createdDefault {
-            LocalNotifier.post(title: "Hearth is running", body: "Supervising \(runner.name). Open Preferences from the menubar to customize.")
+        // Show the welcome window once, ever: it orients a first-time user (a
+        // menubar app with no window is easy to lose), confirms what was found, and
+        // asks for notification permission with context.
+        guard !UserDefaults.standard.bool(forKey: WelcomeController.shownKey) else { return }
+        let foundPath: String? = binaryMissingPath == nil ? config.selectedBinaryPath : suggestedBinaryPath
+        let welcome = WelcomeController()
+        self.welcome = welcome
+        welcome.show(
+            runner: config.runner,
+            foundPath: foundPath,
+            installHint: Self.installHint(for: config.runner),
+            onEnableNotifications: { LocalNotifier.requestAuthorization() },
+            onOpenPreferences: { [weak self] in self?.openPreferencesTapped() }
+        )
+    }
+
+    private static func installHint(for runner: String) -> String {
+        switch runner.lowercased() {
+        case "lmstudio", "lm-studio", "lm_studio": return "brew install --cask lm-studio"
+        case "mlx", "mlx_lm", "mlx-lm": return "pip install mlx-lm"
+        default: return "brew install ollama"
         }
     }
 

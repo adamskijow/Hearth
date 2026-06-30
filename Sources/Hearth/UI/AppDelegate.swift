@@ -165,6 +165,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             foundPath: foundPath,
             installHint: Self.installHint(for: config.runner),
             collisionWarning: preexistingRunnerWarning,
+            onSwitchToAttached: { [weak self] in self?.switchToAttachedTapped() },
             onEnableNotifications: { LocalNotifier.requestAuthorization() },
             onOpenPreferences: { [weak self] in self?.openPreferencesTapped() }
         )
@@ -292,6 +293,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let warning = preexistingRunnerWarning {
             menu.addItem(infoRow(headlineAttr("\u{26A0} Already running", color: .systemYellow)))
             menu.addItem(infoRow(detailAttr("   \(warning)")))
+            addAction("Switch to Attached Mode", #selector(switchToAttachedTapped), enabled: true)
             menu.addItem(.separator())
         }
 
@@ -550,6 +552,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case "mlx", "mlx_lm", "mlx-lm": updated.mlxBinaryPath = detected
         default: updated.ollamaBinaryPath = detected
         }
+        ConfigStore.save(updated)
+        Task { await reloadFromDisk(firstRun: false) }
+    }
+
+    /// Resolve the pre-existing-runner collision in one click: stop fighting for the
+    /// port and watch the runner that is already up.
+    @objc private func switchToAttachedTapped() {
+        var updated = config
+        updated.mode = "attached"
         ConfigStore.save(updated)
         Task { await reloadFromDisk(firstRun: false) }
     }

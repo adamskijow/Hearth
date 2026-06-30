@@ -19,6 +19,7 @@ final class WelcomeController: NSObject, NSWindowDelegate {
               foundPath: String?,
               installHint: String,
               collisionWarning: String?,
+              onSwitchToAttached: @escaping () -> Void,
               onEnableNotifications: @escaping () -> Void,
               onOpenPreferences: @escaping () -> Void) {
         let view = WelcomeView(
@@ -26,6 +27,7 @@ final class WelcomeController: NSObject, NSWindowDelegate {
             foundPath: foundPath,
             installHint: installHint,
             collisionWarning: collisionWarning,
+            onSwitchToAttached: { [weak self] in self?.window?.close(); onSwitchToAttached() },
             onEnableNotifications: onEnableNotifications,
             onOpenPreferences: { [weak self] in self?.window?.close(); onOpenPreferences() },
             onDone: { [weak self] in self?.window?.close() }
@@ -59,6 +61,7 @@ struct WelcomeView: View {
     let foundPath: String?
     let installHint: String
     let collisionWarning: String?
+    let onSwitchToAttached: () -> Void
     let onEnableNotifications: () -> Void
     let onOpenPreferences: () -> Void
     let onDone: () -> Void
@@ -167,11 +170,13 @@ struct WelcomeView: View {
         HStack(alignment: .top, spacing: 11) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .foregroundStyle(.yellow).font(.title3)
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text("\(runnerLabel) is already running").fontWeight(.medium)
                 Text(message)
                     .font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                Button("Switch to attached mode", action: onSwitchToAttached)
+                    .controlSize(.small)
             }
             Spacer(minLength: 0)
         }

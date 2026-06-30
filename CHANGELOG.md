@@ -8,11 +8,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
-- First-run collision detection. When a runner Hearth did not start is already
-  serving the port (most often the official Ollama app, which auto-runs the server),
-  managed mode would silently fight it for the port. The welcome window, the menu,
-  and `hearth doctor` now flag it with the fix: switch to attached mode to watch the
-  running one, or quit it so Hearth can manage its own.
+- First-run collision detection with a one-click fix. When a runner Hearth did not
+  start is already serving the port (most often the official Ollama app, which
+  auto-runs the server), managed mode would silently fight it for the port. The
+  welcome window and the menu now flag it with a **Switch to Attached Mode** button
+  that resolves it in one click (Hearth watches the running one instead of fighting
+  it), and `hearth doctor` reports the same fix.
 - The welcome window now reassures a new user that their apps need no changes, they
   keep talking to the runner as they do now, and several apps and models can share
   the one runner.

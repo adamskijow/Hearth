@@ -5,7 +5,11 @@ All notable changes to Hearth are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0] - 2026-06-30
+
+Onboarding: the most common newcomer, who already runs the official Ollama app, now
+gets told about the port collision and resolves it in one click, and is reassured
+that their apps need no changes.
 
 ### Added
 - First-run collision detection with a one-click fix. When a runner Hearth did not

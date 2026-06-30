@@ -25,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var configNote: String?
     private var configProblem = false
     private var configDiagnostics: [Diagnostic] = []
+    private var competingManagerWarning: String?
     private var binaryMissingPath: String?
     private var suggestedBinaryPath: String?
     private var signalSources: [DispatchSourceSignal] = []
@@ -105,6 +106,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         configNote = loaded.note
         configProblem = loaded.isProblem
         configDiagnostics = ConfigDiagnostics.check(loaded.config)
+        competingManagerWarning = RunnerManagerConflict.warning(
+            runner: loaded.config.runner, mode: loaded.config.mode, loadedLabels: LaunchdLabels.loaded())
         binaryMissingPath = nil
         suggestedBinaryPath = nil
         if config.isManaged, !FileManager.default.isExecutableFile(atPath: config.selectedBinaryPath) {
@@ -246,6 +249,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             for diagnostic in configDiagnostics {
                 menu.addItem(infoRow(detailAttr("   \(diagnostic.message)")))
             }
+            menu.addItem(.separator())
+        }
+        if let conflict = competingManagerWarning {
+            menu.addItem(infoRow(headlineAttr("\u{26A0} Competing manager", color: .systemYellow)))
+            menu.addItem(infoRow(detailAttr("   \(conflict)")))
             menu.addItem(.separator())
         }
 

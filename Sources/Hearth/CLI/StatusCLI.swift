@@ -16,7 +16,7 @@ enum StatusCLI {
         Usage:
           Hearth                    Run as a menubar agent (default).
           Hearth --headless         Run headless (no GUI), for a LaunchDaemon.
-          Hearth status             Print the current supervision status.
+          Hearth status [--json]    Print the current supervision status (--json for agents).
           Hearth logs [-n N] [-f]   Show the runner log (last N lines; -f to follow).
           Hearth events [-n N] [-f] Show Hearth's own event history (down, restart, recovered).
           Hearth metrics            Show memory and thermal history over the retained window.
@@ -35,7 +35,8 @@ enum StatusCLI {
 
     // MARK: - status
 
-    static func printStatus() -> Never {
+    static func printStatus(_ args: [String] = []) -> Never {
+        let json = args.contains("--json")
         let config = ConfigStore.load().config
 
         if config.controlEnabled, let token = config.controlToken, !token.isEmpty {
@@ -43,17 +44,62 @@ enum StatusCLI {
             let (data, response, _) = syncGET(url, bearer: token, timeout: 3)
             if let data, (response as? HTTPURLResponse)?.statusCode == 200,
                let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                printControlStatus(object)
-                printRecentEvents()
+                if json {
+                    emitStatusJSON(control: object)
+                } else {
+                    printControlStatus(object)
+                    printRecentEvents()
+                }
                 exit(0)
             }
-            FileHandle.standardError.write(Data(
-                "Could not reach Hearth's control endpoint at \(config.controlHost):\(config.controlPort).\n".utf8))
+            if !json {
+                FileHandle.standardError.write(Data(
+                    "Could not reach Hearth's control endpoint at \(config.controlHost):\(config.controlPort).\n".utf8))
+            }
         }
 
-        printReducedStatus(config: config)
-        printRecentEvents()
+        if json {
+            emitReducedJSON(config: config)
+        } else {
+            printReducedStatus(config: config)
+            printRecentEvents()
+        }
         exit(0)
+    }
+
+    /// Machine-readable status, for an agent verifying a setup. `healthy` is the
+    /// one field a script usually wants. Source is "control" (full picture) or
+    /// "reduced" (control endpoint off or unreachable).
+    private static func emitStatusJSON(control s: [String: Any]) {
+        var out = s
+        out["source"] = "control"
+        out["supervising"] = true
+        out["healthy"] = (s["phase"] as? String) == "healthy"
+        out["recentEvents"] = EventLogStore.recent(6)
+        emitJSON(out)
+    }
+
+    private static func emitReducedJSON(config: HearthConfig) {
+        let serving = isSomethingListening(host: config.host, port: config.port)
+        var out: [String: Any] = [
+            "source": "reduced",
+            "controlEndpoint": config.controlEnabled ? "unreachable" : "off",
+            "runner": config.runner,
+            "runnerHost": config.host,
+            "runnerPort": config.port,
+            "runnerServing": serving,
+            "healthy": serving,
+            "recentEvents": EventLogStore.recent(6),
+        ]
+        if let identity = recordedRunner(), kill(identity.pid, 0) == 0 {
+            out["supervisedPid"] = Int(identity.pid)
+        }
+        emitJSON(out)
+    }
+
+    private static func emitJSON(_ dict: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]) else { return }
+        print(String(decoding: data, as: UTF8.self))
     }
 
     /// The tail of the persisted event log, which survives a Hearth restart.
@@ -177,6 +223,14 @@ enum StatusCLI {
             print(mark(nil) + " attached target is serving on \(config.host):\(config.port)")
         } else {
             report(Diagnostic(.warning, "Attached mode, but nothing is serving on \(config.host):\(config.port) yet."))
+        }
+
+        // Another manager (brew services) keeping the same runner alive?
+        if let conflict = RunnerManagerConflict.warning(
+            runner: config.runner, mode: config.mode, loadedLabels: LaunchdLabels.loaded()) {
+            report(Diagnostic(.warning, conflict))
+        } else if config.isManaged {
+            print(mark(nil) + " no competing manager for \(config.runner) (brew services etc.)")
         }
 
         // Log directory writable?

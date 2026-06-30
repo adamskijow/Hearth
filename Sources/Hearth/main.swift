@@ -12,7 +12,7 @@ let arguments = Array(CommandLine.arguments.dropFirst())
 
 switch arguments.first {
 case "status":
-    StatusCLI.printStatus()  // exits
+    StatusCLI.printStatus(Array(arguments.dropFirst()))  // exits
 case "logs":
     StatusCLI.tailLogs(Array(arguments.dropFirst()))  // exits
 case "events":

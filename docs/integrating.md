@@ -24,10 +24,12 @@ the runner alive underneath you.
 
    ```sh
    brew install --cask adamskijow/tap/hearth   # if not already installed
-   hearth install-agent                         # keep the runner alive at login
+   hearth setup                                 # detect runner, install agent, wait for ready
    ```
 
-   `hearth install-agent` writes a per-user LaunchAgent
+   `hearth setup` is the one-shot path: it detects the runner, points the config at
+   it, installs the login agent, and waits for the runner to come up. If you want
+   just the agent step, `hearth install-agent` writes a per-user LaunchAgent
    (`~/Library/LaunchAgents/com.hearth.headless.plist`) that runs Hearth headless
    at login and keeps it alive. It needs no sudo, and it is safe to run even if
    Hearth is already set up or the menubar app is also running (the guard makes one
@@ -51,9 +53,11 @@ the runner alive underneath you.
    invisible.
 
 4. **Optionally, read Hearth's own health.** If the control endpoint is enabled,
-   `GET /healthz` (unauthenticated) returns `200` when Hearth is up, and
-   `GET /status` (with the bearer token) returns the phase, uptime, resident
-   models, and metrics. Useful for a dashboard, not required for normal operation.
+   `GET /healthz` (unauthenticated) returns `200` when Hearth is up, `GET /status`
+   (with the bearer token) returns the phase, uptime, resident models, and metrics,
+   and `GET /metrics` (with the token) exposes the same as a Prometheus text
+   exposition for Grafana or Uptime Kuma. Useful for a dashboard, not required for
+   normal operation.
 
 ## Do not
 

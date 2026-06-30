@@ -39,6 +39,7 @@ or mode, a control endpoint with no token, timings that cannot grow).
 | `crashLoopWindowSeconds` | number | `60` | Sliding window for counting failures toward the brake. |
 | `failingProbeIntervalSeconds` | number | `30` | Slow, steady retry cadence once in the crash-loop (failing) state. |
 | `maintenanceRestartHours` | number | `0` | Proactively cycle a healthy runner this often (in hours) to clear the memory creep that degrades a 24/7 runner. `0` disables it; an enabled value is floored at 1 hour. A common value is `24`. |
+| `restartOnBinaryChange` | bool | `false` | Restart a managed runner when its binary changes on disk (an upgrade), so it adopts the new version instead of serving the old one. Catches a Homebrew Cellar relink. |
 
 ## Notifications
 

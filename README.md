@@ -311,7 +311,7 @@ Logs. The child's stdout and stderr are captured to
 
 ## Keeping a 24/7 runner fresh
 
-Two opt-in features address what degrades a runner left up for days, not what
+A few opt-in features address what degrades a runner left up for days, not what
 crashes it.
 
 A widely reported problem with a long-running Ollama is gradual memory creep and
@@ -322,6 +322,13 @@ it cycles a healthy runner on that interval, clearing the creep. It is a clean
 restart counted off the runner's healthy uptime, so a reactive restart resets the
 clock too, and the return to healthy is quiet (no "recovered" alert for a routine
 cycle). Off by default.
+
+When you `brew upgrade ollama`, the running serve is still the old binary until
+something restarts it, and Hearth would otherwise keep the old version alive
+forever. Set `restartOnBinaryChange` and Hearth notices the runner binary changed
+on disk (it follows the Homebrew symlink into the Cellar) and adopts the new
+version through the same quiet maintenance restart. Off by default; managed mode
+only.
 
 Hearth already samples the thermal state and memory pressure for the menubar; it
 can also alert on them. When system memory crosses `memoryAlertPercent` (default
@@ -350,8 +357,11 @@ curl -X POST -H "Authorization: Bearer $TOKEN" http://HOST:11435/start
 
 `/status` returns a compact JSON document with the phase, resident models,
 uptime, restart count, last restart reason, and the system metrics (thermal
-state, memory used percent, runner resident bytes). The control endpoint is a
-control surface, not a public API: bind it to localhost or a private interface (a
+state, memory used percent, runner resident bytes). `/metrics` returns the same
+data as a Prometheus text exposition (also behind the token), so you can scrape
+Hearth into Grafana or Uptime Kuma; and the unauthenticated `/healthz` returns
+`200` when Hearth is up, for an uptime monitor. The control endpoint is a control
+surface, not a public API: bind it to localhost or a private interface (a
 Tailscale address is ideal) and keep it behind a VPN. It refuses to start without
 a token, and rejects any request whose bearer token does not match.
 
@@ -372,7 +382,8 @@ From the same machine, two terminal subcommands give a quick read without the
 menubar or a curl invocation:
 
 ```
-hearth status              # phase, uptime, restarts, metrics, resident models
+hearth setup               # turnkey: detect runner, install login agent, wait for ready
+hearth status [--json]     # phase, uptime, restarts, metrics, resident models (--json for agents)
 hearth logs -n 100         # last 100 lines of the runner log
 hearth logs -f             # follow the runner log
 hearth events              # Hearth's own event history (down, restart, recovered)
@@ -429,6 +440,12 @@ also shows a "config issues" line when it finds any.
   process group it owns and sweeps it on the next launch. If you deleted
   `runner-state.json` by hand, that record is gone; kill the stray once and let
   Hearth own the next one.
+- **The runner keeps restarting and the state churns (managed mode).** Something
+  else is also managing the runner and fighting Hearth over it, most often
+  `brew services`. `hearth doctor` and the menu flag this; run
+  `brew services stop ollama` so Hearth is the sole supervisor. (Two Hearths can
+  also collide; the single-instance guard handles that, but a non-Hearth manager
+  needs stopping.)
 
 ## Running headless
 

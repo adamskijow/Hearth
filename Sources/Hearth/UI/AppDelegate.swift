@@ -19,6 +19,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var config = HearthConfig()
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
+    private var menuTickTimer: Timer?
+    private weak var liveHeadlineField: NSTextField?
     private var preferences: PreferencesController?
     private var welcome: WelcomeController?
 
@@ -281,7 +283,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // Health: a bright, color-coded headline, then a couple of detail lines.
         let phaseColor = MenuFormat.tint(for: latestState.phase) ?? .labelColor
-        menu.addItem(infoRow(headlineAttr(StatusText.headline(latestState, now: now), color: phaseColor)))
+        let headlineItem = infoRow(headlineAttr(StatusText.headline(latestState, now: now), color: phaseColor))
+        menu.addItem(headlineItem)
+        // The down and failing headlines carry a retry countdown; hold the field so
+        // the menu can tick it live while open (a menu is otherwise a static
+        // snapshot taken when it opened).
+        liveHeadlineField = (latestState.phase == .down || latestState.phase == .failing)
+            ? headlineItem.view?.subviews.first as? NSTextField : nil
         menu.addItem(infoRow(detailAttr(StatusText.contextLine(
             latestState, runnerName: runner.name, managed: config.isManaged, now: now))))
         if latestState.phase != .healthy, let reason = latestState.lastRestartReason {
@@ -340,6 +348,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         menu.addItem(.separator())
         addAction("Quit Hearth", #selector(quitTapped), enabled: true, keyEquivalent: "q")
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        // Only the down/failing headline has a live retry countdown to advance.
+        guard liveHeadlineField != nil else { return }
+        // A default-mode timer does not fire while a menu is tracking, so add it to
+        // the common modes.
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.tickHeadline() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        menuTickTimer = timer
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        menuTickTimer?.invalidate()
+        menuTickTimer = nil
+    }
+
+    private func tickHeadline() {
+        guard let field = liveHeadlineField else { return }
+        let color = MenuFormat.tint(for: latestState.phase) ?? .labelColor
+        field.attributedStringValue = headlineAttr(StatusText.headline(latestState, now: Date()), color: color)
     }
 
     // MARK: - Menu helpers

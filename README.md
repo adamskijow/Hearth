@@ -23,7 +23,7 @@ logs only to judge whether it is healthy.
 
 ## Contents
 
-**Start here** &nbsp; [Quickstart](#quickstart) · [Why this exists](#why-this-exists) · [Hearth vs launchd / brew services](#hearth-vs-launchd-keepalive-vs-brew-services) · [Requirements](#requirements) · [Install and build](#install-and-build)
+**Start here** &nbsp; [Quickstart](#quickstart) · [Why this exists](#why-this-exists) · [Why not launchd / brew services](#why-not-just-launchd-or-brew-services) · [Requirements](#requirements) · [Install and build](#install-and-build)
 
 **Use it** &nbsp; [Configure](#configure) · [How it works](#how-it-works) · [Keeping a 24/7 runner fresh](#keeping-a-247-runner-fresh) · [Remote control](#remote-control) · [Troubleshooting](#troubleshooting)
 
@@ -94,28 +94,16 @@ spawn, so the listen address is correct by construction.
 Hearth exists to make a local runner behave like a real, always on service on a
 machine nobody is sitting at.
 
-## Hearth vs launchd KeepAlive vs brew services
+## Why not just launchd or brew services?
 
-The usual ways to keep a runner up restart the process when it exits. They do not
-know whether it is actually answering, and they do nothing about sleep, the listen
-address, or telling you when something is wrong.
-
-| | Hearth | launchd `KeepAlive` | `brew services` |
-|---|:---:|:---:|:---:|
-| Restart when the process exits (crash) | yes | yes | yes |
-| Restart when it is **alive but wedged** (readiness) | yes | no | no |
-| Crash-loop backoff | yes | partial (`ThrottleInterval`) | partial |
-| Keep the Mac awake while serving | yes | no | no |
-| Correct listen address (no `OLLAMA_HOST` env trap) | yes | no | no |
-| Alerts (local and phone via ntfy) | yes | no | no |
-| Memory and thermal pressure warnings | yes | no | no |
-| Reboot escalation for driver/GPU wedges | yes (opt-in) | no | no |
-| Status CLI, control endpoint, browser status page | yes | no | no |
-| Zero third-party dependencies | yes | (built in) | (built in) |
-
-`brew services` is a thin wrapper over launchd, so it inherits the same blind
-spot: a runner that is up but not answering looks healthy to both. Hearth probes
-readiness, so it does not.
+Because they answer a different question. launchd `KeepAlive` and `brew services`
+restart the process when it exits, and they are good at that. What they cannot see
+is a runner that is still running but has stopped answering: to a liveness check, a
+wedged Ollama looks healthy. Hearth probes readiness, so it catches that case, and
+it handles what a process supervisor was never meant to (keeping the Mac awake
+while serving, the `OLLAMA_HOST` listen-address trap, memory and thermal warnings,
+and telling you when something breaks). It runs on top of them, not instead of
+them: the login agent that keeps Hearth itself alive is a launchd job.
 
 ## Requirements
 

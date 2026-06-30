@@ -1,21 +1,48 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
 #
-# A stand in for `ollama serve`, for trying Hearth without installing Ollama.
-# It reads OLLAMA_HOST (host:port) the same way Ollama does, answers the two
-# endpoints Hearth probes (/api/version and /api/ps), and runs until killed.
-# It does no inference; it exists only to be supervised.
+# A stand in for `ollama serve`, for trying Hearth without installing Ollama and
+# for the wedge-recovery demo. It reads OLLAMA_HOST (host:port) the same way Ollama
+# does, answers the two endpoints Hearth probes (/api/version and /api/ps), and
+# runs until killed. It does no inference; it exists only to be supervised.
+#
+# Send it SIGUSR1 to WEDGE it: the process stays alive and the socket stays open,
+# but it stops answering. That is the alive-but-wedged failure a liveness check
+# (launchd KeepAlive, systemd) misses and Hearth's readiness probe catches. SIGUSR2
+# un-wedges it (Hearth normally recovers by killing and respawning a fresh one).
 #
 # Point a Hearth config at this file as the runner binary:
 #   "ollamaBinaryPath": "/absolute/path/to/scripts/fake-runner.py"
 import json
 import os
+import signal
 import sys
-from http.server import BaseHTTPRequestHandler, HTTPServer
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 host_port = os.environ.get("OLLAMA_HOST", "127.0.0.1:11434")
 host, _, port = host_port.partition(":")
 port = int(port or "11434")
+
+wedged = False
+
+
+def _wedge(_signum, _frame):
+    global wedged
+    wedged = True
+    sys.stderr.write("fake-runner: WEDGED (alive, no longer answering)\n")
+    sys.stderr.flush()
+
+
+def _unwedge(_signum, _frame):
+    global wedged
+    wedged = False
+    sys.stderr.write("fake-runner: unwedged (answering again)\n")
+    sys.stderr.flush()
+
+
+signal.signal(signal.SIGUSR1, _wedge)
+signal.signal(signal.SIGUSR2, _unwedge)
 
 sys.stderr.write(f"fake-runner: serving on {host}:{port} (argv={sys.argv[1:]})\n")
 sys.stderr.flush()
@@ -26,6 +53,11 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
+        # When wedged, hang well past any readiness timeout: the process is alive
+        # and still accepting connections, but the probe never gets a response.
+        if wedged:
+            time.sleep(600)
+            return
         if self.path == "/api/version":
             body = json.dumps({"version": "fake-0.1"}).encode()
         elif self.path == "/api/ps":
@@ -48,4 +80,6 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
-HTTPServer((host, port), Handler).serve_forever()
+# Threaded so a wedged (hanging) request never blocks the accept loop: the process
+# keeps accepting connections, it just never answers.
+ThreadingHTTPServer((host, port), Handler).serve_forever()

@@ -5,6 +5,17 @@ All notable changes to Hearth are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `HEARTH_DATA_DIR`: an environment override that moves all of Hearth's state and
+  logs under one directory, so a throwaway, demo, or test instance is fully
+  isolated from a real one (the support and log locations are otherwise fixed under
+  the home directory and shared across instances). Pairs with `HEARTH_CONFIG`.
+- `make demo`: a narrated, isolated wedge-recovery demo against the stand-in runner
+  (freeze it alive with `SIGUSR1`, watch Hearth catch it by readiness and recover),
+  the source for the README's wedge-recovery recording.
+
 ## [0.3.0] - 2026-06-30
 
 Networking and runner-config quality of life: reaching the runner from another

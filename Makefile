@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: MIT
 
-.PHONY: build release run test ci hooks smoke validate package install uninstall dmg icon clean
+.PHONY: build release run test ci hooks smoke demo validate package install uninstall dmg icon clean
 
 # Build the library and the menubar agent (debug).
 build:
@@ -31,6 +31,11 @@ hooks:
 # End-to-end smoke test against the fake runner (needs a desktop session).
 smoke:
 	./scripts/smoke-test.sh
+
+# Narrated wedge-recovery demo against the fake runner (for the README GIF).
+# Fully isolated (HEARTH_DATA_DIR), so it is safe to run alongside a real Hearth.
+demo:
+	./scripts/demo.sh
 
 # End-to-end gate against a real ollama serve (needs Ollama and a pulled model).
 validate:

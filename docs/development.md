@@ -72,6 +72,19 @@ checked), and releases the assertion and kills the child on a clean shutdown. It
 launches the real menubar agent, so it needs a logged in desktop session; it is a
 local helper, not a CI step.
 
+For the wedge-recovery story specifically:
+
+```
+make demo
+```
+
+drives the same fake runner through the alive-but-wedged case: it reaches healthy,
+freezes the runner with `SIGUSR1` (the process stays up and the port stays open,
+but it stops answering), and narrates Hearth catching it by readiness and recovering
+on its own. It is fully isolated through `HEARTH_DATA_DIR` (its state, logs, and
+lock live under a throwaway directory), so it is safe to run alongside a real
+Hearth. It is the source for the README's wedge-recovery recording.
+
 ## Releasing
 
 `scripts/release.sh` builds, Developer ID signs (Hardened Runtime on, App Sandbox

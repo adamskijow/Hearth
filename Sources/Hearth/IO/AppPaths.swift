@@ -6,8 +6,21 @@ import SupervisorCore
 /// Standard on disk locations and config loading. Config is JSON (chosen over
 /// TOML to keep the dependency set empty: JSON decodes with Foundation alone).
 enum AppPaths {
-    /// ~/Library/Application Support/Hearth
+    /// An override that moves all of Hearth's on-disk state and logs under one
+    /// directory, so a throwaway, demo, or test instance is fully isolated from a
+    /// real one. Without it, the support and log locations are fixed under the
+    /// user's home and shared across instances (including `runner-state.json`,
+    /// whose orphan sweep would otherwise reach another instance's runner). The
+    /// single-instance lock is already config-keyed; this isolates the data too.
+    private static var dataDirectoryOverride: URL? {
+        guard let override = ProcessInfo.processInfo.environment["HEARTH_DATA_DIR"],
+              !override.isEmpty else { return nil }
+        return URL(fileURLWithPath: (override as NSString).expandingTildeInPath, isDirectory: true)
+    }
+
+    /// ~/Library/Application Support/Hearth, or `HEARTH_DATA_DIR` when set.
     static var supportDirectory: URL {
+        if let override = dataDirectoryOverride { return override }
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Application Support")
         return base.appendingPathComponent("Hearth", isDirectory: true)
@@ -24,9 +37,12 @@ enum AppPaths {
         return supportDirectory.appendingPathComponent("config.json")
     }
 
-    /// ~/Library/Logs/Hearth
+    /// ~/Library/Logs/Hearth, or `HEARTH_DATA_DIR`/logs when set.
     static var logDirectory: URL {
-        URL(fileURLWithPath: NSHomeDirectory())
+        if let override = dataDirectoryOverride {
+            return override.appendingPathComponent("logs", isDirectory: true)
+        }
+        return URL(fileURLWithPath: NSHomeDirectory())
             .appendingPathComponent("Library/Logs/Hearth", isDirectory: true)
     }
 

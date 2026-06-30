@@ -81,6 +81,10 @@ struct SupervisorAssembly {
         if let topic = config.ntfyTopic, !topic.trimmingCharacters(in: .whitespaces).isEmpty {
             notifiers.append(NtfyNotifier(server: config.ntfyServer, topic: topic))
         }
+        if let webhook = config.webhookURL, !webhook.trimmingCharacters(in: .whitespaces).isEmpty,
+           let url = URL(string: webhook) {
+            notifiers.append(WebhookNotifier(url: url))
+        }
         return CompositeNotifier(notifiers)
     }
 }

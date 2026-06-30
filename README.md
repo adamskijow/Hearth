@@ -295,9 +295,12 @@ service that is supposed to be available. It releases the assertion when you sto
 supervision. You can confirm the assertion with `pmset -g assertions`.
 
 Notifications fire on the transitions that matter: going down, recovering, and
-entering the failing state. There are two delivery paths. Local Notification
+entering the failing state. There are three delivery paths. Local Notification
 Center alerts for when you are at the machine, and ntfy HTTP posts for when you
-are not, so a Mac in a closet can still reach your phone.
+are not, so a Mac in a closet can still reach your phone. Set `webhookURL` and
+Hearth also POSTs a small JSON status body (`level`, `title`, `body`, `event`,
+`timestamp`) to your own endpoint on each event, to wire into your own automation.
+All three carry only Hearth's own short status, never runner content.
 
 The menubar shows the current status, the models the runner currently holds
 resident (from its own API, surfaced for awareness only, never chosen by Hearth),

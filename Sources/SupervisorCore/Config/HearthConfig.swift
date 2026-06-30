@@ -40,6 +40,9 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     // Notifications
     public var ntfyTopic: String?
     public var ntfyServer: String
+    /// POST a small JSON status body to this URL on each notification, to wire
+    /// Hearth into your own automation. Null disables it.
+    public var webhookURL: String?
     public var localNotifications: Bool
     /// Alert when system memory used reaches this percent (a precursor to the
     /// runner being killed under pressure). Zero disables the memory alert.
@@ -85,6 +88,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 restartOnBinaryChange: Bool = false,
                 ntfyTopic: String? = nil,
                 ntfyServer: String = "https://ntfy.sh",
+                webhookURL: String? = nil,
                 localNotifications: Bool = true,
                 memoryAlertPercent: Int = 90,
                 thermalAlerts: Bool = true,
@@ -119,6 +123,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.restartOnBinaryChange = restartOnBinaryChange
         self.ntfyTopic = ntfyTopic
         self.ntfyServer = ntfyServer
+        self.webhookURL = webhookURL
         self.localNotifications = localNotifications
         self.memoryAlertPercent = memoryAlertPercent
         self.thermalAlerts = thermalAlerts
@@ -173,6 +178,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         maintenanceRestartHours = try value(.maintenanceRestartHours, defaults.maintenanceRestartHours)
         restartOnBinaryChange = try value(.restartOnBinaryChange, defaults.restartOnBinaryChange)
         ntfyTopic = try c.decodeIfPresent(String.self, forKey: .ntfyTopic)
+        webhookURL = try c.decodeIfPresent(String.self, forKey: .webhookURL)
         ntfyServer = try value(.ntfyServer, defaults.ntfyServer)
         localNotifications = try value(.localNotifications, defaults.localNotifications)
         memoryAlertPercent = try value(.memoryAlertPercent, defaults.memoryAlertPercent)

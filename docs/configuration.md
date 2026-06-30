@@ -48,6 +48,7 @@ or mode, a control endpoint with no token, timings that cannot grow).
 | `localNotifications` | bool | `true` | Show a macOS notification on down/recovered (needs a logged-in session and a signed app). |
 | `ntfyTopic` | string or null | `null` | Subscribe to this topic in the [ntfy](https://ntfy.sh) app for phone alerts. Null disables ntfy. |
 | `ntfyServer` | string | `"https://ntfy.sh"` | ntfy server URL. |
+| `webhookURL` | string or null | `null` | POST a small JSON status body (`level`, `title`, `body`, `event`, `timestamp`) to this URL on each notification, to wire Hearth into your own automation. Null disables it. Only Hearth's own status is sent, never runner content. |
 | `memoryAlertPercent` | int | `90` | Alert when system memory used reaches this percent (the precursor to the runner being killed under pressure). `0` disables the memory alert. |
 | `thermalAlerts` | bool | `true` | Alert when the Mac's thermal state goes serious or critical. |
 

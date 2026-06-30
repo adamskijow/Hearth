@@ -129,6 +129,9 @@ struct PreferencesView: View {
                 .help("Subscribe to this topic in the ntfy app to get alerts on your phone. Leave blank to skip.")
             TextField("ntfy server", text: $model.config.ntfyServer)
                 .help("ntfy server URL. The default is the public ntfy.sh.")
+            TextField("Webhook URL", text: optional(\.webhookURL),
+                      prompt: Text("https://your-server/hook (optional)"))
+                .help("Hearth POSTs a small JSON status body here on each event, to wire into your own automation. Leave blank to skip.")
             Button("Send test notification") { sendTest() }
         }
     }
@@ -259,16 +262,20 @@ struct PreferencesView: View {
     }
 
     private func sendTest() {
-        LocalNotifier.post(title: "Hearth test", body: "This is a test notification.")
+        let note = HearthNotification(level: .info, title: "Hearth test", body: "Notifications are working.", event: .becameHealthy)
+        LocalNotifier.post(title: note.title, body: note.body)
+        var channels = ["local"]
         if let topic = model.config.ntfyTopic, !topic.isEmpty {
             let notifier = NtfyNotifier(server: model.config.ntfyServer, topic: topic)
-            Task {
-                await notifier.notify(HearthNotification(level: .info, title: "Hearth test", body: "ntfy is working.", event: .becameHealthy))
-            }
-            model.status = "Sent local and ntfy test notifications."
-        } else {
-            model.status = "Sent a local test notification."
+            Task { await notifier.notify(note) }
+            channels.append("ntfy")
         }
+        if let webhook = model.config.webhookURL, !webhook.isEmpty, let url = URL(string: webhook) {
+            let notifier = WebhookNotifier(url: url)
+            Task { await notifier.notify(note) }
+            channels.append("webhook")
+        }
+        model.status = "Sent test notification (\(channels.joined(separator: ", ")))."
     }
 
     private func copyPhoneURL() {

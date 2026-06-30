@@ -299,6 +299,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if !latestState.residentModels.isEmpty {
             let loaded = latestState.residentModels.map(StatusText.model).joined(separator: ", ")
             menu.addItem(infoRow(detailAttr("Loaded: \(loaded)")))
+        } else if latestState.phase == .healthy {
+            // Healthy but nothing resident yet (the runner unloads after its idle
+            // timeout); say so rather than leaving a blank where models would be.
+            menu.addItem(infoRow(detailAttr("No model loaded")))
         }
         if let url = phoneAccessURL() {
             menu.addItem(phoneAccessItem(url: url))

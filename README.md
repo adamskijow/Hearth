@@ -173,9 +173,12 @@ The signed release installs with Homebrew:
 brew install --cask adamskijow/tap/hearth
 ```
 
-The cask lives at `Casks/hearth.rb` and is mirrored to the `adamskijow/homebrew-tap`
-tap. The release pipeline bumps its `version` and `sha256` to match each published
-DMG.
+The cask installs `Hearth.app` and puts the `hearth` CLI (`doctor`, `status`,
+`setup`, `wait-ready`) on your PATH, so the commands in this README work straight
+after install. (`make install` does the same, symlinking `hearth` into
+`/usr/local/bin`.) The cask lives at `Casks/hearth.rb` and is mirrored to the
+`adamskijow/homebrew-tap` tap; the release pipeline bumps its `version` and `sha256`
+to match each published DMG.
 
 ## Configure
 
@@ -515,8 +518,11 @@ sudo launchctl kickstart -k system/com.hearth.daemon
 Remove it with `sudo ./scripts/uninstall-daemon.sh`. In daemon mode Hearth runs
 as root, so its config lives at `/etc/hearth/config.json` (pointed to by the
 plist's `HEARTH_CONFIG`) and its logs at `/var/log/hearth.out.log` and
-`/var/log/hearth.err.log`. After editing the config, apply it without restarting
-by sending SIGHUP: `sudo launchctl kill HUP system/com.hearth.daemon`.
+`/var/log/hearth.err.log`. After editing the config, apply it by restarting the
+daemon (it has no in-process live reload; the runner cycles briefly):
+`sudo launchctl kickstart -k system/com.hearth.daemon`, or send SIGHUP
+(`sudo launchctl kill HUP system/com.hearth.daemon`), which stops it cleanly and
+lets launchd respawn it with the new config.
 
 ## Recovering a wedge a restart cannot
 

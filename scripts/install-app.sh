@@ -41,8 +41,18 @@ echo "Installing to $DEST ..."
 rm -rf "$DEST/Hearth.app"
 cp -R "$APP" "$DEST/Hearth.app"
 
+# Put the `hearth` CLI (the app binary itself) on PATH so `hearth doctor`,
+# `hearth status`, and `hearth setup` resolve as the README describes. Prefer
+# /usr/local/bin; fall back to ~/.local/bin when it is not writable.
+HEARTH_BIN="$DEST/Hearth.app/Contents/MacOS/Hearth"
+LINK_DIR="/usr/local/bin"
+[ -w "$LINK_DIR" ] || LINK_DIR="$HOME/.local/bin"
+mkdir -p "$LINK_DIR"
+ln -sf "$HEARTH_BIN" "$LINK_DIR/hearth"
+
 echo
 echo "Installed: $DEST/Hearth.app"
+echo "CLI:        $LINK_DIR/hearth   (run: hearth doctor, hearth status)"
 echo "Launch it:  open \"$DEST/Hearth.app\"   (a flame appears in the menubar)"
 echo
 echo "First run:"

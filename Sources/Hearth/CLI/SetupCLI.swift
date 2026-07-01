@@ -15,8 +15,8 @@ enum SetupCLI {
         // 1. Detect the runner binary and point the config at it.
         if let detected = RunnerLocator.locate(runner) {
             print("  found \(runner): \(detected)")
-            if binaryPath(of: config) != detected {
-                setBinaryPath(detected, on: &config)
+            if config.selectedBinaryPath != detected {
+                config.setSelectedBinaryPath(detected)
                 ConfigStore.save(config)
                 print("  set the \(runner) binary path in the config")
             }
@@ -43,19 +43,4 @@ enum SetupCLI {
         exit(install.ok ? 0 : 1)
     }
 
-    private static func binaryPath(of config: HearthConfig) -> String {
-        switch config.runner.lowercased() {
-        case "lmstudio", "lm-studio", "lm_studio": return config.lmStudioBinaryPath
-        case "mlx", "mlx_lm", "mlx-lm": return config.mlxBinaryPath
-        default: return config.ollamaBinaryPath
-        }
-    }
-
-    private static func setBinaryPath(_ path: String, on config: inout HearthConfig) {
-        switch config.runner.lowercased() {
-        case "lmstudio", "lm-studio", "lm_studio": config.lmStudioBinaryPath = path
-        case "mlx", "mlx_lm", "mlx-lm": config.mlxBinaryPath = path
-        default: config.ollamaBinaryPath = path
-        }
-    }
 }

@@ -289,11 +289,20 @@ public actor SupervisorEngine {
         let pendingRetry = (machine.phase == .down || machine.phase == .failing)
             ? machine.scheduledRespawnAt
             : nil
+        // A failed spawn (a bad or incompatible binary that posix_spawn rejected)
+        // otherwise surfaces only as a generic "down". When the last spawn errored
+        // and we are down, say what went wrong instead, so the menu/status/`/status`
+        // report the cause rather than a bare phase. lastSpawnError is cleared on the
+        // next successful spawn, so a later crash never shows a stale message.
+        var reason = machine.lastRestartReason
+        if let spawnError = lastSpawnError, machine.phase == .down || machine.phase == .failing {
+            reason = "spawn failed: \(spawnError)"
+        }
         let state = SupervisorState(
             phase: machine.phase,
             residentModels: currentModels,
             healthySince: machine.healthySince,
-            lastRestartReason: machine.lastRestartReason,
+            lastRestartReason: reason,
             restartCount: machine.restartCount,
             consecutiveFailures: machine.consecutiveFailures,
             failingSince: machine.failingSince,

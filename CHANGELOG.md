@@ -7,6 +7,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- The Homebrew cask and `make install` put the `hearth` CLI on your PATH (a `binary`
+  stanza / a symlink into `/usr/local/bin`), so the `hearth doctor`, `hearth status`,
+  and `hearth setup` commands the docs use resolve on a fresh install.
+- The deep readiness probe works on LM Studio and mlx_lm too (a one-token OpenAI chat
+  completion), not only Ollama, instead of silently passing on those runners.
+- The root daemon installs a newsyslog drop-in so its own
+  `/var/log/hearth.{out,err}.log` rotate instead of growing unbounded.
+
 ### Changed
 - The deep readiness probe no longer sends `keep_alive`, so the probed model's
   residency follows the runner's own `OLLAMA_KEEP_ALIVE` policy rather than a five
@@ -15,11 +24,18 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 - The root-daemon installer writes `/etc/hearth/config.json` as mode `600` (it holds
   the control token) and re-tightens an already-existing one.
+- The headless daemon handles SIGHUP as a clean restart (via launchd KeepAlive)
+  rather than a default-disposition terminate that briefly orphaned the child, and
+  the root-daemon doc no longer claims SIGHUP reloads config without restarting.
 - `hearth doctor` now warns when the control endpoint is bound to `0.0.0.0`, when the
   control token is the placeholder or under 16 characters, and when `ntfyTopic` is
   still the placeholder. The example config ships `ntfyTopic: null`, so a verbatim
   copy cannot post to a public relay.
-- The integrating guide's example link pointed Hob at Hearth's own repo.
+- A failed spawn (a bad or incompatible runner binary) now reports the specific error
+  in the status, menu, and `/status` instead of a bare "down".
+- The first-run config template writes the detected binary into the selected runner's
+  field (via a setter shared with `hearth setup`), and the integrating guide's
+  example link pointed Hob at Hearth's own repo.
 
 ## [0.6.0] - 2026-06-30
 

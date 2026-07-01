@@ -18,6 +18,9 @@ cask "hearth" do
   depends_on macos: :sonoma
 
   app "Hearth.app"
+  # The app bundle is also the `hearth` CLI (doctor, status, setup, wait-ready),
+  # which the README and docs route you to. Put it on PATH.
+  binary "#{appdir}/Hearth.app/Contents/MacOS/Hearth", target: "hearth"
 
   zap trash: [
     "~/Library/Application Support/Hearth",

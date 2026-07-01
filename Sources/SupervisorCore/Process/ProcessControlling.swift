@@ -41,6 +41,16 @@ public struct ProcessExit: Sendable, Equatable {
         self.wasSignaled = wasSignaled
         self.signal = signal
     }
+
+    /// Decode a raw `waitpid` status into this model, mirroring WIFEXITED /
+    /// WEXITSTATUS / WIFSIGNALED / WTERMSIG without importing the C macros. Pure, so
+    /// the bit handling is tested without spawning a process.
+    public static func from(waitpidStatus status: Int32) -> ProcessExit {
+        if status & 0x7f == 0 {
+            return ProcessExit(code: (status >> 8) & 0xff, wasSignaled: false, signal: nil)
+        }
+        return ProcessExit(code: 0, wasSignaled: true, signal: status & 0x7f)
+    }
 }
 
 /// A point in time snapshot of a child process: is it alive, how did it exit if

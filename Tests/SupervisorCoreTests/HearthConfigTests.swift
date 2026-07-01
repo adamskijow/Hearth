@@ -99,6 +99,20 @@ struct HearthConfigTests {
         #expect(runner.name == "Ollama")
     }
 
+    @Test func setSelectedBinaryPathWritesTheRunnersOwnField() {
+        // One setter so the first-run template and `hearth setup` cannot disagree.
+        var lm = HearthConfig(runner: "lmstudio")
+        lm.setSelectedBinaryPath("/x/lms")
+        #expect(lm.lmStudioBinaryPath == "/x/lms")
+        #expect(lm.selectedBinaryPath == "/x/lms")
+        var mlx = HearthConfig(runner: "mlx")
+        mlx.setSelectedBinaryPath("/x/mlx")
+        #expect(mlx.mlxBinaryPath == "/x/mlx")
+        var ollama = HearthConfig()
+        ollama.setSelectedBinaryPath("/x/ollama")
+        #expect(ollama.ollamaBinaryPath == "/x/ollama")
+    }
+
     @Test func runnerEnvDecodesAndReachesTheRunner() throws {
         let json = Data("""
         {"runnerEnv": {"OLLAMA_LOAD_TIMEOUT": "10m", "OLLAMA_KEEP_ALIVE": "30m"}}

@@ -35,7 +35,7 @@ public enum ConfigLoading {
         guard let data = fileContents else {
             var defaults = HearthConfig()
             if let detectedBinary {
-                defaults.ollamaBinaryPath = detectedBinary
+                defaults.setSelectedBinaryPath(detectedBinary)
             }
             return ConfigResolution(
                 config: defaults,

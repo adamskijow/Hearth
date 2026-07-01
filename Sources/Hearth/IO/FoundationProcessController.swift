@@ -26,7 +26,7 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
         let stdoutRead: FileHandle
         let stderrRead: FileHandle
         var stderrRing: [String] = []
-        var partialStderr = Data()
+        var stderr = StderrLineSplitter()
         var exit: ProcessExit?
         var reaped = false
         var readingFinished = false
@@ -184,7 +184,7 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
             if result == 0 {
                 return ProcessStatus(isAlive: true, exit: nil, recentStderr: entry.stderrRing)
             }
-            let exit = result == entry.pid ? Self.decode(raw) : ProcessExit(code: 0, wasSignaled: true, signal: SIGKILL)
+            let exit = result == entry.pid ? ProcessExit.from(waitpidStatus: raw) : ProcessExit(code: 0, wasSignaled: true, signal: SIGKILL)
             entry.exit = exit
             entry.reaped = true
             finishReading(entry)
@@ -268,53 +268,29 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
         return Int64(info.pti_resident_size)
     }
 
-    // MARK: - Exit decoding
-
-    /// Decode a waitpid status into our exit model. Mirrors WIFEXITED / WTERMSIG.
-    private static func decode(_ status: Int32) -> ProcessExit {
-        if status & 0x7f == 0 {
-            return ProcessExit(code: (status >> 8) & 0xff, wasSignaled: false, signal: nil)
-        }
-        return ProcessExit(code: 0, wasSignaled: true, signal: status & 0x7f)
-    }
+    // MARK: - stderr ring
 
     private func finishReading(_ entry: Entry) {
         guard !entry.readingFinished else { return }
         entry.readingFinished = true
         entry.stdoutRead.readabilityHandler = nil
         entry.stderrRead.readabilityHandler = nil
-        if !entry.partialStderr.isEmpty, let line = String(data: entry.partialStderr, encoding: .utf8) {
-            entry.stderrRing.append(line)
-            entry.partialStderr.removeAll()
-        }
+        if let line = entry.stderr.flush() { appendStderrLine(line, to: entry) }
         try? entry.stdoutRead.close()
         try? entry.stderrRead.close()
     }
-
-    // MARK: - stderr ring
 
     private func ingestStderr(_ id: ProcessHandleID, data: Data) {
         lock.withLock {
             appendLogLocked(data)
             guard let entry = entries[id] else { return }
-            entry.partialStderr.append(data)
-            while let newline = entry.partialStderr.firstIndex(of: 0x0A) {
-                let lineData = entry.partialStderr[entry.partialStderr.startIndex..<newline]
-                entry.partialStderr.removeSubrange(entry.partialStderr.startIndex...newline)
-                appendStderrLine(lineData, to: entry)
-            }
-            // Cap a runaway no-newline line so the partial buffer cannot grow
-            // without bound (a runner that floods stderr with no newline).
-            let maxPartialBytes = 64 * 1024
-            if entry.partialStderr.count > maxPartialBytes {
-                appendStderrLine(entry.partialStderr[...], to: entry)
-                entry.partialStderr.removeAll(keepingCapacity: false)
+            for line in entry.stderr.ingest(data) {
+                appendStderrLine(line, to: entry)
             }
         }
     }
 
-    private func appendStderrLine(_ lineData: Data.SubSequence, to entry: Entry) {
-        guard let line = String(data: lineData, encoding: .utf8) else { return }
+    private func appendStderrLine(_ line: String, to entry: Entry) {
         entry.stderrRing.append(line)
         if entry.stderrRing.count > maxStderrLines {
             entry.stderrRing.removeFirst(entry.stderrRing.count - maxStderrLines)

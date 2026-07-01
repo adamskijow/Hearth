@@ -13,6 +13,7 @@ fi
 launchctl bootout system/com.hearth.daemon 2>/dev/null || true
 rm -f /Library/LaunchDaemons/com.hearth.daemon.plist
 rm -f /usr/local/bin/hearth
+rm -f /etc/newsyslog.d/hearth.conf
 
-echo "Removed the daemon and /usr/local/bin/hearth."
+echo "Removed the daemon, /usr/local/bin/hearth, and the newsyslog drop-in."
 echo "Left /etc/hearth/config.json in place; delete it by hand if you want it gone."

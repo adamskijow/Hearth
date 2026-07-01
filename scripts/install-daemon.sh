@@ -41,6 +41,11 @@ echo "Installing the LaunchDaemon ..."
 install -m 644 deploy/com.hearth.daemon.plist /Library/LaunchDaemons/com.hearth.daemon.plist
 chown root:wheel /Library/LaunchDaemons/com.hearth.daemon.plist
 
+# Rotate the daemon's own /var/log output so it cannot grow unbounded.
+echo "Installing newsyslog rotation for the daemon logs ..."
+install -d -m 755 /etc/newsyslog.d
+install -m 644 deploy/hearth.newsyslog.conf /etc/newsyslog.d/hearth.conf
+
 launchctl bootout system/com.hearth.daemon 2>/dev/null || true
 launchctl bootstrap system /Library/LaunchDaemons/com.hearth.daemon.plist
 

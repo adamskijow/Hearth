@@ -42,6 +42,11 @@ sleep 1
 for target in "${present[@]}"; do
   rm -rf "$target"
 done
+# Remove the `hearth` CLI symlink `make install` created, only if it is our symlink
+# (never the root daemon's real installed binary at /usr/local/bin/hearth).
+for link in /usr/local/bin/hearth "$HOME/.local/bin/hearth"; do
+  [ -L "$link" ] && rm -f "$link"
+done
 
 echo "Removed."
 echo "If you had enabled Start at Login, the now-stale login item clears on the"

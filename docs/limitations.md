@@ -34,6 +34,12 @@ does not reimplement the operating system.
   sleep on idle (a desktop, or a plugged in laptop with the lid open) awake and
   serving. Keeping a laptop serving with the lid closed on battery is a separate,
   privileged concern and is not implemented.
+- Timers are wall-clock, not serving-clock. If the Mac does sleep (forced, or a
+  laptop lid close), a long sleep ages the runner in real time: supervision
+  self-corrects on wake (a restart that came due mid-sleep fires immediately), but
+  an enabled maintenance restart can land right after wake, and the crash-loop
+  window counts real time rather than time spent serving. There is no
+  `IORegisterForSystemPower` hook; the drift is cosmetic, not a recovery gap.
 - LM Studio works in attached mode only. `lms server start` exits immediately (the
   server runs in LM Studio's own background process), so a managed runner thrashes;
   `hearth doctor` and the menu flag it. Start LM Studio's server yourself and let

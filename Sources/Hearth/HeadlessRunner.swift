@@ -62,7 +62,12 @@ final class HeadlessRunner {
 
     private func installSignalHandlers() {
         let coordinator = assembly.coordinator
-        for sig in [SIGTERM, SIGINT] {
+        // SIGTERM/SIGINT stop the daemon. SIGHUP is the config-reload trigger: the
+        // daemon has no in-process live reload (that lives in the menubar app), so it
+        // stops cleanly and launchd's KeepAlive respawns it with the new config, a
+        // clean restart rather than the default-disposition terminate that would
+        // briefly orphan the child.
+        for sig in [SIGTERM, SIGINT, SIGHUP] {
             signal(sig, SIG_IGN)
             let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
             source.setEventHandler {

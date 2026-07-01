@@ -118,6 +118,21 @@ public struct DeepProbeRequest: Sendable, Equatable {
     }
 }
 
+/// A one-token OpenAI-style chat completion, the deep probe for runners that expose
+/// the OpenAI API (mlx_lm, LM Studio). nil for an empty model.
+func openAIDeepReadinessRequest(host: String, port: Int, model: String) -> DeepProbeRequest? {
+    let trimmed = model.trimmingCharacters(in: .whitespaces)
+    guard !trimmed.isEmpty else { return nil }
+    let payload: [String: Any] = [
+        "model": trimmed,
+        "messages": [["role": "user", "content": "ping"]],
+        "max_tokens": 1,
+        "stream": false,
+    ]
+    guard let body = try? JSONSerialization.data(withJSONObject: payload) else { return nil }
+    return DeepProbeRequest(url: runnerEndpoint(host: host, port: port, path: "/v1/chat/completions"), body: body)
+}
+
 /// The seam that keeps each runner's specifics in one place. Ollama is the first
 /// implementation; LM Studio and mlx_lm can be added later without the engine or
 /// the decision logic learning anything Ollama specific. Every Ollama string,

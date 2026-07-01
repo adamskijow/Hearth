@@ -313,4 +313,17 @@ public struct HearthConfig: Codable, Sendable, Equatable {
             return ollamaBinaryPath
         }
     }
+
+    /// Set the binary path for the currently selected runner. One place so the
+    /// first-run template and `hearth setup` cannot drift on which field to write.
+    public mutating func setSelectedBinaryPath(_ path: String) {
+        switch runner.lowercased() {
+        case "lmstudio", "lm-studio", "lm_studio":
+            lmStudioBinaryPath = path
+        case "mlx", "mlx_lm", "mlx-lm":
+            mlxBinaryPath = path
+        default:
+            ollamaBinaryPath = path
+        }
+    }
 }

@@ -65,6 +65,12 @@ public struct LMStudioRunner: Runner {
     public func classifyExit(_ exit: ProcessExit?, stderr: [String]) -> ExitReason {
         RunnerHeuristics.classify(exit, stderr: stderr, oomSignatures: oomSignatures)
     }
+
+    /// A one-token chat completion against the named model, so the deep probe
+    /// catches a wedged LM Studio server that still answers `/v1/models`.
+    public func deepReadinessRequest(model: String) -> DeepProbeRequest? {
+        openAIDeepReadinessRequest(host: host, port: port, model: model)
+    }
 }
 
 // MARK: - LM Studio /api/v0/models JSON shape

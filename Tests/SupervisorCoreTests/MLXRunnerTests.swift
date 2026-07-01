@@ -12,6 +12,17 @@ struct MLXRunnerTests {
         #expect(spec.arguments == ["--host", "127.0.0.1", "--port", "8080"])
     }
 
+    @Test func deepReadinessRequestIsAnOpenAIChatCompletion() throws {
+        // The deep probe must work on the OpenAI-API runners too, not silently no-op.
+        let runner = MLXRunner(binaryPath: "/x", host: "127.0.0.1", port: 8080)
+        let req = try #require(runner.deepReadinessRequest(model: "qwen2.5"))
+        #expect(req.url.absoluteString == "http://127.0.0.1:8080/v1/chat/completions")
+        let json = try JSONSerialization.jsonObject(with: req.body) as? [String: Any]
+        #expect(json?["model"] as? String == "qwen2.5")
+        #expect(json?["max_tokens"] as? Int == 1)
+        #expect(runner.deepReadinessRequest(model: "  ") == nil)
+    }
+
     @Test func endpointsAreOpenAICompatible() {
         let runner = MLXRunner(binaryPath: "/x", host: "127.0.0.1", port: 8080)
         #expect(runner.readinessEndpoint.absoluteString == "http://127.0.0.1:8080/v1/models")

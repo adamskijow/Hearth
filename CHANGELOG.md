@@ -13,6 +13,12 @@ by default (the one non-opt-in change is that reboot-on-wedge, already opt-in, n
 longer fires in attached mode).
 
 ### Added
+- `runnerUser` (config, off by default): when Hearth runs as the root daemon, it
+  drops the spawned runner to this account while staying root itself (so it keeps
+  the reboot capability), so a runner or malicious-model compromise no longer lands
+  as root. Hearth supplies the account's `HOME`/`USER`/`LOGNAME` automatically.
+  Verified end to end on Apple Silicon: the dropped runner still reaches the Metal
+  GPU from the non-GUI daemon session.
 - `rebootOnlyOnProcessFailure` (config, off by default): when on, a reboot fires
   only if the failing streak included a real process exit, never for a pure "alive
   but not answering" wedge, so a runner that only controls its HTTP responses cannot

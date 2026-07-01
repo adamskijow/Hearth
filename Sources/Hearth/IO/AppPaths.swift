@@ -73,6 +73,10 @@ enum ConfigStore {
         try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
 
         let exists = fm.fileExists(atPath: url.path)
+        // Retro-harden a config an older version (or a hand copy) left
+        // world-readable: it holds the control token and ntfy topic. Best-effort,
+        // and a no-op once already 0600 or when we do not own the file.
+        if exists { SecureFile.harden(url) }
         // A present but unreadable file is read as empty Data so it fails to parse
         // and surfaces as a problem, rather than nil (first run) which would
         // overwrite it with a template. Detection only seeds the first-run path.
@@ -97,10 +101,8 @@ enum ConfigStore {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         guard let data = try? encoder.encode(config) else { return false }
-        try? FileManager.default.createDirectory(
-            at: AppPaths.configFile.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        return (try? data.write(to: AppPaths.configFile)) != nil
+        // Owner-only (0600 in a 0700 dir): the config holds the control token and
+        // ntfy topic, so it must not be world-readable.
+        return SecureFile.write(data, to: AppPaths.configFile)
     }
 }

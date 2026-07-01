@@ -18,8 +18,7 @@ enum RunnerStateStore {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         guard let data = try? encoder.encode(identity) else { return }
-        try? FileManager.default.createDirectory(at: AppPaths.supportDirectory, withIntermediateDirectories: true)
-        try? data.write(to: url)
+        SecureFile.write(data, to: url)
     }
 
     static func clear() {

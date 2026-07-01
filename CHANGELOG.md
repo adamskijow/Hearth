@@ -5,6 +5,25 @@ All notable changes to Hearth are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+A security hardening pass from a third independent audit, a red-team across six
+attacker personas. No new features; each item closes a real finding and preserves
+existing behavior (the one intentional change is that reboot-on-wedge, already
+opt-in, no longer fires in attached mode).
+
+### Security
+- Hearth writes its own config, runner-state, reboot-history, and metrics-history
+  files as mode `600` in a `700` directory, and re-tightens an already
+  world-readable config on load. The control token and ntfy topic are no longer
+  readable by other local users, so the app no longer relies on the install script
+  to harden files it writes itself.
+- The runner HTTP client caps a response body at 16 MB and sets a hard resource
+  timeout, so a hostile or wedged runner cannot exhaust the supervisor's memory or
+  hold a probe open forever by trickling bytes under the stall timeout.
+- Reboot-on-wedge is refused in attached mode: Hearth never reboots the Mac over a
+  runner it only monitors and does not own.
+
 ## [0.7.0] - 2026-06-30
 
 Reach and robustness, plus a hardening pass from two independent audits: the deep

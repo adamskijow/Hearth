@@ -10,13 +10,15 @@ import SupervisorCore
 /// history, announces, and pulls the trigger through the SystemControlling seam.
 final class RebootEscalator {
     private let policy: RebootPolicy
+    private let managed: Bool
     private let system: SystemControlling
     private let announce: (String) -> Void
     private var everHealthy = false
     private var announcedExhausted = false
 
-    init(policy: RebootPolicy, system: SystemControlling, announce: @escaping (String) -> Void) {
+    init(policy: RebootPolicy, managed: Bool = true, system: SystemControlling, announce: @escaping (String) -> Void) {
         self.policy = policy
+        self.managed = managed
         self.system = system
         self.announce = announce
     }
@@ -30,6 +32,7 @@ final class RebootEscalator {
 
         switch RebootEscalation.decide(
             policy: policy,
+            managed: managed,
             phase: state.phase,
             failingSince: state.failingSince,
             everHealthyThisSession: everHealthy,

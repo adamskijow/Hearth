@@ -58,6 +58,7 @@ public enum RebootDecision: Sendable, Equatable {
 
 public enum RebootEscalation {
     public static func decide(policy: RebootPolicy,
+                              managed: Bool = true,
                               phase: SupervisorPhase,
                               failingSince: Date?,
                               everHealthyThisSession: Bool,
@@ -65,6 +66,11 @@ public enum RebootEscalation {
                               now: Date,
                               systemBootedAt: Date? = nil) -> RebootDecision {
         guard policy.enabled else { return .wait }
+        // Attached (unmanaged) mode monitors a runner Hearth does not own and
+        // cannot restart, so it cannot tell a hostile runner from a real driver
+        // wedge; rebooting the whole Mac over someone else's process is never
+        // warranted. Reboot escalation applies only when Hearth manages the runner.
+        guard managed else { return .wait }
         // Never reboot for a setup failure (a wrong binary path, a bad config).
         // Only a runner that was actually serving and then wedged past what a
         // process restart can fix is worth a reboot.

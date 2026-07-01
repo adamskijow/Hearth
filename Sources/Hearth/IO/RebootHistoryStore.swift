@@ -25,10 +25,9 @@ enum RebootHistoryStore {
         history.recoveryReboots = history.recoveryReboots.filter { $0 >= cutoff }
         history.recoveryReboots.append(rebootAt)
         guard let data = try? JSONEncoder().encode(history) else { return }
-        try? FileManager.default.createDirectory(at: AppPaths.supportDirectory, withIntermediateDirectories: true)
-        // Write atomically: this happens moments before a reboot, so a half-written
-        // file must never be what survives. The kernel boot-time guard backstops a
-        // total loss; this keeps the history itself intact.
-        try? data.write(to: url, options: .atomic)
+        // Written atomically (SecureFile uses .atomic): this happens moments before
+        // a reboot, so a half-written file must never be what survives. The kernel
+        // boot-time guard backstops a total loss; this keeps the history intact.
+        SecureFile.write(data, to: url)
     }
 }

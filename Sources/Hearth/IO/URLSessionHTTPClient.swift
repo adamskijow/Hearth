@@ -10,10 +10,22 @@ import SupervisorCore
 final class URLSessionHTTPClient: HTTPClient, @unchecked Sendable {
     private let session: URLSession
 
+    /// A hard ceiling on a runner response body. The endpoints Hearth reads
+    /// (version, the model list, a one-token probe) are kilobytes, so this is a
+    /// three-order-of-magnitude margin that only a runner deliberately streaming
+    /// an unbounded body to exhaust the supervisor's memory would ever hit.
+    private static let maxResponseBytes = 16 * 1024 * 1024
+
     init() {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.waitsForConnectivity = false
         configuration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        // A hard wall-clock ceiling per request, well above any legitimate probe
+        // (the per-request stall timeout, 2s shallow up to the deep-probe timeout,
+        // fires first on a healthy runner). It only bites a runner that trickles
+        // bytes just under the stall timeout to keep a probe alive indefinitely;
+        // without it that request would never return.
+        configuration.timeoutIntervalForResource = 300
         self.session = URLSession(configuration: configuration)
     }
 
@@ -21,21 +33,7 @@ final class URLSessionHTTPClient: HTTPClient, @unchecked Sendable {
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.timeoutInterval = timeout
-
-        do {
-            let (data, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse else {
-                return .failure("non HTTP response")
-            }
-            if (200..<300).contains(http.statusCode) {
-                return .ok(data)
-            }
-            return .http(status: http.statusCode, body: data)
-        } catch let error as URLError {
-            return Self.mapURLError(error)
-        } catch {
-            return .failure(String(describing: error))
-        }
+        return await send(request)
     }
 
     func post(_ url: URL, body: Data, timeout: TimeInterval) async -> HTTPOutcome {
@@ -44,11 +42,25 @@ final class URLSessionHTTPClient: HTTPClient, @unchecked Sendable {
         request.timeoutInterval = timeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = body
+        return await send(request)
+    }
 
+    /// Send the request and read the body with a hard size cap, so a hostile
+    /// runner (a declared trust boundary) cannot exhaust the supervisor's memory
+    /// with an unbounded response. Streaming the body also lets an oversized reply
+    /// be abandoned mid-flight rather than fully buffered first.
+    private func send(_ request: URLRequest) async -> HTTPOutcome {
         do {
-            let (data, response) = try await session.data(for: request)
+            let (bytes, response) = try await session.bytes(for: request)
             guard let http = response as? HTTPURLResponse else {
                 return .failure("non HTTP response")
+            }
+            var data = Data()
+            for try await byte in bytes {
+                data.append(byte)
+                if data.count > Self.maxResponseBytes {
+                    return .failure("runner response exceeded \(Self.maxResponseBytes) bytes")
+                }
             }
             if (200..<300).contains(http.statusCode) {
                 return .ok(data)

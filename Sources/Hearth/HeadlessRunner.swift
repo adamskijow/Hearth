@@ -41,9 +41,9 @@ final class HeadlessRunner {
         // restarts for long enough, escalate to a reboot. Only wired headless,
         // since the GUI app is not root and cannot reboot.
         let rebootPolicy = config.rebootPolicy()
-        if rebootPolicy.enabled {
+        if rebootPolicy.enabled && config.isManaged {
             let notifier = assembly.notifier
-            let escalator = RebootEscalator(policy: rebootPolicy, system: SystemController()) { message in
+            let escalator = RebootEscalator(policy: rebootPolicy, managed: true, system: SystemController()) { message in
                 FileHandle.standardError.write(Data("Hearth headless: \(message)\n".utf8))
                 Task.detached {
                     await notifier.notify(HearthNotification(
@@ -52,6 +52,12 @@ final class HeadlessRunner {
             }
             let states = assembly.engine.states
             Task { for await state in states { escalator.observe(state) } }
+        } else if rebootPolicy.enabled {
+            // Reboot-on-wedge is opt-in, but in attached mode Hearth does not own
+            // the runner and must never reboot the Mac over a process it only
+            // monitors. Say so rather than silently ignoring the setting.
+            FileHandle.standardError.write(Data(
+                "Hearth headless: reboot-on-wedge is disabled in attached mode (Hearth does not own the runner)\n".utf8))
         }
 
         let coordinator = assembly.coordinator

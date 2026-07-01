@@ -16,16 +16,31 @@ struct RebootEscalationTests {
                         history: RebootHistory = RebootHistory(),
                         now: Date,
                         enabled: Bool = true,
+                        managed: Bool = true,
                         bootedAt: Date? = nil) -> RebootDecision {
-        RebootEscalation.decide(policy: policy(enabled: enabled), phase: phase, failingSince: failingSince,
-                                everHealthyThisSession: everHealthy, history: history, now: now,
-                                systemBootedAt: bootedAt)
+        RebootEscalation.decide(policy: policy(enabled: enabled), managed: managed, phase: phase,
+                                failingSince: failingSince, everHealthyThisSession: everHealthy,
+                                history: history, now: now, systemBootedAt: bootedAt)
     }
 
     @Test func disabledNeverReboots() {
         let r = decide(phase: .failing, failingSince: t0, everHealthy: true,
                        now: t0.addingTimeInterval(100_000), enabled: false)
         #expect(r == .wait)
+    }
+
+    @Test func attachedModeNeverReboots() {
+        // A textbook reboot-worthy wedge (healthy this session, failing long past
+        // the threshold) still must not reboot when Hearth only monitors a runner
+        // it does not own: rebooting the Mac over someone else's process is never
+        // warranted, and a hostile attached runner must not gain a reboot primitive.
+        let r = decide(phase: .failing, failingSince: t0, everHealthy: true,
+                       now: t0.addingTimeInterval(100_000), managed: false)
+        #expect(r == .wait)
+        // The same inputs in managed mode do escalate, so the gate is what changed.
+        let managed = decide(phase: .failing, failingSince: t0, everHealthy: true,
+                             now: t0.addingTimeInterval(100_000), managed: true)
+        #expect(managed == .reboot)
     }
 
     @Test func neverHealthyMeansSetupFailureNotAWedge() {

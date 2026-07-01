@@ -34,9 +34,7 @@ final class MetricsHistoryStore: @unchecked Sendable {
 
     private func persist() {
         guard let data = try? JSONEncoder().encode(history) else { return }
-        try? FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try? data.write(to: url, options: .atomic)
+        SecureFile.write(data, to: url)
     }
 
     static func load(_ url: URL = MetricsHistoryStore.url) -> MetricsHistory {

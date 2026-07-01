@@ -5,7 +5,11 @@ All notable changes to Hearth are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.0] - 2026-06-30
+
+Reach and robustness, plus a hardening pass from two independent audits: the deep
+probe now covers LM Studio and mlx_lm, the `hearth` CLI lands on your PATH after
+install, and the root daemon applies config cleanly and rotates its own logs.
 
 ### Added
 - The Homebrew cask and `make install` put the `hearth` CLI on your PATH (a `binary`

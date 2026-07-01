@@ -90,6 +90,24 @@ README's "Recovering a wedge a restart cannot" for the full safety story.
 | `rebootMaxPerDay` | int | `3` | Most recovery reboots allowed in a rolling 24 hours. Clamped to at least 1. |
 | `rebootOnlyOnProcessFailure` | bool | `false` | Reboot only when the failing streak included a real process exit (a crash), never for a pure "alive but not answering" wedge. Turn this on if you do not fully trust the runner: it stops a runner that only controls its HTTP responses from driving a reboot, at the cost that a genuine wedge is escalated to a notification instead of auto-recovered. |
 
+## Runner privilege drop (root daemon)
+
+When Hearth runs as the root LaunchDaemon it spawns the runner as root too, so a
+compromise of the runner or a malicious model runs as root. `runnerUser` drops the
+spawned runner to a lower-privileged account while Hearth itself stays root (so it
+keeps the reboot capability). Off by default: the runner inherits Hearth's user.
+
+| Key | Type | Default | Meaning |
+|-----|------|---------|---------|
+| `runnerUser` | string | unset | Account name to run the spawned runner as, when Hearth is root. Only honored as root and when the account resolves; ignored for the non-root menubar app (it logs a note and runs normally). If the account does not resolve while root, Hearth refuses to start the runner rather than run it as root (fail closed). |
+
+Test before relying on it. On macOS a LaunchDaemon runs in a non-GUI session, and
+GPU/Metal access from a dropped, non-GUI service account is not guaranteed: the
+runner may fall back to CPU or fail to load models. After setting `runnerUser`,
+confirm inference still uses the GPU (watch memory/latency, or the runner's own
+logs) before trusting it in production. If the account cannot reach the GPU, leave
+`runnerUser` unset and keep the runner running as root.
+
 ## Example
 
 A minimal managed-Ollama config with phone control over Tailscale:

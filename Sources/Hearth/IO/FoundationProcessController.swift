@@ -3,6 +3,7 @@
 import Foundation
 import Darwin
 import SupervisorCore
+import HearthSpawn
 
 /// posix_spawn failed with this non-zero return code.
 struct SpawnError: Error { let code: Int32 }
@@ -43,6 +44,11 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
     private let maxStderrLines: Int
     private let killGraceSeconds: Double
     private let rotation: LogRotationPolicy
+    /// The account the spawned runner is dropped to, when configured (`runnerUser`)
+    /// and Hearth is root. nil keeps the default: the runner inherits Hearth's user
+    /// via the ordinary `posix_spawn` path, which is left completely untouched.
+    private let runAsUser: String?
+    private let dropCredentials: RunnerUserCredentials?
     private var nextRaw: UInt64 = 1
     private var entries: [ProcessHandleID: Entry] = [:]
     private var latestPID: pid_t?
@@ -54,16 +60,30 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
     init(logFileURL: URL,
          maxStderrLines: Int = 200,
          killGraceSeconds: Double = 3,
-         rotation: LogRotationPolicy = LogRotationPolicy(maxBytes: 5_000_000, keepFiles: 3)) {
+         rotation: LogRotationPolicy = LogRotationPolicy(maxBytes: 5_000_000, keepFiles: 3),
+         runAsUser: String? = nil) {
         self.logFileURL = logFileURL
         self.maxStderrLines = maxStderrLines
         self.killGraceSeconds = killGraceSeconds
         self.rotation = rotation
+        self.runAsUser = runAsUser
+        self.dropCredentials = runAsUser.flatMap { RunnerUserCredentials.resolve(username: $0) }
         try? FileManager.default.createDirectory(
             at: logFileURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
         openLogLocked()
+        if let user = runAsUser {
+            if dropCredentials == nil {
+                warn("runnerUser \"\(user)\" does not resolve to an account; as root the runner will refuse to start rather than run as root")
+            } else if geteuid() != 0 {
+                warn("runnerUser \"\(user)\" is set but Hearth is not root; the runner inherits this user, no privilege drop")
+            }
+        }
+    }
+
+    private func warn(_ message: String) {
+        FileHandle.standardError.write(Data("Hearth: \(message)\n".utf8))
     }
 
     func spawn(_ spec: ProcessSpec) throws -> ProcessHandleID {
@@ -77,62 +97,34 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
         let outWrite = stdoutPipe.fileHandleForWriting.fileDescriptor
         let errWrite = stderrPipe.fileHandleForWriting.fileDescriptor
 
-        var fileActions: posix_spawn_file_actions_t?
-        posix_spawn_file_actions_init(&fileActions)
-        posix_spawn_file_actions_adddup2(&fileActions, outWrite, STDOUT_FILENO)
-        posix_spawn_file_actions_adddup2(&fileActions, errWrite, STDERR_FILENO)
-
-        var attr: posix_spawnattr_t?
-        posix_spawnattr_init(&attr)
-        // Give the runner a clean signal state. Hearth sets SIGTERM/SIGINT/SIGHUP
-        // to SIG_IGN and libdispatch leaves them blocked for its signal sources;
-        // both survive across spawn and exec. Without resetting, the runner starts
-        // with our SIGTERM ignored or blocked and would not die from Hearth's
-        // graceful teardown, only the SIGKILL backup. Reset the relevant signals to
-        // their default disposition, and clear the inherited blocked mask entirely.
-        var resetSignals = sigset_t()
-        sigemptyset(&resetSignals)
-        sigaddset(&resetSignals, SIGTERM)
-        sigaddset(&resetSignals, SIGINT)
-        sigaddset(&resetSignals, SIGHUP)
-        posix_spawnattr_setsigdefault(&attr, &resetSignals)
-        var emptyMask = sigset_t()
-        sigemptyset(&emptyMask)
-        posix_spawnattr_setsigmask(&attr, &emptyMask)
-        // New process group led by the child (pgroup 0), signals reset and
-        // unblocked, and every inherited fd closed except the ones we dup, so none
-        // of Hearth's fds leak to the runner.
-        let flags = Int16(POSIX_SPAWN_SETPGROUP)
-            | Int16(POSIX_SPAWN_SETSIGDEF)
-            | Int16(POSIX_SPAWN_SETSIGMASK)
-            | Int16(bitPattern: UInt16(POSIX_SPAWN_CLOEXEC_DEFAULT))
-        posix_spawnattr_setflags(&attr, flags)
-        posix_spawnattr_setpgroup(&attr, 0)
-
-        let path = spec.executableURL.path
-        let argv = [path] + spec.arguments
-        let envp = environment.map { "\($0.key)=\($0.value)" }
-
-        var pid: pid_t = 0
-        let rc = withCStringArray(argv) { argvPtr in
-            withCStringArray(envp) { envpPtr in
-                path.withCString { pathPtr in
-                    posix_spawn(&pid, pathPtr, &fileActions, &attr, argvPtr, envpPtr)
-                }
+        let pid: pid_t
+        do {
+            if geteuid() == 0, let credentials = dropCredentials {
+                // Root daemon with a resolved runnerUser: fork and drop privileges
+                // so the runner runs unprivileged. Hearth (the parent) stays root so
+                // it keeps the reboot capability.
+                pid = try forkExecAsUser(spec: spec, environment: environment,
+                                         credentials: credentials, outWrite: outWrite, errWrite: errWrite)
+            } else if runAsUser != nil, dropCredentials == nil, geteuid() == 0 {
+                // A drop was requested but the account did not resolve. Fail closed:
+                // never fall back to running the untrusted runner as root.
+                throw SpawnError(code: EPERM)
+            } else {
+                // The default, unchanged path: the runner inherits Hearth's user.
+                pid = try posixSpawnChild(spec: spec, environment: environment,
+                                          outWrite: outWrite, errWrite: errWrite)
             }
+        } catch {
+            stdoutPipe.fileHandleForWriting.closeFile()
+            stderrPipe.fileHandleForWriting.closeFile()
+            stdoutPipe.fileHandleForReading.closeFile()
+            stderrPipe.fileHandleForReading.closeFile()
+            throw error
         }
-        posix_spawn_file_actions_destroy(&fileActions)
-        posix_spawnattr_destroy(&attr)
 
         // The child holds the write ends now; the parent only reads.
         stdoutPipe.fileHandleForWriting.closeFile()
         stderrPipe.fileHandleForWriting.closeFile()
-
-        guard rc == 0, pid > 0 else {
-            stdoutPipe.fileHandleForReading.closeFile()
-            stderrPipe.fileHandleForReading.closeFile()
-            throw SpawnError(code: rc)
-        }
 
         let entry = Entry(
             pid: pid,
@@ -167,6 +159,86 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
         }
 
         return id
+    }
+
+    /// The default spawn: the runner inherits Hearth's user. posix_spawn in a new
+    /// process group with SIGTERM/SIGINT/SIGHUP reset to default, the inherited mask
+    /// cleared, stdout/stderr on the pipes, and every other inherited fd closed.
+    /// Throws SpawnError on failure. This is the original inline implementation,
+    /// unchanged, so the common case is untouched by the privilege-drop option.
+    private func posixSpawnChild(spec: ProcessSpec,
+                                 environment: [String: String],
+                                 outWrite: Int32,
+                                 errWrite: Int32) throws -> pid_t {
+        var fileActions: posix_spawn_file_actions_t?
+        posix_spawn_file_actions_init(&fileActions)
+        posix_spawn_file_actions_adddup2(&fileActions, outWrite, STDOUT_FILENO)
+        posix_spawn_file_actions_adddup2(&fileActions, errWrite, STDERR_FILENO)
+
+        var attr: posix_spawnattr_t?
+        posix_spawnattr_init(&attr)
+        var resetSignals = sigset_t()
+        sigemptyset(&resetSignals)
+        sigaddset(&resetSignals, SIGTERM)
+        sigaddset(&resetSignals, SIGINT)
+        sigaddset(&resetSignals, SIGHUP)
+        posix_spawnattr_setsigdefault(&attr, &resetSignals)
+        var emptyMask = sigset_t()
+        sigemptyset(&emptyMask)
+        posix_spawnattr_setsigmask(&attr, &emptyMask)
+        let flags = Int16(POSIX_SPAWN_SETPGROUP)
+            | Int16(POSIX_SPAWN_SETSIGDEF)
+            | Int16(POSIX_SPAWN_SETSIGMASK)
+            | Int16(bitPattern: UInt16(POSIX_SPAWN_CLOEXEC_DEFAULT))
+        posix_spawnattr_setflags(&attr, flags)
+        posix_spawnattr_setpgroup(&attr, 0)
+
+        let path = spec.executableURL.path
+        let argv = [path] + spec.arguments
+        let envp = environment.map { "\($0.key)=\($0.value)" }
+
+        var pid: pid_t = 0
+        let rc = withCStringArray(argv) { argvPtr in
+            withCStringArray(envp) { envpPtr in
+                path.withCString { pathPtr in
+                    posix_spawn(&pid, pathPtr, &fileActions, &attr, argvPtr, envpPtr)
+                }
+            }
+        }
+        posix_spawn_file_actions_destroy(&fileActions)
+        posix_spawnattr_destroy(&attr)
+
+        guard rc == 0, pid > 0 else { throw SpawnError(code: rc) }
+        return pid
+    }
+
+    /// Spawn the runner as `credentials` (only the root daemon reaches this).
+    /// macOS posix_spawn cannot set the uid, so this delegates to a C shim that
+    /// forks and drops privileges in the child (see Sources/HearthSpawn). The C
+    /// arrays it needs, argv/envp and the group list, are materialized here first so
+    /// the shim's child does no allocation. Throws SpawnError on fork failure.
+    private func forkExecAsUser(spec: ProcessSpec,
+                                environment: [String: String],
+                                credentials: RunnerUserCredentials,
+                                outWrite: Int32,
+                                errWrite: Int32) throws -> pid_t {
+        let path = spec.executableURL.path
+        let argv = [path] + spec.arguments
+        let envp = environment.map { "\($0.key)=\($0.value)" }
+
+        let pid: pid_t = path.withCString { pathPtr in
+            withCStringArray(argv) { argvPtr in
+                withCStringArray(envp) { envpPtr in
+                    credentials.supplementaryGroups.withUnsafeBufferPointer { groupsPtr in
+                        hearth_spawn_as_user(pathPtr, argvPtr, envpPtr, outWrite, errWrite,
+                                             credentials.uid, credentials.gid,
+                                             groupsPtr.baseAddress, Int32(groupsPtr.count))
+                    }
+                }
+            }
+        }
+        guard pid > 0 else { throw SpawnError(code: errno) }
+        return pid
     }
 
     func status(_ id: ProcessHandleID) -> ProcessStatus {

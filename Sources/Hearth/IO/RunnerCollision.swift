@@ -28,7 +28,12 @@ enum RunnerCollision {
     }
 
     private static func portIsServing(host: String, port: Int) async -> Bool {
-        guard let url = URL(string: "http://\(host):\(port)/") else { return false }
+        // Dial through the shared wildcard-to-loopback mapping the probes use (a
+        // wildcard bind host is not itself connectable) and bracket an IPv6
+        // literal, mirroring runnerEndpoint; otherwise a foreign runner on a
+        // 0.0.0.0 or ::1 config is silently missed.
+        let dialed = probeHost(for: host)
+        guard let url = URL(string: "http://\(urlAuthorityHost(for: dialed)):\(port)/") else { return false }
         var request = URLRequest(url: url)
         request.timeoutInterval = 1.5
         do {

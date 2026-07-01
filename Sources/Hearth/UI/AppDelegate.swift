@@ -547,11 +547,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func useDetectedBinaryTapped() {
         guard let detected = suggestedBinaryPath else { return }
         var updated = config
-        switch updated.runner.lowercased() {
-        case "lmstudio", "lm-studio", "lm_studio": updated.lmStudioBinaryPath = detected
-        case "mlx", "mlx_lm", "mlx-lm": updated.mlxBinaryPath = detected
-        default: updated.ollamaBinaryPath = detected
-        }
+        updated.setSelectedBinaryPath(detected)
         ConfigStore.save(updated)
         Task { await reloadFromDisk(firstRun: false) }
     }

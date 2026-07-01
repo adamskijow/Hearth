@@ -117,6 +117,22 @@ struct MachineCrashLoopTests {
         #expect(machine.failingSince == nil)
     }
 
+    @Test func failuresAgingOutOfTheWindowClearFailingSince() {
+        var (machine, _) = driveToFailing()
+        #expect(machine.phase == .failing)
+        #expect(machine.failingSince != nil)
+
+        // The slow timer fires; the retry is probed and fails again, but far
+        // enough later that every earlier failure has aged out of the 600s crash
+        // loop window. The machine drops back to normal .down backoff, and the
+        // failing marker must clear with the phase.
+        let scheduled = machine.scheduledRespawnAt
+        _ = machine.respawnNow(now: scheduled)
+        _ = machine.observe(dead(), now: scheduled.addingTimeInterval(700))
+        #expect(machine.phase == .down)
+        #expect(machine.failingSince == nil)
+    }
+
     @Test func failuresOutsideWindowDoNotTrip() {
         // Threshold 3 within a 10 second window. Space failures 20 seconds apart
         // so the window never holds more than one.

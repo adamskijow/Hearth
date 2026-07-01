@@ -252,7 +252,7 @@ enum StatusCLI {
         }
 
         // Runner binary present and executable?
-        let binary = runnerBinaryPath(config)
+        let binary = config.selectedBinaryPath
         if FileManager.default.isExecutableFile(atPath: binary) {
             print(mark(nil) + " runner binary: \(binary)")
         } else if let detected = RunnerLocator.locate(config.runner) {
@@ -329,14 +329,6 @@ enum StatusCLI {
         case .error: return "  FAIL"
         case .warning: return "  WARN"
         case nil: return "  OK  "
-        }
-    }
-
-    private static func runnerBinaryPath(_ config: HearthConfig) -> String {
-        switch config.runner.lowercased() {
-        case "lmstudio", "lm-studio", "lm_studio": return config.lmStudioBinaryPath
-        case "mlx", "mlx_lm", "mlx-lm": return config.mlxBinaryPath
-        default: return config.ollamaBinaryPath
         }
     }
 
@@ -475,13 +467,6 @@ enum StatusCLI {
         guard label.count < width else { return "  \(label)  \(value)" }
         let padded = label.padding(toLength: width, withPad: " ", startingAt: 0)
         return "  \(padded)\(value)"
-    }
-
-    private static func isUnreachable(_ error: Error?) -> Bool {
-        guard let error = error as NSError? else { return false }
-        return error.domain == NSURLErrorDomain
-            && [NSURLErrorCannotConnectToHost, NSURLErrorCannotFindHost,
-                NSURLErrorNetworkConnectionLost, NSURLErrorTimedOut].contains(error.code)
     }
 
     /// A reference box so the URLSession completion can store its result without

@@ -36,7 +36,9 @@ public enum ConfigDiagnostics {
             if host == "0.0.0.0" || host == "::" {
                 issues.append(.init(.warning, "Runner is bound to \(host) (all interfaces). Ollama has no built-in authentication; use this only on a trusted LAN or behind a private reverse proxy."))
             }
-            if URL(string: "http://\(config.host):\(config.port)/") == nil {
+            // Bracket an IPv6 literal the same way the probe endpoints do, so a
+            // host like ::1 that supervision handles fine is not flagged invalid.
+            if URL(string: "http://\(urlAuthorityHost(for: config.host)):\(config.port)/") == nil {
                 issues.append(.init(.error, "Host \"\(config.host)\" is not a valid hostname or address."))
             }
         }

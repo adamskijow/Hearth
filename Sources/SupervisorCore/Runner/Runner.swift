@@ -15,6 +15,14 @@ public func probeHost(for host: String) -> String {
     }
 }
 
+/// The host as it appears in a URL authority: an IPv6 literal needs brackets,
+/// anything else passes through unchanged. Shared by endpoint construction,
+/// config validation, and the runner collision probe so they agree on what a
+/// dialable host looks like.
+public func urlAuthorityHost(for host: String) -> String {
+    host.contains(":") && !host.hasPrefix("[") ? "[\(host)]" : host
+}
+
 /// Build a runner HTTP endpoint from a configured host and port, mapping a
 /// wildcard bind host to loopback so the URL is actually connectable. Never
 /// traps: a malformed host or port yields an unconnectable URL, so a probe fails
@@ -22,9 +30,7 @@ public func probeHost(for host: String) -> String {
 /// crashing the whole supervisor on a config typo.
 func runnerEndpoint(host: String, port: Int, path: String) -> URL {
     let dialed = probeHost(for: host)
-    // An IPv6 literal needs brackets in a URL authority.
-    let authority = dialed.contains(":") && !dialed.hasPrefix("[") ? "[\(dialed)]" : dialed
-    return URL(string: "http://\(authority):\(port)\(path)")
+    return URL(string: "http://\(urlAuthorityHost(for: dialed)):\(port)\(path)")
         ?? URL(string: "http://127.0.0.1:0\(path)")
         ?? URL(string: "http://127.0.0.1:0/")!
 }

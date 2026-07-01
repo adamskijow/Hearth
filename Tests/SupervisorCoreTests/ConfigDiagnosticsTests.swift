@@ -58,6 +58,16 @@ struct ConfigDiagnosticsTests {
                 .contains { $0.contains("does not use HTTPS") })
     }
 
+    @Test func ipv6LiteralHostsAreNotErrors() {
+        // Bare IPv6 literals are bracketed before URL validation, the same way
+        // the probe endpoints dial them, so a host supervision handles fine is
+        // not flagged as an invalid address.
+        #expect(errors(HearthConfig(host: "::1")).isEmpty)
+        #expect(errors(HearthConfig(host: "fe80::1")).isEmpty)
+        // The wildcard :: keeps its all-interfaces warning but is not an error.
+        #expect(errors(HearthConfig(host: "::")).isEmpty)
+    }
+
     @Test func aMalformedHostIsAnError() {
         // A space (or other URL-invalid character) would have crashed the runner's
         // force-unwrapped endpoint; it is now caught here.

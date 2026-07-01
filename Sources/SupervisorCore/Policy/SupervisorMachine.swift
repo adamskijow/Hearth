@@ -250,9 +250,12 @@ struct SupervisorMachine {
             return MachineOutput(effects: effects, nextWait: config.failingProbeInterval)
         }
 
-        // Normal recovery: back off, then respawn.
+        // Normal recovery: back off, then respawn. Reaching here from failing
+        // means the earlier failures aged out of the crash loop window, so the
+        // failing marker clears with the phase.
         let backoff = config.backoff(forConsecutiveFailure: consecutiveFailures)
         phase = .down
+        failingSince = nil
         scheduledRespawnAt = now.addingTimeInterval(backoff)
         lastTransition = now
         effects.append(.emit(.restartScheduled(attempt: consecutiveFailures, backoff: backoff)))

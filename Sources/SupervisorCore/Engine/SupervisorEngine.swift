@@ -31,8 +31,10 @@ public actor SupervisorEngine {
     private var currentModels: [ResidentModel] = []
     private var current: SupervisorState = SupervisorState()
     private var lastSpawnError: String?
-    /// When the deep probe last ran, so it runs on its own slower cadence. Reset at
-    /// each spawn so a fresh runner is deep-probed once it is shallow-ready.
+    /// When the deep probe last passed, so it runs on its own slower cadence.
+    /// Only a pass is recorded; a failure clears this so a wedged runner keeps
+    /// failing every cycle. Reset at each spawn so a fresh runner is deep-probed
+    /// once it is shallow-ready.
     private var lastDeepProbeAt: Date?
     private var looping = false
 
@@ -209,8 +211,16 @@ public actor SupervisorEngine {
         guard let deep = deepProbe else { return true }
         if let last = lastDeepProbeAt, now.timeIntervalSince(last) < deep.interval { return true }
         guard let request = runner.deepReadinessRequest(model: deep.model) else { return true }
-        lastDeepProbeAt = now
-        if case .ok = await http.post(request.url, body: request.body, timeout: deep.timeout) { return true }
+        if case .ok = await http.post(request.url, body: request.body, timeout: deep.timeout) {
+            // Only a pass is cached, so a healthy runner is not deep-probed every
+            // cycle. A failure must not suppress the next probe: in attached mode
+            // nothing respawns to reset the timestamp, so caching a failure would
+            // let the next shallow-ready cycle skip the deep probe and falsely
+            // report a still-wedged runner as recovered.
+            lastDeepProbeAt = now
+            return true
+        }
+        lastDeepProbeAt = nil
         return false
     }
 

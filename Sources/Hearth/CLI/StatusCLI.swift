@@ -374,17 +374,21 @@ enum StatusCLI {
         return fm.isWritableFile(atPath: url.path)
     }
 
+    /// The most recently recorded runner (the store keeps a predecessor around
+    /// while its teardown is still in flight; the newest entry is the current one).
     private static func recordedRunner() -> RunnerProcessIdentity? {
-        guard let data = try? Data(contentsOf: RunnerStateStore.url) else { return nil }
-        return try? JSONDecoder().decode(RunnerProcessIdentity.self, from: data)
+        RunnerStateStore.loadRecorded().last
     }
 
+    /// The newest recorded runner that is still the same live instance.
     private static func liveRecordedRunner() -> RunnerProcessIdentity? {
-        guard let recorded = recordedRunner(),
-              let live = RunnerStateStore.liveIdentity(pid: recorded.pid),
-              RunnerSweep.shouldSweep(recorded: recorded, live: live),
-              kill(recorded.pid, 0) == 0 else { return nil }
-        return recorded
+        for recorded in RunnerStateStore.loadRecorded().reversed() {
+            guard let live = RunnerStateStore.liveIdentity(pid: recorded.pid),
+                  RunnerSweep.shouldSweep(recorded: recorded, live: live),
+                  kill(recorded.pid, 0) == 0 else { continue }
+            return recorded
+        }
+        return nil
     }
 
     // MARK: - metrics

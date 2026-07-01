@@ -16,15 +16,16 @@ enum RunnerCollision {
         return !hearthRunnerAlive()
     }
 
-    /// Whether Hearth's recorded runner (from the last spawn) is still alive, with
-    /// the start-time guard so a recycled PID is not mistaken for it. Hearth records
-    /// a runner at spawn, before it binds, so any runner that is ours and serving the
-    /// port is already recorded by the time it answers; a foreign runner is not.
+    /// Whether any of Hearth's recorded runners (from recent spawns) is still
+    /// alive, with the start-time guard so a recycled PID is not mistaken for it.
+    /// Hearth records a runner at spawn, before it binds, so any runner that is
+    /// ours and serving the port is already recorded by the time it answers; a
+    /// foreign runner is not.
     private static func hearthRunnerAlive() -> Bool {
-        guard let data = try? Data(contentsOf: RunnerStateStore.url),
-              let recorded = try? JSONDecoder().decode(RunnerProcessIdentity.self, from: data),
-              let live = RunnerStateStore.liveIdentity(pid: recorded.pid) else { return false }
-        return live.startTimeSeconds == recorded.startTimeSeconds
+        RunnerStateStore.loadRecorded().contains { recorded in
+            guard let live = RunnerStateStore.liveIdentity(pid: recorded.pid) else { return false }
+            return live.startTimeSeconds == recorded.startTimeSeconds
+        }
     }
 
     private static func portIsServing(host: String, port: Int) async -> Bool {

@@ -18,28 +18,45 @@ struct SpawnError: Error { let code: Int32 }
 /// orphan that grandchild on every restart and leak memory. Killing the group
 /// takes the entire runner tree down together. Confirmed against a real Ollama.
 ///
-/// Thread safe by a lock: pipe readability handlers fire on background queues,
-/// while the engine calls `status` from its actor.
+/// Thread safe by a lock: pipe read sources fire on a background queue, while
+/// the engine calls `status` from its actor.
 final class FoundationProcessController: ProcessControlling, @unchecked Sendable {
     private final class Entry {
         let pid: pid_t
         let pgid: pid_t
         let stdoutRead: FileHandle
         let stderrRead: FileHandle
+        /// The leader's identity (pid plus start time) captured at spawn, so the
+        /// deferred group SIGKILL can re-validate that the pgid still names this
+        /// child before signalling, and the crash-recovery record can be dropped
+        /// precisely once the reap is confirmed.
+        let spawnIdentity: RunnerProcessIdentity?
+        /// Pipe drain sources. Each source's cancellation handler owns the close
+        /// of its file descriptor, so a read can never race a close (GCD runs the
+        /// cancel handler only after any in-flight event handler returns, and no
+        /// event handler runs after it).
+        var stdoutSource: DispatchSourceRead?
+        var stderrSource: DispatchSourceRead?
         var stderrRing: [String] = []
         var stderr = StderrLineSplitter()
         var exit: ProcessExit?
         var reaped = false
         var readingFinished = false
-        init(pid: pid_t, pgid: pid_t, stdoutRead: FileHandle, stderrRead: FileHandle) {
+        init(pid: pid_t, pgid: pid_t, stdoutRead: FileHandle, stderrRead: FileHandle,
+             spawnIdentity: RunnerProcessIdentity?) {
             self.pid = pid
             self.pgid = pgid
             self.stdoutRead = stdoutRead
             self.stderrRead = stderrRead
+            self.spawnIdentity = spawnIdentity
         }
     }
 
     private let lock = NSLock()
+    /// One serial queue drains every child's pipes. Serial so an entry's event
+    /// handlers and its cancellation handlers (which close the fds) are mutually
+    /// exclusive by construction.
+    private let readQueue = DispatchQueue(label: "Hearth.FoundationProcessController.pipe-read")
     private let logFileURL: URL
     private let maxStderrLines: Int
     private let killGraceSeconds: Double
@@ -83,6 +100,16 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
             }
         } else if geteuid() == 0 {
             warn("runnerUser is unset; as root Hearth will refuse to start a managed runner rather than run it as root")
+        }
+    }
+
+    deinit {
+        // A read source's event handler references the source, a deliberate cycle
+        // that cancellation breaks. If a controller is ever dropped with entries
+        // still tracked, cancel their sources so the descriptors and sources are
+        // not leaked for the rest of the process's life.
+        for entry in entries.values {
+            finishReading(entry)
         }
     }
 
@@ -141,11 +168,18 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
         stdoutPipe.fileHandleForWriting.closeFile()
         stderrPipe.fileHandleForWriting.closeFile()
 
+        // Record this runner so a hard SIGKILL of Hearth can be recovered from on
+        // the next launch (the child is its own process group leader). The captured
+        // identity also guards this entry's deferred group SIGKILL against a
+        // recycled pgid, and is removed from the record once the reap is confirmed.
+        let spawnIdentity = RunnerStateStore.record(pid: pid, pgid: pid)
+
         let entry = Entry(
             pid: pid,
             pgid: pid, // child is the group leader, so the group id equals its pid
             stdoutRead: stdoutPipe.fileHandleForReading,
-            stderrRead: stderrPipe.fileHandleForReading
+            stderrRead: stderrPipe.fileHandleForReading,
+            spawnIdentity: spawnIdentity
         )
 
         let id: ProcessHandleID = lock.withLock {
@@ -158,22 +192,49 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
             return handle
         }
 
-        // Record this runner so a hard SIGKILL of Hearth can be recovered from on
-        // the next launch (the child is its own process group leader).
-        RunnerStateStore.record(pid: pid, pgid: pid)
-
-        entry.stdoutRead.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { handle.readabilityHandler = nil; return }
-            self?.lock.withLock { self?.appendLogLocked(data) }
+        entry.stdoutSource = makeReadSource(draining: entry.stdoutRead) { [weak self] data in
+            guard let self else { return }
+            self.lock.withLock { self.appendLogLocked(data) }
         }
-        entry.stderrRead.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { handle.readabilityHandler = nil; return }
+        entry.stderrSource = makeReadSource(draining: entry.stderrRead) { [weak self] data in
             self?.ingestStderr(id, data: data)
         }
 
         return id
+    }
+
+    /// Drain one pipe end with a `DispatchSourceRead`. The source's cancellation
+    /// handler owns the close of the descriptor: GCD guarantees the cancel handler
+    /// runs only after any in-flight event handler has returned and that no event
+    /// handler runs after it, so a `read` can never touch a closed fd. That
+    /// mutual exclusion is the point; the previous `readabilityHandler` approach
+    /// called `availableData` (which raises an uncatchable NSException on a closed
+    /// fd) in a race with `finishReading`'s close on the restart hot path.
+    private func makeReadSource(draining handle: FileHandle,
+                                onData: @escaping (Data) -> Void) -> DispatchSourceRead {
+        let fd = handle.fileDescriptor
+        let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: readQueue)
+        source.setEventHandler {
+            var buffer = [UInt8](repeating: 0, count: 65_536)
+            let count = buffer.withUnsafeMutableBytes { raw in
+                read(fd, raw.baseAddress, raw.count)
+            }
+            if count > 0 {
+                onData(Data(bytes: buffer, count: count))
+            } else if !(count == -1 && (errno == EAGAIN || errno == EINTR)) {
+                // EOF (the child closed its end) or a real error: stop reading and
+                // close the fd via the cancellation handler.
+                source.cancel()
+            }
+        }
+        // The handler keeps the FileHandle alive until cancellation, and closing
+        // here is the only close, so the fd cannot be double closed or recycled
+        // under a pending read.
+        source.setCancelHandler {
+            try? handle.close()
+        }
+        source.resume()
+        return source
     }
 
     /// The default spawn: the runner inherits Hearth's user. posix_spawn in a new
@@ -291,8 +352,9 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
         }
         let pgid = entry.pgid
         let pid = entry.pid
+        let spawnIdentity = entry.spawnIdentity
         // Stop reading the doomed child and release its pipe fds now, rather than
-        // leaking the handlers and descriptors until something probes it again.
+        // leaking the sources and descriptors until something probes it again.
         lock.withLock { finishReading(entry) }
         // Take the whole runner tree down: serve plus the llama-server grandchild.
         killpg(pgid, SIGTERM)
@@ -304,8 +366,22 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
         // old controller's life by `grace`, with no retain cycle.
         DispatchQueue.global().asyncAfter(deadline: .now() + grace) { [self] in
             // SIGKILL the group if anything in it is still alive (a wedged or
-            // SIGSTOPped runner ignores SIGTERM; SIGKILL still lands).
-            if killpg(pgid, 0) == 0 {
+            // SIGSTOPped runner ignores SIGTERM; SIGKILL still lands), but only
+            // while the group id provably still belongs to this child: once the
+            // leader has been reaped its pid (== pgid) can be recycled, and a
+            // blind killpg here could SIGKILL an unrelated group that inherited
+            // the number inside the grace window. An unreaped leader (alive or
+            // zombie) keeps the pgid reserved, so signalling stays safe; on top
+            // of that the leader's start time is re-checked against the identity
+            // captured at spawn whenever it is still probeable.
+            let leaderReaped: Bool = lock.withLock {
+                guard let entry = entries[id] else { return true }
+                return entry.reaped
+            }
+            if RunnerSweep.deferredKillAllowed(leaderReaped: leaderReaped,
+                                               spawn: spawnIdentity,
+                                               live: RunnerStateStore.liveIdentity(pid: pid)),
+               killpg(pgid, 0) == 0 {
                 killpg(pgid, SIGKILL)
             }
             // Reap the group leader so it is not left a zombie, and forget the
@@ -325,13 +401,22 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
             var raw: Int32 = 0
             _ = waitpid(pid, &raw, 0)   // the group SIGKILL has landed, so this returns at once
         }
-        lock.withLock {
+        let reapedIdentity: RunnerProcessIdentity? = lock.withLock {
+            var identity: RunnerProcessIdentity?
             if let entry = entries[id] {
                 entry.reaped = true
                 finishReading(entry)
                 entries.removeValue(forKey: id)
+                identity = entry.spawnIdentity
             }
             if latestPID == pid { latestPID = nil }
+            return identity
+        }
+        // The reap is confirmed: the pid can be recycled from here on and the
+        // record is no longer sweepable (the sweep is keyed on the leader's
+        // identity), so drop it from the crash-recovery set.
+        if let reapedIdentity {
+            RunnerStateStore.remove(reapedIdentity)
         }
     }
 
@@ -361,11 +446,12 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
     private func finishReading(_ entry: Entry) {
         guard !entry.readingFinished else { return }
         entry.readingFinished = true
-        entry.stdoutRead.readabilityHandler = nil
-        entry.stderrRead.readabilityHandler = nil
+        // Cancelling is asynchronous and idempotent: the close happens in each
+        // source's cancellation handler on the read queue, strictly after any
+        // in-flight read, so this is safe to call while a drain is running.
+        entry.stdoutSource?.cancel()
+        entry.stderrSource?.cancel()
         if let line = entry.stderr.flush() { appendStderrLine(line, to: entry) }
-        try? entry.stdoutRead.close()
-        try? entry.stderrRead.close()
     }
 
     private func ingestStderr(_ id: ProcessHandleID, data: Data) {

@@ -66,6 +66,14 @@ let package = Package(
             dependencies: ["SupervisorCore"],
             swiftSettings: testingFrameworkSettings.swift,
             linkerSettings: testingFrameworkSettings.linker
+        ),
+        // Integration tests for the executable target's real I/O, most importantly
+        // the process controller, exercised against real short-lived children.
+        .testTarget(
+            name: "HearthTests",
+            dependencies: ["Hearth", "SupervisorCore"],
+            swiftSettings: testingFrameworkSettings.swift,
+            linkerSettings: testingFrameworkSettings.linker
         )
     ]
 )

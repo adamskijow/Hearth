@@ -33,4 +33,24 @@ public enum RunnerSweep {
         guard let live else { return false }
         return live.pid == recorded.pid && live.startTimeSeconds == recorded.startTimeSeconds
     }
+
+    /// Whether the deferred SIGKILL that backs up a graceful terminate may still
+    /// signal the child's process group after the grace window.
+    ///
+    /// Once the supervisor has reaped the leader, its pid, which is also the
+    /// group id, is free for reuse, so a `killpg` could land on an unrelated
+    /// recycled group; never signal then. While the leader is unreaped its pid
+    /// stays reserved by the kernel (alive, or a zombie the supervisor has not
+    /// waited on), so the group id still names the child's own group and the
+    /// SIGKILL is both safe and needed to take down wedged group members. Belt
+    /// and braces: when the leader is still probeable, its start time must also
+    /// match the identity captured at spawn; an unprobeable leader (a zombie
+    /// reports no info) is fine because unreaped means unrecycled.
+    public static func deferredKillAllowed(leaderReaped: Bool,
+                                           spawn: RunnerProcessIdentity?,
+                                           live: RunnerProcessIdentity?) -> Bool {
+        if leaderReaped { return false }
+        if let spawn, let live { return shouldSweep(recorded: spawn, live: live) }
+        return true
+    }
 }

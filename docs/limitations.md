@@ -10,7 +10,7 @@ does not reimplement the operating system.
   full reboot. A respawn clears more on Apple Silicon and Metal than on the
   discrete-GPU setups in those reports, but it is not a cure-all. For a headless
   box, the opt-in reboot escalation
-  ([Recovering a wedge a restart cannot](../README.md#recovering-a-wedge-a-restart-cannot))
+  ([Recovering a wedge a restart cannot](running-headless.md#recovering-a-wedge-a-restart-cannot))
   automates the reboot that does, with a loop guard and a give-up-and-notify floor.
 - Validated against a real Ollama 0.30.11 (see
   [VALIDATION-REPORT.md](../VALIDATION-REPORT.md)): cold start, external kill, the

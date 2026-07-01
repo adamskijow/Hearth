@@ -15,11 +15,9 @@ Hearth is a background supervisor that keeps a local LLM runner (Ollama, with LM
 Studio and mlx_lm support) alive and serving on a headless Mac.
 
 It is an availability layer, not an inference layer. Hearth watches the runner,
-restarts it when it dies or wedges, keeps the Mac awake while it is meant to be
+restarts it when it dies **or wedges**, keeps the Mac awake while it is meant to be
 serving, and tells you when something goes wrong. It is not a chat UI or a
-replacement for Ollama or LM Studio; it supervises the runner you already run. The
-runner is an opaque child process that Hearth owns; it reads the runner's API and
-logs only to judge whether it is healthy.
+replacement for Ollama or LM Studio; it supervises the runner you already run.
 
 Why a Mac-specific tool, and not Docker? On Apple Silicon you run Ollama natively:
 [Docker on macOS has no GPU passthrough and runs CPU-only](https://github.com/ollama/ollama/blob/main/docs/faq.mdx#how-do-i-use-ollama-with-gpu-acceleration-in-docker),
@@ -28,47 +26,37 @@ locally. A native runner has none of the container world's health-probe and rest
 machinery, so the readiness-based recovery you would get from Kubernetes has to come
 from somewhere. Hearth is that layer.
 
-## Contents
-
-**Start here** &nbsp; [Quickstart](#quickstart) · [Why this exists](#why-this-exists) · [Requirements](#requirements) · [Install and build](#install-and-build)
-
-**Use it** &nbsp; [Configure](#configure) · [How it works](#how-it-works) · [Remote control](#remote-control) · [Troubleshooting](#troubleshooting)
-
-**Run it headless** &nbsp; [Running headless](#running-headless) · [Recovering a wedge a restart cannot](#recovering-a-wedge-a-restart-cannot) · [Security and exposing the runner](#security-and-exposing-the-runner)
-
-**Project** &nbsp; [Architecture](#architecture) · [Roadmap](#roadmap) · [Contributing](#contributing) · [License](#license)
+**Contents** &nbsp; [Quickstart](#quickstart) · [Why this exists](#why-this-exists) · [Requirements](#requirements) · [Install](#install-and-build) · [Configure](#configure) · [How it works](#how-it-works) · [Security](#security-and-exposing-the-runner) · [Architecture](#architecture)
 
 ## Documentation
 
-The README is the tour. Deeper detail lives in `docs/`:
+The README is the tour; the operational detail lives in `docs/`:
 
-- **[Configuration reference](docs/configuration.md):** every config key, its default, and what it does.
-- **[Integrating with Hearth](docs/integrating.md):** for an app that wants to depend on a local runner being up.
+- **[Configuration reference](docs/configuration.md):** every config key, its type, and its default.
+- **[Remote control and local status](docs/remote-control.md):** the HTTP control endpoint, the `hearth` CLI, and monitoring.
+- **[Running headless](docs/running-headless.md):** the login agent, the root daemon, and the wedge-recovery reboot ladder.
+- **[Troubleshooting](docs/troubleshooting.md):** the common failure modes and their fixes.
+- **[Integrating with Hearth](docs/integrating.md):** for an app that depends on a local runner being up.
 - **[Reverse proxy and TLS](docs/reverse-proxy.md):** reaching the runner or the control endpoint securely from off this machine.
-- **[Development](docs/development.md):** running the test suite and cutting a release.
 - **[Known limitations and design choices](docs/limitations.md):** what Hearth does not do, and why.
+- **[Development](docs/development.md):** the test suite, signing, and cutting a release.
 
 ## Quickstart
 
 If you already run Ollama on this Mac:
 
 ```
-brew install --cask adamskijow/tap/hearth   # or: git clone the repo, then make install
+brew install --cask adamskijow/tap/hearth
 open /Applications/Hearth.app
 ```
 
 A flame appears in the menubar. Hearth auto-detects Ollama at the Homebrew path,
 starts supervising it, and keeps the Mac awake while it serves. That is the whole
-setup. To check it from a terminal:
-
-```
-hearth doctor    # config and environment preflight
-hearth status    # phase, uptime, restarts, resident models
-```
-
-If your runner is elsewhere or you want LM Studio or mlx_lm, the remote control
-endpoint, or pressure alerts, see Configure below. If something looks off, jump to
-Troubleshooting.
+setup. Check it from a terminal with `hearth doctor` (config and environment
+preflight) and `hearth status` (phase, uptime, restarts, resident models). If your
+runner is elsewhere or you want LM Studio or mlx_lm, see
+[Configure](#configure); if something looks off, see
+[Troubleshooting](docs/troubleshooting.md).
 
 ## Why this exists
 
@@ -84,454 +72,108 @@ the GPU stops responding and "the service needs to be rebooted"
 or Ollama silently reverts to CPU and spins for hours
 ([ollama#8594](https://github.com/ollama/ollama/issues/8594)). The process is up the
 whole time, so a **liveness** check ("is the PID there?") is satisfied and launchd
-does nothing. The fixes people reach for are blind to it too (a `KeepAlive` plist,
-a cron restart on a timer) or homemade and brittle (a hand-rolled watchdog script),
-because there is no off-the-shelf Mac tool for this.
+does nothing.
 
 Hearth probes **readiness** ("does the API actually answer in time?"), so it catches
-the wedge, not just the crash: launchd restarts the runner when it dies, Hearth also
-restarts it when it stops answering. An optional [deep probe](#configure) goes one
-level further, running a tiny generation on an interval so it catches the harder
-case too: the HTTP server still answers while the model runner or GPU is hung. It
-also handles what a process supervisor was never meant to: keeping the Mac awake
-while serving, sidestepping the `OLLAMA_HOST` listen-address trap, and alerting you
-when something breaks. And it runs on top of launchd, not instead of it (the login
-agent that keeps Hearth alive is a launchd job), to make a local runner behave like
-a real, always-on service on a machine nobody is sitting at.
+the wedge, not just the crash. An optional deep probe goes further, running a tiny
+generation on an interval to catch the case where the HTTP server still answers while
+the model or GPU is hung. It also does what a process supervisor was never meant to:
+keeps the Mac awake while serving, pins `OLLAMA_HOST` so the runner binds where you
+expect, and alerts you when something breaks. It runs on top of launchd, not instead
+of it, to make a local runner behave like a real, always-on service on a machine
+nobody is sitting at.
 
 ## Requirements
 
-- macOS 14 or later.
-- An existing runner install. Ollama is the default; LM Studio and mlx_lm are
-  also supported. Hearth supervises the runner, it does not install it.
-  - Ollama: expected at `/opt/homebrew/bin/ollama` (the Apple Silicon Homebrew
-    location). If yours is elsewhere, for example `/usr/local/bin/ollama`, set
-    `ollamaBinaryPath`.
-  - LM Studio: set `runner` to `lmstudio` and `lmStudioBinaryPath` to your `lms`
-    CLI, and use **attached** mode. Managed mode does not work, because
-    `lms server start` exits immediately (the server runs in LM Studio's own
-    background process), so a managed runner would thrash; `hearth doctor` and the
-    menu flag this. Start LM Studio's server yourself and let Hearth watch it.
-  - mlx_lm: set `runner` to `mlx` and `mlxBinaryPath` to your `mlx_lm.server`.
-    Managed mode is validated. Note that `mlx_lm.server` needs at least one MLX
-    model in your HuggingFace cache (its `/v1/models` errors on an empty cache),
-    which any mlx user already has.
-- No third party Swift dependencies. Hearth builds against Apple system
-  frameworks only (Foundation, AppKit, IOKit, Network, ServiceManagement, and
-  UserNotifications), which keeps the dependency surface, and the licensing
-  surface, empty.
+macOS 14 or later, and an existing runner install (Hearth supervises the runner, it
+does not install it). Ollama is the default, expected at `/opt/homebrew/bin/ollama`;
+LM Studio (in attached mode) and mlx_lm are also supported, selected with `runner`
+and the matching binary path. The [configuration reference](docs/configuration.md)
+and [Troubleshooting](docs/troubleshooting.md) have the per-runner notes. Hearth has
+no third-party Swift dependencies; it builds against Apple system frameworks only.
 
 ## Install and build
 
-The signed release installs with Homebrew:
+Install the signed release with Homebrew:
 
 ```
 brew install --cask adamskijow/tap/hearth
 ```
 
 The cask installs `Hearth.app` and puts the `hearth` CLI (`doctor`, `status`,
-`setup`, `wait-ready`) on your PATH, so the commands in this README work straight
-after install. The cask lives at `Casks/hearth.rb` and is mirrored to the
-`adamskijow/homebrew-tap` tap.
-
-To build from a checkout instead:
-
-```
-swift build -c release
-swift run Hearth      # runs the agent directly; a flame appears in the menubar
-```
-
-Running unbundled is fine for development, but two features only work from a
-packaged, signed app and degrade gracefully otherwise: autostart at login
-(SMAppService) and local Notification Center alerts. For a day-to-day local
-install, `make install` ad-hoc signs the app, copies it to `/Applications`, and
-symlinks the `hearth` CLI; `make uninstall` removes it. Hearth is distributed as a
-Developer ID signed, notarized build (see [Development](docs/development.md) for the
-signing and release pipeline, and [Security](#security-and-exposing-the-runner) for
-why it runs unsandboxed).
+`setup`, `wait-ready`) on your PATH. To build from a checkout instead,
+`swift build -c release && swift run Hearth`; for a day-to-day local install,
+`make install` ad-hoc signs the app into `/Applications` (and `make uninstall`
+removes it). Hearth is distributed as a Developer ID signed, notarized build, not via
+the App Store, whose sandbox forbids the process supervision that is the whole job.
+The build, signing, and release pipeline is in [Development](docs/development.md).
 
 ## Configure
 
-Configure Hearth from **Preferences** in the menubar (Cmd-comma) or by editing the
-JSON directly at `~/Library/Application Support/Hearth/config.json`. Either way,
-changes apply **without a restart** (Preferences' Save reloads live; after a hand
-edit choose "Reload Config" from the menu, or send SIGHUP), and reloading briefly
-cycles the runner. On first launch Hearth writes a starter template with the runner
-binary auto detected, every key is optional and falls back to its default, and a
-malformed file is flagged loudly rather than silently reverted. Point Hearth at a
-different file with the `HEARTH_CONFIG` environment variable.
-
-The keys most people set:
-
-- `runner` and `mode`: which runner (`ollama`, `lmstudio`, `mlx`) and whether Hearth
-  launches it (`managed`) or only watches one you started (`attached`).
-- `ollamaBinaryPath` (or `lmStudioBinaryPath` / `mlxBinaryPath`): where the runner
-  binary is, if not at the default.
-- `host` and `port`: the address the runner serves on (default `127.0.0.1:11434`;
-  set `host` to `0.0.0.0` to reach it from your LAN, see [Troubleshooting](#troubleshooting)).
-- `ntfyTopic`: a long, unguessable topic for phone alerts. Treat it like a secret;
-  anyone who knows a public topic can read it. Subscribe to the same topic in the
-  ntfy app on your phone.
-- `controlEnabled` and `controlToken`: turn on the HTTP control endpoint and the
-  bearer token every request must carry.
-
-A typical config:
-
-```json
-{
-  "runner": "ollama",
-  "mode": "managed",
-  "host": "127.0.0.1",
-  "port": 11434,
-  "ntfyTopic": "my-private-hearth-topic-7f3a",
-  "controlEnabled": true,
-  "controlHost": "127.0.0.1",
-  "controlPort": 11435,
-  "controlToken": "a-long-unguessable-secret"
-}
-```
-
-Everything else, the probe and backoff timing, the crash-loop brake, the deep probe
-(`probeModel`), maintenance restarts (`maintenanceRestartHours`), extra runner
-environment (`runnerEnv`), the pressure thresholds, log rotation, and reboot
-escalation, has a sensible default. The
+Configure Hearth from **Preferences** in the menubar (Cmd-comma) or by editing
+`~/Library/Application Support/Hearth/config.json` directly; either way changes apply
+**without a restart**. On first launch Hearth writes a starter template with the
+runner binary auto detected, and every key is optional. The keys most people set are
+`runner`/`mode` (which runner, and whether Hearth launches it or watches one you
+started), the runner's binary path and `host`/`port`, `ntfyTopic` for phone alerts,
+and `controlEnabled`/`controlToken` for the
+[control endpoint](docs/remote-control.md). The
 [configuration reference](docs/configuration.md) lists every key, its type, and its
-default.
+default, with a full example.
 
 ## How it works
 
-Hearth's default is managed mode. It spawns the runner child itself and owns it,
-setting the child's environment at launch. Because Hearth defines the child's
-environment, `OLLAMA_HOST` is pinned to your configured host and port by
-construction, which is what sidesteps the launchd env trap.
+Hearth's default is **managed** mode: it spawns the runner as a child in its own
+process group and owns it. Because Hearth sets the child's environment, `OLLAMA_HOST`
+is pinned to your configured host and port, sidestepping the launchd env trap; and
+because it owns the whole process group, a restart takes the runner's helpers (an
+Ollama serve forks a `llama-server` that holds GPU memory) down together, so nothing
+is orphaned to leak across a restart loop. If Hearth itself is SIGKILLed before it can
+tear down, it recovers on the next launch by sweeping the runner group it recorded to
+disk, guarded by start time so a recycled PID is never mistaken for it. In
+**attached** mode it spawns nothing and only monitors a runner something else
+started, the reliable way to use LM Studio.
 
-The runner is spawned in its own process group. That matters because a runner
-forks helpers (an Ollama serve forks a separate `llama-server` that holds GPU and
-unified memory), and on teardown or restart Hearth kills the whole group, so a
-helper is never orphaned to leak memory across a restart loop. This is verified
-against a real Ollama in [VALIDATION-REPORT.md](VALIDATION-REPORT.md).
+Health is **readiness**, not just liveness. Liveness asks whether the process is
+alive; readiness asks whether the runner's endpoint actually answers in time.
+Readiness is the important half, because it catches the alive-but-wedged runner a
+liveness check calls healthy. The optional deep probe (`probeModel`) goes one level
+deeper, running a one-token generation on a slower interval to catch a model or GPU
+hang while the HTTP server still answers.
 
-That covers every exit Hearth gets to observe. The one it cannot observe is its
-own hard death: if Hearth is SIGKILLed, it never runs teardown and the group it
-spawned is left behind. To close that, Hearth records the runner's PID, process
-group, and start time to disk on every spawn, and on the next launch it sweeps
-any recorded group that is still alive before starting fresh. The start time is
-the safety check: a recycled PID belonging to a different process has a different
-start time, so Hearth never kills a bystander.
-
-In attached mode, Hearth does not spawn anything. It monitors a runner that
-something else started, by probing its readiness endpoint. It still holds the
-power assertion and notifies on transitions, but it never spawns or kills a
-process it does not own. Attached mode is the reliable way to use LM Studio,
-whose `lms server start` may hand the server off to a background service rather
-than staying in the foreground.
-
-Health has two parts. Liveness asks whether the child process is still alive.
-Readiness asks whether the runner's version endpoint actually answers within the
-probe timeout. Readiness is the important half: it catches the alive but wedged
-runner that a liveness check alone would call healthy, and treats it as down. (In
-attached mode there is no child to inspect, so readiness is the whole signal.)
-
-That shallow readiness check catches a runner that has stopped answering, but not
-one whose HTTP server still answers while the model itself is wedged (a GPU or
-model-load hang). For that, set `probeModel`: Hearth then also runs a one-token
-generation against it on a slower interval, so an inference-level wedge is caught
-and restarted. It is off by default because it names a model and does GPU work; the
-shallow probe stays the default.
-
-When the runner stops serving, whether it crashed or wedged, Hearth restarts it
-(in managed mode) on an exponential backoff capped at `maxBackoffSeconds`. If
-failures keep coming, specifically `crashLoopThreshold` failures within
-`crashLoopWindowSeconds`, Hearth decides it is in a crash loop. It stops
-thrashing, enters a failing state, and retries slowly on
-`failingProbeIntervalSeconds` instead of hammering the machine. It keeps probing,
-so if the underlying problem clears, it recovers on its own.
+When the runner stops serving, Hearth restarts it on an exponential backoff. If
+failures keep coming (a crash loop), it stops thrashing, enters a failing state, and
+retries slowly while it keeps probing, so it recovers on its own once the underlying
+problem clears.
 
 <p align="center">
   <img src="assets/state-machine.svg" alt="The supervisor state machine: Stopped to Starting to Healthy, with a failure cycle through Down, Restarting, and Failing" width="820">
 </p>
 
-Hearth classifies how the child exited from its exit status and recent stderr,
-distinguishing a clean stop from an ordinary crash from an out of memory kill.
-The out of memory case matters on a unified memory Mac, where an oversized model
-can take down the whole box rather than failing a single request.
-
-While it intends to keep the runner up, Hearth holds an IOKit power assertion
-(`PreventUserIdleSystemSleep`) so the Mac does not idle sleep out from under a
-service that is supposed to be available. It releases the assertion when you stop
-supervision. You can confirm the assertion with `pmset -g assertions`.
-
-Notifications fire on the transitions that matter: going down, recovering, and
-entering the failing state. There are three delivery paths. Local Notification
-Center alerts for when you are at the machine, and ntfy HTTP posts for when you
-are not, so a Mac in a closet can still reach your phone. Set `webhookURL` and
-Hearth also POSTs a small JSON status body (`level`, `title`, `body`, `event`,
-`timestamp`) to your own endpoint on each event, to wire into your own automation.
-All three carry only Hearth's own short status, never runner content.
-
-The menubar shows the current status, the models the runner currently holds
-resident (from its own API, surfaced for awareness only, never chosen by Hearth),
-uptime of the current healthy streak, and the reason for the last restart. It
-also shows a coarse system readout: the thermal state (throttling risk), the
-fraction of physical memory in use (out of memory risk), and the runner's
-resident memory. These come from public APIs only, no root, and are
-observability, not inference. The actions are Start, Stop, Restart, and Open
-Logs. The child's stdout and stderr are captured to
-`~/Library/Logs/Hearth/runner.log`.
-
-Beyond reacting to failures, a few opt-in settings address slow degradation.
-`maintenanceRestartHours` cycles a healthy runner on an interval (for example `24`)
-to clear the memory creep that slows a long-running Ollama, quietly, with no
-"recovered" alert. `restartOnBinaryChange` adopts a new binary after a
-`brew upgrade` instead of serving the old one forever (managed mode). And the same
-memory and thermal samples behind the menubar readout can alert: when system memory
-crosses `memoryAlertPercent` (default 90) or thermals go serious, Hearth sends a
-heads-up, and an all-clear when it eases, before pressure becomes a crash.
-
-## Remote control
-
-With `controlEnabled` and a `controlToken` set, Hearth runs a small HTTP control
-endpoint so a phone can check status and start, stop, or restart the runner, not
-just receive notifications. Every request must carry the token as a bearer
-header.
-
-```
-# status
-curl -H "Authorization: Bearer $TOKEN" http://HOST:11435/status
-
-# control
-curl -X POST -H "Authorization: Bearer $TOKEN" http://HOST:11435/restart
-curl -X POST -H "Authorization: Bearer $TOKEN" http://HOST:11435/stop
-curl -X POST -H "Authorization: Bearer $TOKEN" http://HOST:11435/start
-```
-
-`/status` returns a compact JSON document with the phase, resident models,
-uptime, restart count, last restart reason, and the system metrics (thermal
-state, memory used percent, runner resident bytes). `/metrics` returns the same
-data as a Prometheus text exposition (also behind the token), so you can scrape
-Hearth into Grafana or Uptime Kuma; and the unauthenticated `/healthz` returns
-`200` when Hearth is up, for an uptime monitor. Ready-made Prometheus, Grafana, and
-Uptime Kuma recipes (including a dashboard) are in
-[deploy/monitoring.md](deploy/monitoring.md). The control endpoint is a control
-surface, not a public API: bind it to localhost or a private interface (a
-Tailscale address is ideal) and keep it behind a VPN. It refuses to start without
-a token, and rejects any request whose bearer token does not match.
-
-Opening the control URL in a browser (`http://HOST:11435/`) serves a small status
-page for phones: paste your token once (it is stored in that browser only, never
-in the URL) and it polls `/status` and shows the phase, uptime, and metrics. The
-page itself is unauthenticated but reveals nothing; the status fetch it makes
-carries the token.
-
-When Hearth detects a Tailscale address on the machine (an interface in the
-100.64.0.0/10 range), the menubar shows a "Phone access" line with the full
-control URL to use from your phone. Hearth only reads the interface list; it does
-not configure Tailscale.
-
-### Local status and logs
-
-From the same machine, two terminal subcommands give a quick read without the
-menubar or a curl invocation:
-
-```
-hearth setup               # turnkey: detect runner, install login agent, wait for ready
-hearth status [--json]     # phase, uptime, restarts, metrics, resident models (--json for agents)
-hearth logs -n 100         # last 100 lines of the runner log
-hearth logs -f             # follow the runner log
-hearth events              # Hearth's own event history (down, restart, recovered)
-hearth metrics             # memory and thermal history over the retained window
-hearth doctor              # check the config and environment for problems
-hearth wait-ready [-t S]   # block until the runner answers, then exit 0 (1 on timeout)
-hearth install-agent       # install a login agent that keeps Hearth running (no sudo)
-hearth uninstall-agent     # remove that login agent
-```
-
-`hearth status` reads the config (at `HEARTH_CONFIG` or the standard location)
-and queries the control endpoint when it is enabled, printing the full picture.
-With the control endpoint off it falls back to a reduced report: whether a
-supervised runner is recorded and alive, and whether anything is serving on the
-runner's port.
-
-Hearth records its own decisions (became healthy, down with the cause, restart
-scheduled, recovered, crash loop) to a small line-capped `events.log` next to the
-runner log. Unlike the in-memory recent-activity list, this survives a restart,
-so `hearth events`, the menu's Recent activity, and the tail shown by
-`hearth status` all answer "why did it restart last night." The runner log
-(`hearth logs`) is the runner's own stdout and stderr; the event log is Hearth's
-view of it.
-
-`hearth doctor` is a preflight check. It validates the config (port ranges, an
-unknown runner or mode, a control endpoint with no token, a control port that
-collides with the runner port, backoff timings that cannot grow) and the
-environment (the runner binary exists and is executable, the runner port is free
-for a managed runner or already serving for an attached one, the log directory is
-writable), then prints each result and exits non-zero if anything is an error.
-
-## Troubleshooting
-
-Run `hearth doctor` first; it catches most of these and tells you which. The menu
-also shows a "config issues" line when it finds any.
-
-- **The menubar flame never goes green / "runner binary not found."** Hearth is
-  looking for the runner at the default path and not finding it. Set
-  `ollamaBinaryPath` (or `lmStudioBinaryPath` / `mlxBinaryPath`) to the output of
-  `which ollama`, in Preferences or the config. `hearth doctor` reports the path
-  it tried.
-- **LM Studio keeps restarting (down, restarting, down).** Managed mode does not
-  work with LM Studio: `lms server start` exits immediately. Set `mode` to
-  `attached` and start LM Studio's server yourself; Hearth will watch it.
-- **mlx_lm never reaches healthy.** `mlx_lm.server`'s `/v1/models` errors until at
-  least one MLX model is in your HuggingFace cache. Download any model once.
-- **Login item or notifications do nothing.** Those need the packaged, signed app
-  (`make install` or the cask), not `swift run Hearth`. Unbundled, they degrade
-  gracefully and the menu says so.
-- **`hearth status` says the control endpoint is unreachable.** Enable it
-  (`controlEnabled`, with a `controlToken`), and check `controlHost`/`controlPort`.
-  Bind it to localhost or a Tailscale address, never a public interface.
-- **Another computer can't reach the runner (connection refused).** By default
-  Ollama binds to `127.0.0.1`, so it is reachable only from the Mac it runs on. Set
-  `host` to `0.0.0.0` to open it to your LAN: managed Hearth then launches the runner
-  bound correctly, with no `launchctl setenv OLLAMA_HOST` ritual. Open the firewall
-  for the port, then connect from the other machine to `http://<this-mac-lan-ip>:11434`.
-  `hearth doctor` prints the exact URL and the firewall reminder, and the menu shows
-  a "Reachable at" line once it is open. For access beyond your LAN, use Tailscale
-  rather than exposing the port. To carry hand-tuned runner settings
-  (`OLLAMA_LOAD_TIMEOUT` and the like) along with the bind change, set them in
-  `runnerEnv` so they live in the config instead of a launchd plist.
-- **A stray `ollama serve` is running after a restart.** Hearth records the
-  process group it owns and sweeps it on the next launch. If you deleted
-  `runner-state.json` by hand, that record is gone; kill the stray once and let
-  Hearth own the next one.
-- **The runner keeps restarting and the state churns (managed mode).** Something
-  else is also managing the runner and fighting Hearth over it, most often
-  `brew services`. `hearth doctor` and the menu flag this; run
-  `brew services stop ollama` so Hearth is the sole supervisor. (Two Hearths can
-  also collide; the single-instance guard handles that, but a non-Hearth manager
-  needs stopping.)
-
-## Running headless
-
-The menubar agent needs a logged in desktop session. For a Mac where nobody logs
-in, Hearth has a headless mode that runs supervision with no GUI: no menubar and
-no local Notification Center (there is no session to show it), but ntfy still
-reaches your phone, and the control endpoint and the power assertion work the
-same.
-
-```
-hearth --headless          # or set HEARTH_HEADLESS=1
-```
-
-### Keep it running at login (one command)
-
-The easy way to run Hearth headless and keep it alive is a per-user login agent,
-installed in one step (no sudo):
-
-```
-hearth install-agent
-```
-
-This writes `~/Library/LaunchAgents/com.hearth.headless.plist` pointing at the
-Hearth binary you ran it from and your config, then loads it with `launchctl`.
-Hearth now starts headless at login and is kept alive. Remove it any time with
-`hearth uninstall-agent`.
-
-It is safe to run even if the menubar app also launches at login: the
-single-instance guard means whichever starts first supervises and the other stands
-by, so they never fight. This is the recommended setup for an app that depends on a
-local runner staying up. Such an app does not integrate with Hearth's API; it
-depends on the runner directly and gates its own startup on the runner answering:
-
-```
-hearth wait-ready && my-app   # start once the runner actually answers
-```
-
-The full contract (what to do, what not, graceful degradation, the Hob example) is
-in [Integrating with Hearth](docs/integrating.md).
-
-### Before anyone logs in (root daemon)
-
-A login agent only runs once you are logged in. To run Hearth before any login (a
-Mac in a closet that reboots unattended), install it as a root LaunchDaemon. The
-files are in `deploy/` and the installer is `scripts/install-daemon.sh`. It
-modifies your system (writes to `/usr/local/bin`, `/etc/hearth`, and
-`/Library/LaunchDaemons`), so read it first and run it with sudo:
-
-```
-swift build -c release
-sudo ./scripts/install-daemon.sh
-# edit /etc/hearth/config.json (set your tokens), then:
-sudo launchctl kickstart -k system/com.hearth.daemon
-```
-
-Remove it with `sudo ./scripts/uninstall-daemon.sh`. In daemon mode Hearth runs
-as root, so its config lives at `/etc/hearth/config.json` (pointed to by the
-plist's `HEARTH_CONFIG`) and its logs at `/var/log/hearth.out.log` and
-`/var/log/hearth.err.log`. After editing the config, apply it by restarting the
-daemon (it has no in-process live reload; the runner cycles briefly):
-`sudo launchctl kickstart -k system/com.hearth.daemon`, or send SIGHUP
-(`sudo launchctl kill HUP system/com.hearth.daemon`), which stops it cleanly and
-lets launchd respawn it with the new config.
-
-## Recovering a wedge a restart cannot
-
-Killing and respawning the runner clears a process-level wedge. Some hangs are at
-the driver or GPU level and survive a process restart; only a reboot of the Mac
-clears them (see [Known limitations](docs/limitations.md)). On a headless box you would otherwise have to
-notice and reboot it by hand. The recovery ladder closes that gap as an opt-in
-last resort:
-
-```
-probe readiness
-  wedged?           -> kill and respawn the runner group   (clears most wedges)
-  still wedged long
-  after restarts
-  stopped helping?  -> reboot the Mac -> comes back, respawns the runner clean
-```
-
-Enable it in the config. It is off by default and needs Hearth running as root
-(the headless daemon above), because rebooting takes privileges:
-
-```json
-{ "rebootOnWedge": true }
-```
-
-The policy is deliberately paranoid, because an auto-reboot done wrong is a boot
-loop:
-
-- Off by default; nothing reboots unless you opt in.
-- Only after the runner was actually healthy this session. A wrong binary path or
-  a bad config never triggers a reboot, only a runner that was serving and then
-  wedged past what a restart can fix.
-- Only after a sustained failing streak (`rebootEscalateAfterSeconds`, default ten
-  minutes), so a brief blip never reboots.
-- Loop-protected. The reboot history is persisted across the reboots themselves;
-  if a reboot did not help (still wedged sooner than `rebootMinIntervalSeconds`)
-  or the daily cap (`rebootMaxPerDay`) is reached, Hearth stops and notifies you
-  rather than rebooting again.
-- Loud. ntfy fires before the reboot, and again if it gives up.
-
-A reboot cannot fix a hardware or thermal fault, so the give-up-and-notify path is
-the honest floor: if even a reboot does not restore the runner, a human needs to
-look.
+Along the way it holds an IOKit power assertion so the Mac does not idle-sleep out
+from under a service that is meant to be up, classifies how the child exited (clean
+stop vs crash vs out-of-memory kill, which matters on a unified-memory Mac), and
+notifies you on the transitions that matter (down, recovered, failing) over local
+alerts, ntfy to your phone, and an optional webhook. Opt-in settings cover slow
+degradation too: scheduled maintenance restarts, adopting an upgraded binary, and
+memory and thermal pressure alerts.
 
 ## Security and exposing the runner
 
-Hearth runs unsandboxed by necessity: supervising another process is exactly what
-the App Sandbox forbids, so it ships with the sandbox off and the Hardened Runtime
-on, as a Developer ID notarized build. It spawns and owns the runner child and reads
-that runner's local API to judge health; it sends only short status text to
-notifiers, never prompts, model data, or runner content.
+Hearth runs unsandboxed by necessity: supervising another process is exactly what the
+App Sandbox forbids, so it ships with the sandbox off and the Hardened Runtime on, as
+a Developer ID notarized build. It sends only short status text to notifiers, never
+prompts, model data, or runner content.
 
 It is conservative about putting the runner on the network. By default the runner
-listens on `127.0.0.1`. For another machine on a network you trust, setting `host`
-to `0.0.0.0` is the simple path (`hearth doctor` prints the URL and the firewall
-caveat, see [Troubleshooting](#troubleshooting)). Do not expose the runner raw to an
-untrusted network: it has no authentication of its own, so keep it on `127.0.0.1`
-behind an authenticating reverse proxy bound to a private (Tailscale) address. The
-[reverse-proxy guide](docs/reverse-proxy.md) has Caddy and nginx examples plus the
-`/healthz` route for uptime monitors. Hearth's own control endpoint is separate: off
-by default, a bearer token required when on, bound to a private interface, and only
-for supervision, never inference.
+listens on `127.0.0.1`. For a machine on a network you trust, setting `host` to
+`0.0.0.0` is the simple path (`hearth doctor` prints the URL and the firewall caveat).
+Do not expose the runner raw to an untrusted network: it has no authentication of its
+own, so keep it on `127.0.0.1` behind an authenticating reverse proxy bound to a
+private (Tailscale) address (the [reverse-proxy guide](docs/reverse-proxy.md) has Caddy and
+nginx examples). Hearth's own control endpoint is separate: off by default, a bearer
+token required when on, bound to a private interface, and only for supervision, never
+inference.
 
 ## Architecture
 
@@ -540,11 +182,10 @@ The code splits into a logic half and a presentation half with a hard line betwe
 process control, HTTP, power, and notifications sit behind protocols, so it is unit
 tested with fakes and never touches real I/O. Its heart is an explicit restart state
 machine and a pure exit classifier that take the current time as an argument, so
-their behavior is fully determined by their inputs; the runner specifics, the control
-endpoint's routing and auth, and the metrics and tailnet helpers live here too as
-pure, tested code. `Hearth` is the executable that wires the core to real process
-spawning (`posix_spawn` in a dedicated process group), URLSession, IOKit, the Network
-framework, SMAppService, and UserNotifications, and renders the published state.
+their behavior is fully determined by their inputs. `Hearth` is the executable that
+wires the core to real process spawning (`posix_spawn` in a dedicated process group),
+URLSession, IOKit, the Network framework, SMAppService, and UserNotifications, and
+renders the published state.
 
 ## Roadmap
 

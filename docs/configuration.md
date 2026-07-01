@@ -79,8 +79,9 @@ endpoint with TLS.
 
 The last rung of the recovery ladder, for a wedge a process restart cannot clear
 (a driver/GPU-level hang). Off by default, and effective only when Hearth runs as
-root (the headless LaunchDaemon), since rebooting needs privileges. See the
-README's "Recovering a wedge a restart cannot" for the full safety story.
+root (the headless LaunchDaemon), since rebooting needs privileges. See
+[Recovering a wedge a restart cannot](running-headless.md#recovering-a-wedge-a-restart-cannot)
+for the full safety story.
 
 | Key | Type | Default | Meaning |
 |-----|------|---------|---------|

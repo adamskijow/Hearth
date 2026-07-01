@@ -5,12 +5,14 @@ All notable changes to Hearth are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.8.0] - 2026-07-01
 
-A security hardening pass from a third independent audit, a red-team across six
-attacker personas. Each item closes a real finding and preserves existing behavior
-by default (the one non-opt-in change is that reboot-on-wedge, already opt-in, no
-longer fires in attached mode).
+Least privilege, plus a security hardening pass from a third independent audit (a
+red-team across six attacker personas). The headline is `runnerUser`: the root
+daemon can drop the runner to an unprivileged account while staying root for the
+reboot capability, verified end to end with full GPU access on Apple Silicon. Every
+item is opt-in or preserves existing behavior by default. The README is also
+restructured into a tighter tour, with the operational detail moved into `docs/`.
 
 ### Added
 - `runnerUser` (config, off by default): when Hearth runs as the root daemon, it

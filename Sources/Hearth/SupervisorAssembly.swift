@@ -21,7 +21,7 @@ struct SupervisorAssembly {
         let processController = FoundationProcessController(
             logFileURL: AppPaths.runnerLogFile,
             rotation: config.logRotationPolicy(),
-            runAsUser: config.runnerUser
+            runAsUser: config.normalizedRunnerUser
         )
         let metricsProvider = SystemMetricsProvider(runnerResidentBytes: { [weak processController] in
             processController?.latestResidentBytes()

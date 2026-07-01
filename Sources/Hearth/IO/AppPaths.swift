@@ -68,9 +68,17 @@ enum ConfigStore {
     /// path). A malformed file is flagged as a problem; the caller decides whether
     /// to keep its current settings rather than reverting.
     static func load() -> ConfigLoad {
+        load(from: AppPaths.configFile)
+    }
+
+    /// Load a specific config file, writing a starter template on first run when
+    /// the caller allows it. `doctor-daemon` uses this to inspect `/etc/hearth`
+    /// without depending on HEARTH_CONFIG being set in the shell.
+    static func load(from url: URL, createDefaultIfMissing: Bool = true) -> ConfigLoad {
         let fm = FileManager.default
-        let url = AppPaths.configFile
-        try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if createDefaultIfMissing {
+            try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        }
 
         let exists = fm.fileExists(atPath: url.path)
         // Retro-harden a config an older version (or a hand copy) left
@@ -84,8 +92,8 @@ enum ConfigStore {
         let detected: String? = exists ? nil : RunnerLocator.locate(HearthConfig().runner)
 
         let resolution = ConfigLoading.resolve(fileContents: contents, configPath: url.path, detectedBinary: detected)
-        if resolution.createdDefault {
-            save(resolution.config)
+        if resolution.createdDefault && createDefaultIfMissing {
+            save(resolution.config, to: url)
         }
         return ConfigLoad(
             config: resolution.config,
@@ -98,11 +106,16 @@ enum ConfigStore {
     /// Write the config to disk as pretty JSON.
     @discardableResult
     static func save(_ config: HearthConfig) -> Bool {
+        save(config, to: AppPaths.configFile)
+    }
+
+    @discardableResult
+    static func save(_ config: HearthConfig, to url: URL) -> Bool {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         guard let data = try? encoder.encode(config) else { return false }
         // Owner-only (0600 in a 0700 dir): the config holds the control token and
         // ntfy topic, so it must not be world-readable.
-        return SecureFile.write(data, to: AppPaths.configFile)
+        return SecureFile.write(data, to: url)
     }
 }

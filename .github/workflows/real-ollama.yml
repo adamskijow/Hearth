@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: MIT
+#
+# Optional real-runner validation. This is manual because it installs Ollama,
+# pulls a model, and drives process-level scenarios that are heavier than normal
+# pull-request CI.
+name: Real Ollama Validation
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: "Small model tag to pull and use for validation"
+        required: false
+        default: "qwen2.5:0.5b"
+
+jobs:
+  validate-real:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Ollama
+        run: brew install ollama
+
+      - name: Build Hearth
+        run: swift build
+
+      - name: Pull validation model
+        env:
+          HEARTH_VALIDATE_MODEL: ${{ inputs.model }}
+        run: |
+          OLLAMA="$(command -v ollama)"
+          "$OLLAMA" serve >/tmp/hearth-ollama-bootstrap.log 2>&1 &
+          OLLAMA_PID=$!
+          trap 'kill "$OLLAMA_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if "$OLLAMA" list >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$attempt" = "30" ]; then
+              echo "Ollama did not become ready in time" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          "$OLLAMA" pull "$HEARTH_VALIDATE_MODEL"
+
+      - name: Run real Ollama lifecycle gate
+        env:
+          HEARTH_VALIDATE_MODEL: ${{ inputs.model }}
+        run: OLLAMA_BIN="$(command -v ollama)" ./scripts/ci.sh --real

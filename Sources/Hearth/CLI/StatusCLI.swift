@@ -21,6 +21,7 @@ enum StatusCLI {
           Hearth events [-n N] [-f] Show Hearth's own event history (down, restart, recovered).
           Hearth metrics            Show memory and thermal history over the retained window.
           Hearth doctor             Check the config and environment for problems.
+          Hearth doctor-daemon      Check the root daemon config at /etc/hearth/config.json.
           Hearth setup              Turnkey: detect the runner, install the login agent, wait for ready.
           Hearth wait-ready [-t S]  Block until the runner answers (exit 0), or time out (exit 1).
           Hearth install-agent      Install a login agent that keeps Hearth running (no sudo).
@@ -185,8 +186,33 @@ enum StatusCLI {
     // MARK: - doctor
 
     static func printDoctor() -> Never {
-        print("Hearth doctor")
-        let load = ConfigStore.load()
+        printDoctor(configURL: AppPaths.configFile, runningAsRoot: geteuid() == 0, includeDaemonHint: true)
+    }
+
+    static func printDaemonDoctor() -> Never {
+        let daemonConfig = URL(fileURLWithPath: "/etc/hearth/config.json")
+        if geteuid() != 0 {
+            print("Hearth daemon doctor")
+            print(mark(.error) + " daemon config is root-owned; run this check with sudo:")
+            print("       sudo hearth doctor-daemon")
+            exit(1)
+        }
+        guard FileManager.default.fileExists(atPath: daemonConfig.path) else {
+            print("Hearth daemon doctor")
+            print(mark(.error) + " daemon config not found at \(daemonConfig.path)")
+            print("")
+            print("Install the root daemon first with: sudo ./scripts/install-daemon.sh")
+            exit(1)
+        }
+        printDoctor(configURL: daemonConfig, runningAsRoot: true, includeDaemonHint: false, title: "Hearth daemon doctor")
+    }
+
+    private static func printDoctor(configURL: URL,
+                                    runningAsRoot: Bool,
+                                    includeDaemonHint: Bool,
+                                    title: String = "Hearth doctor") -> Never {
+        print(title)
+        let load = ConfigStore.load(from: configURL, createDefaultIfMissing: includeDaemonHint)
         if load.isProblem {
             print(mark(.error) + " config: \(load.note ?? "could not be read")")
             print("\n1 error, 0 warnings.")
@@ -204,7 +230,10 @@ enum StatusCLI {
         }
 
         // Pure config rules.
-        for diagnostic in ConfigDiagnostics.check(config) { report(diagnostic) }
+        for diagnostic in ConfigDiagnostics.check(config, runningAsRoot: runningAsRoot) { report(diagnostic) }
+        if includeDaemonHint, daemonAppearsInstalled(), ProcessInfo.processInfo.environment["HEARTH_CONFIG"] == nil {
+            report(Diagnostic(.warning, "A root daemon appears installed. This doctor is checking \(configURL.path); check the daemon config with `sudo hearth doctor-daemon`."))
+        }
 
         // Runner binary present and executable?
         let binary = runnerBinaryPath(config)
@@ -266,6 +295,10 @@ enum StatusCLI {
         print("")
         print("\(errors) error\(errors == 1 ? "" : "s"), \(warnings) warning\(warnings == 1 ? "" : "s").")
         exit(errors == 0 ? 0 : 1)
+    }
+
+    private static func daemonAppearsInstalled() -> Bool {
+        FileManager.default.fileExists(atPath: "/Library/LaunchDaemons/com.hearth.daemon.plist")
     }
 
     private static func mark(_ severity: Diagnostic.Severity?) -> String {

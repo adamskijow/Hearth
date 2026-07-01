@@ -16,8 +16,9 @@
   "localNotifications": false,
   "ntfyTopic": null,
   "ntfyServer": "https://ntfy.sh",
-  "controlEnabled": true,
+  "controlEnabled": false,
   "controlHost": "127.0.0.1",
   "controlPort": 11435,
-  "controlToken": "CHANGE-ME-to-a-long-random-secret"
+  "controlToken": "CHANGE-ME-to-a-long-random-secret",
+  "runnerUser": "CHANGE-ME-to-your-mac-user"
 }

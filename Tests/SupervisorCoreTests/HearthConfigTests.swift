@@ -142,6 +142,14 @@ struct HearthConfigTests {
         #expect(!HearthConfig(mode: "attached").isManaged)
     }
 
+    @Test func runnerUserNormalizationTrimsWhitespaceAndBlanks() throws {
+        #expect(HearthConfig(runnerUser: " joseph \n").normalizedRunnerUser == "joseph")
+        #expect(HearthConfig(runnerUser: "   ").normalizedRunnerUser == nil)
+
+        let decoded = try JSONDecoder().decode(HearthConfig.self, from: Data(#"{"runnerUser":" daemon "}"#.utf8))
+        #expect(decoded.normalizedRunnerUser == "daemon")
+    }
+
     @Test func controlFieldsDecode() throws {
         let json = Data("""
         {"controlEnabled": true, "controlHost": "100.64.0.2", "controlPort": 8443, "controlToken": "abc123"}

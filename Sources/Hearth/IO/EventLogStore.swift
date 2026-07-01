@@ -24,9 +24,7 @@ enum EventLogStore {
         let line = EventLog.line(timestamp: stamp.string(from: date), message: StatusText.describe(event))
         let existing = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
         let updated = EventLog.appended(existing, line: line, maxLines: maxLines)
-        try? FileManager.default.createDirectory(
-            at: AppPaths.logDirectory, withIntermediateDirectories: true)
-        try? updated.write(to: url, atomically: true, encoding: .utf8)
+        SecureFile.write(Data(updated.utf8), to: url)
     }
 
     /// The most recent `count` event lines, oldest first.

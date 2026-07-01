@@ -44,7 +44,8 @@ enum AgentInstaller {
         do {
             try FileManager.default.createDirectory(
                 at: plistURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try FileManager.default.createDirectory(at: AppPaths.logDirectory, withIntermediateDirectories: true)
+            SecureFile.prepareFile(URL(fileURLWithPath: outLog))
+            SecureFile.prepareFile(URL(fileURLWithPath: errLog))
             let data = try PropertyListSerialization.data(fromPropertyList: job, format: .xml, options: 0)
             try data.write(to: plistURL, options: .atomic)
         } catch {

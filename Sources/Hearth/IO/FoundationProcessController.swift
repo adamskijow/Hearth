@@ -45,8 +45,8 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
     private let killGraceSeconds: Double
     private let rotation: LogRotationPolicy
     /// The account the spawned runner is dropped to, when configured (`runnerUser`)
-    /// and Hearth is root. nil keeps the default: the runner inherits Hearth's user
-    /// via the ordinary `posix_spawn` path, which is left completely untouched.
+    /// and Hearth is root. Root without a non-root runnerUser refuses to spawn; the
+    /// ordinary `posix_spawn` path is for the non-root app and login agent.
     private let runAsUser: String?
     private let dropCredentials: RunnerUserCredentials?
     private var nextRaw: UInt64 = 1
@@ -76,9 +76,13 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
         if let user = runAsUser {
             if dropCredentials == nil {
                 warn("runnerUser \"\(user)\" does not resolve to an account; as root the runner will refuse to start rather than run as root")
+            } else if dropCredentials?.isRoot == true {
+                warn("runnerUser \"\(user)\" resolves to root; as root the runner will refuse to start rather than keep root privileges")
             } else if geteuid() != 0 {
                 warn("runnerUser \"\(user)\" is set but Hearth is not root; the runner inherits this user, no privilege drop")
             }
+        } else if geteuid() == 0 {
+            warn("runnerUser is unset; as root Hearth will refuse to start a managed runner rather than run it as root")
         }
     }
 
@@ -109,15 +113,16 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
 
         let pid: pid_t
         do {
-            if geteuid() == 0, let credentials = dropCredentials {
+            if geteuid() == 0, let credentials = dropCredentials, !credentials.isRoot {
                 // Root daemon with a resolved runnerUser: fork and drop privileges
                 // so the runner runs unprivileged. Hearth (the parent) stays root so
                 // it keeps the reboot capability.
                 pid = try forkExecAsUser(spec: spec, environment: environment,
                                          credentials: credentials, outWrite: outWrite, errWrite: errWrite)
-            } else if runAsUser != nil, dropCredentials == nil, geteuid() == 0 {
-                // A drop was requested but the account did not resolve. Fail closed:
-                // never fall back to running the untrusted runner as root.
+            } else if geteuid() == 0 {
+                // Root without a non-root runnerUser would run the untrusted
+                // runner as root. Fail closed: the root daemon must either drop to
+                // an unprivileged account or use attached mode.
                 throw SpawnError(code: EPERM)
             } else {
                 // The default, unchanged path: the runner inherits Hearth's user.
@@ -174,8 +179,9 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
     /// The default spawn: the runner inherits Hearth's user. posix_spawn in a new
     /// process group with SIGTERM/SIGINT/SIGHUP reset to default, the inherited mask
     /// cleared, stdout/stderr on the pipes, and every other inherited fd closed.
-    /// Throws SpawnError on failure. This is the original inline implementation,
-    /// unchanged, so the common case is untouched by the privilege-drop option.
+    /// Throws SpawnError on failure. Used by the non-root app and login agent; the
+    /// root daemon reaches this only after the root-specific checks refuse to run
+    /// an untrusted runner as root.
     private func posixSpawnChild(spec: ProcessSpec,
                                  environment: [String: String],
                                  outWrite: Int32,
@@ -383,9 +389,7 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
 
     private func openLogLocked() {
         let fm = FileManager.default
-        if !fm.fileExists(atPath: logFileURL.path) {
-            fm.createFile(atPath: logFileURL.path, contents: nil)
-        }
+        SecureFile.prepareFile(logFileURL)
         logHandle = try? FileHandle(forWritingTo: logFileURL)
         logHandle?.seekToEndOfFile()
         let attributes = try? fm.attributesOfItem(atPath: logFileURL.path)

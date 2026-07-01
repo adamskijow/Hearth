@@ -55,6 +55,11 @@ that gate runs before every push; bypass a single push with `git push
 --no-verify`. Pass `--smoke` or `--real` to `scripts/ci.sh` to also run the
 desktop and Ollama gates described below.
 
+A manual GitHub Actions workflow, `.github/workflows/real-ollama.yml`, can run
+the real Ollama gate on demand. It installs Ollama, pulls a small model, and then
+runs `./scripts/ci.sh --real`. It is intentionally not part of the default PR
+gate because it is slower and depends on a live runner.
+
 ### Trying it without a runner
 
 You can exercise the whole agent without installing Ollama or LM Studio, using a

@@ -10,7 +10,8 @@ or `hearth` with `SIGHUP` (or the menu's Reload Config) applies it without a
 restart.
 
 Run `hearth doctor` after editing to catch problems (bad ports, an unknown runner
-or mode, a control endpoint with no token, timings that cannot grow).
+or mode, a control endpoint with no token, timings that cannot grow). For the root
+daemon config at `/etc/hearth/config.json`, run `sudo hearth doctor-daemon`.
 
 ## Runner
 
@@ -24,6 +25,34 @@ or mode, a control endpoint with no token, timings that cannot grow).
 | `host` | string | `"127.0.0.1"` | Address the runner binds to. `127.0.0.1` keeps it on this machine; `0.0.0.0` opens it to your LAN so another computer can reach it (`hearth doctor` reports the URL and the firewall caveat). |
 | `port` | int | `11434` | Port the runner serves on (Ollama's default is 11434). |
 | `runnerEnv` | object | `{}` | Extra environment variables for a managed runner, so a hand-tuned setup is a config key rather than a launchd plist edit. Example: `{"OLLAMA_LOAD_TIMEOUT": "10m", "OLLAMA_KEEP_ALIVE": "30m"}`. Merged into the child's environment at spawn. Hearth derives `OLLAMA_HOST` from `host`/`port`, so a value for it here is ignored (and `hearth doctor` warns). |
+
+### Common Ollama setups
+
+For Homebrew Ollama, use managed mode and stop `brew services` so Hearth is the
+only supervisor:
+
+```json
+{
+  "runner": "ollama",
+  "mode": "managed",
+  "host": "127.0.0.1",
+  "port": 11434
+}
+```
+
+For the official Ollama app, use attached mode. The app owns the server; Hearth
+only watches it:
+
+```json
+{
+  "runner": "ollama",
+  "mode": "attached",
+  "host": "127.0.0.1",
+  "port": 11434
+}
+```
+
+See [ollama.md](ollama.md) for the full Ollama setup guide, including deep probes.
 
 ## Health and restart policy
 
@@ -93,10 +122,11 @@ for the full safety story.
 
 ## Runner privilege drop (root daemon)
 
-When Hearth runs as the root LaunchDaemon it spawns the runner as root too, so a
-compromise of the runner or a malicious model runs as root. `runnerUser` drops the
-spawned runner to a lower-privileged account while Hearth itself stays root (so it
-keeps the reboot capability). Off by default: the runner inherits Hearth's user.
+When Hearth runs as the root LaunchDaemon, Hearth itself stays root so it can be
+kept alive by launchd and perform optional reboot recovery. The managed runner is
+different: it must run as a lower-privileged account. `runnerUser` names that
+account. If Hearth is root and `runnerUser` is unset, unresolved, or resolves to
+root, managed runner spawn fails closed rather than running the LLM runner as root.
 
 Hearth supplies the account's `HOME`, `USER`, and `LOGNAME` to the dropped runner
 automatically (a LaunchDaemon has no `HOME`, and Ollama refuses to start without
@@ -105,13 +135,14 @@ one). If your models live outside that account's `~/.ollama`, set `OLLAMA_MODELS
 
 | Key | Type | Default | Meaning |
 |-----|------|---------|---------|
-| `runnerUser` | string | unset | Account name to run the spawned runner as, when Hearth is root. Only honored as root and when the account resolves; ignored for the non-root menubar app (it logs a note and runs normally). If the account does not resolve while root, Hearth refuses to start the runner rather than run it as root (fail closed). |
+| `runnerUser` | string | unset | Account name to run the spawned runner as, when Hearth is root. Required for managed root-daemon mode. Ignored for the non-root menubar app (it logs a note and runs normally). If the account does not resolve, or resolves to root, Hearth refuses to start the managed runner rather than run it as root (fail closed). |
 
 GPU access holds from the daemon session: verified end to end on Apple Silicon, a
 root daemon that drops the runner to a regular user still reaches Metal and offloads
 the model to the GPU. It is still worth a check on your own setup (watch the runner's
 log for the `Metal` / `offloaded N/N layers to GPU` lines); if a given account cannot
-reach the GPU, leave `runnerUser` unset and keep the runner running as root.
+reach the GPU, use attached mode or choose another unprivileged account rather than
+leaving the runner to inherit root.
 
 ## Example
 
@@ -127,6 +158,7 @@ A minimal managed-Ollama config with phone control over Tailscale:
   "controlEnabled": true,
   "controlHost": "100.x.y.z",
   "controlPort": 11435,
-  "controlToken": "a-long-random-secret"
+  "controlToken": "a-long-random-secret",
+  "runnerUser": "your-mac-user"
 }
 ```

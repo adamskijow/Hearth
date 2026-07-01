@@ -16,6 +16,7 @@ struct RunnerUserCredentialsTests {
         // Home and login name are captured so the drop can supply HOME/USER/LOGNAME.
         #expect(creds.name == "root")
         #expect(creds.home == "/var/root")
+        #expect(creds.isRoot)
     }
 
     @Test func resolvesAKnownServiceAccount() throws {
@@ -25,6 +26,7 @@ struct RunnerUserCredentialsTests {
         #expect(!creds.supplementaryGroups.isEmpty)
         #expect(creds.name == "daemon")
         #expect(!creds.home.isEmpty)
+        #expect(!creds.isRoot)
     }
 
     @Test func unknownAccountResolvesToNil() {

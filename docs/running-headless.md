@@ -49,18 +49,37 @@ modifies your system (writes to `/usr/local/bin`, `/etc/hearth`, and
 ```
 swift build -c release
 sudo ./scripts/install-daemon.sh
-# edit /etc/hearth/config.json (set your tokens), then:
-sudo launchctl kickstart -k system/com.hearth.daemon
+# if the installer reports doctor errors, edit
+# /etc/hearth/config.json (set runnerUser and your tokens), then:
+sudo hearth doctor-daemon
+sudo launchctl bootstrap system /Library/LaunchDaemons/com.hearth.daemon.plist
 ```
 
 Remove it with `sudo ./scripts/uninstall-daemon.sh`. In daemon mode Hearth runs
 as root, so its config lives at `/etc/hearth/config.json` (pointed to by the
 plist's `HEARTH_CONFIG`) and its logs at `/var/log/hearth.out.log` and
-`/var/log/hearth.err.log`. After editing the config, apply it by restarting the
-daemon (it has no in-process live reload; the runner cycles briefly):
-`sudo launchctl kickstart -k system/com.hearth.daemon`, or send SIGHUP
-(`sudo launchctl kill HUP system/com.hearth.daemon`), which stops it cleanly and
-lets launchd respawn it with the new config.
+`/var/log/hearth.err.log`. Managed mode in the root daemon requires `runnerUser`,
+an unprivileged local account that runs the LLM runner while Hearth itself keeps
+root only for launchd and optional reboot recovery. If your models live outside
+that account's home directory, set `runnerEnv.OLLAMA_MODELS` to the model
+directory.
+
+The installer runs `sudo hearth doctor-daemon` before starting the daemon. If the
+doctor reports errors, the installer leaves the daemon stopped so you can fix the
+config or stop a competing runner first. Warnings are printed but do not stop
+startup, because some warnings are intentional setups such as LAN binding or
+attached mode before the runner is serving. After editing the config, run
+`sudo hearth doctor-daemon`; when it has no errors, bootstrap the daemon with
+`sudo launchctl bootstrap system /Library/LaunchDaemons/com.hearth.daemon.plist`.
+For later config changes on a loaded daemon, apply them by restarting it with
+`sudo launchctl kickstart -k system/com.hearth.daemon` (it has no in-process live
+reload; the runner cycles briefly), or send SIGHUP (`sudo launchctl kill HUP
+system/com.hearth.daemon`), which stops it cleanly and lets launchd respawn it with
+the new config. To check the daemon config specifically, run:
+
+```
+sudo hearth doctor-daemon
+```
 
 ## Recovering a wedge a restart cannot
 

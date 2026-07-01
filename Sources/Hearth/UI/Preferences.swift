@@ -217,10 +217,20 @@ struct PreferencesView: View {
                    help: "Time window for counting restarts toward the crash-loop brake.")
             number("Failing retry interval", $model.config.failingProbeIntervalSeconds,
                    help: "How often to retry while in the crash-loop (failing) state.")
+            TextField("Deep probe model", text: optional(\.probeModel),
+                      prompt: Text("optional, e.g. qwen2.5:0.5b"))
+                .help("Optional: periodically run a one-token generation against this model to catch an inference-level wedge.")
+            number("Maintenance restart hours", $model.config.maintenanceRestartHours,
+                   help: "Optional: restart a long-healthy managed runner this often. 0 disables it.")
+            Toggle("Restart on binary change", isOn: $model.config.restartOnBinaryChange)
+                .help("Restart a managed runner after its binary changes on disk, for example after a Homebrew upgrade.")
+            TextField("Runner user (root daemon)", text: optional(\.runnerUser),
+                      prompt: Text("required for root daemon managed mode"))
+                .help("Only used by the root LaunchDaemon. Managed root-daemon mode refuses to start the runner unless this is a non-root account.")
         } header: {
-            Text("Advanced (timing, seconds)")
+            Text("Advanced")
         } footer: {
-            Text("The defaults suit most setups. Lower the probe interval to notice failures sooner.")
+            Text("The defaults suit most setups. Deep probes are optional. For root-daemon managed mode, set Runner user and verify with hearth doctor-daemon.")
         }
     }
 

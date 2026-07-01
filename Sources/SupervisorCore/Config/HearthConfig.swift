@@ -91,9 +91,9 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     /// The account to drop the spawned runner to when Hearth runs as the root
     /// daemon. The parent stays root (so it keeps the reboot capability), while the
     /// runner it spawns, which loads untrusted models and answers the network, runs
-    /// as this lower-privileged account. nil (default) keeps today's behavior: the
-    /// runner inherits Hearth's user. Only honored when Hearth is root and the
-    /// account resolves; ignored for the non-root menubar app. See
+    /// as this lower-privileged account. Required for managed root-daemon mode:
+    /// nil, an unresolved account, or root itself fails closed rather than running
+    /// the runner as root. Ignored for the non-root menubar app. See
     /// docs/configuration.md, and test that GPU inference still works under the
     /// account before relying on it.
     public var runnerUser: String?
@@ -250,6 +250,14 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     /// monitors an already running one (attached).
     public var isManaged: Bool {
         mode.lowercased() != "attached"
+    }
+
+    /// The configured runner account after shell-style whitespace is removed.
+    /// Empty strings are treated the same as an unset `runnerUser`.
+    public var normalizedRunnerUser: String? {
+        guard let trimmed = runnerUser?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else { return nil }
+        return trimmed
     }
 
     /// The restart policy these settings describe. Values that would brick

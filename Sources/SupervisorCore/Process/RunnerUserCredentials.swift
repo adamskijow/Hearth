@@ -22,6 +22,10 @@ public struct RunnerUserCredentials: Sendable, Equatable {
     public let home: String
     public let name: String
 
+    /// Root is never a useful target for a privilege drop. The root daemon should
+    /// either drop the runner to a real unprivileged account or refuse the spawn.
+    public var isRoot: Bool { uid == 0 }
+
     public init(uid: uid_t, gid: gid_t, supplementaryGroups: [gid_t], home: String, name: String) {
         self.uid = uid
         self.gid = gid

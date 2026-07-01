@@ -21,6 +21,8 @@ case "metrics":
     StatusCLI.printMetrics()  // exits
 case "doctor":
     StatusCLI.printDoctor()  // exits
+case "doctor-daemon":
+    StatusCLI.printDaemonDoctor()  // exits
 case "wait-ready":
     StatusCLI.waitReady(Array(arguments.dropFirst()))  // exits
 case "setup":

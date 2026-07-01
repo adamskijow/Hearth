@@ -39,11 +39,13 @@ from somewhere. Hearth is that layer.
 The README is the tour; the operational detail lives in `docs/`:
 
 - **[Configuration reference](docs/configuration.md):** every config key, its type, and its default.
+- **[Ollama setup guide](docs/ollama.md):** Homebrew Ollama, Ollama.app, deep probes, and integration wording.
 - **[Remote control and local status](docs/remote-control.md):** the HTTP control endpoint, the `hearth` CLI, and monitoring.
 - **[Running headless](docs/running-headless.md):** the login agent, the root daemon, and the wedge-recovery reboot ladder.
 - **[Troubleshooting](docs/troubleshooting.md):** the common failure modes and their fixes.
 - **[Integrating with Hearth](docs/integrating.md):** for an app that depends on a local runner being up.
 - **[Reverse proxy and TLS](docs/reverse-proxy.md):** reaching the runner or the control endpoint securely from off this machine.
+- **[Observability roadmap](docs/observability-roadmap.md):** follow-up metrics work such as throughput and OOM fixtures.
 - **[Known limitations and design choices](docs/limitations.md):** what Hearth does not do, and why.
 - **[Development](docs/development.md):** the test suite, signing, and cutting a release.
 
@@ -63,6 +65,15 @@ preflight) and `hearth status` (phase, uptime, restarts, resident models). If yo
 runner is elsewhere or you want LM Studio or mlx_lm, see
 [Configure](#configure); if something looks off, see
 [Troubleshooting](docs/troubleshooting.md).
+
+Two common Ollama setups:
+
+- **Homebrew Ollama:** stop `brew services` if it is already supervising Ollama,
+  then let Hearth run managed mode. `hearth doctor` warns when another manager
+  would fight Hearth over the same port.
+- **Ollama.app:** the official app already starts its own server. Use attached
+  mode so Hearth watches that server instead of launching a second one. See the
+  [Ollama setup guide](docs/ollama.md#ollamaapp-attached-mode).
 
 ## Why this exists
 
@@ -201,8 +212,8 @@ another runner is a small, contained change when someone needs one.
 
 Where it is heading:
 
-- **Least privilege.** Building on the opt-in `runnerUser` drop, a minimal root
-  helper so the supervisor itself need not run as root.
+- **Least privilege.** Building on the root daemon's required `runnerUser` drop, a
+  minimal root helper so the supervisor itself need not run as root.
 - **Reach.** Full Tailscale auto-configuration (address detection already ships),
   and turnkey setup for the authenticating reverse proxy it documents today.
 - **Metrics.** A tokens-per-second readout, alongside the existing thermal and

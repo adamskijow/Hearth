@@ -169,10 +169,12 @@ public enum ControlRouting {
     private static func constantTimeEquals(_ a: String, _ b: String) -> Bool {
         let lhs = Array(a.utf8)
         let rhs = Array(b.utf8)
-        guard lhs.count == rhs.count else { return false }
-        var difference: UInt8 = 0
-        for index in lhs.indices {
-            difference |= lhs[index] ^ rhs[index]
+        var difference = lhs.count ^ rhs.count
+        let count = max(lhs.count, rhs.count)
+        for index in 0..<count {
+            let left = index < lhs.count ? Int(lhs[index]) : 0
+            let right = index < rhs.count ? Int(rhs[index]) : 0
+            difference |= left ^ right
         }
         return difference == 0
     }

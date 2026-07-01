@@ -9,18 +9,20 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Least privilege, plus a security hardening pass from a third independent audit (a
 red-team across six attacker personas). The headline is `runnerUser`: the root
-daemon can drop the runner to an unprivileged account while staying root for the
-reboot capability, verified end to end with full GPU access on Apple Silicon. Every
-item is opt-in or preserves existing behavior by default. The README is also
-restructured into a tighter tour, with the operational detail moved into `docs/`.
+daemon drops the runner to an unprivileged account while staying root for the
+reboot capability, verified end to end with full GPU access on Apple Silicon. The
+root managed-daemon path now fails closed until `runnerUser` is set; non-root app
+and login-agent behavior is unchanged. The README is also restructured into a
+tighter tour, with the operational detail moved into `docs/`.
 
 ### Added
-- `runnerUser` (config, off by default): when Hearth runs as the root daemon, it
+- `runnerUser` (config): when Hearth runs as the root daemon in managed mode, it
   drops the spawned runner to this account while staying root itself (so it keeps
   the reboot capability), so a runner or malicious-model compromise no longer lands
-  as root. Hearth supplies the account's `HOME`/`USER`/`LOGNAME` automatically.
-  Verified end to end on Apple Silicon: the dropped runner still reaches the Metal
-  GPU from the non-GUI daemon session.
+  as root. Managed root-daemon spawn now refuses to run until this is set to a
+  real non-root account. Hearth supplies the account's `HOME`/`USER`/`LOGNAME`
+  automatically. Verified end to end on Apple Silicon: the dropped runner still
+  reaches the Metal GPU from the non-GUI daemon session.
 - `rebootOnlyOnProcessFailure` (config, off by default): when on, a reboot fires
   only if the failing streak included a real process exit, never for a pure "alive
   but not answering" wedge, so a runner that only controls its HTTP responses cannot

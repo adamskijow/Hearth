@@ -50,6 +50,7 @@ hearth logs -f             # follow the runner log
 hearth events              # Hearth's own event history (down, restart, recovered)
 hearth metrics             # memory and thermal history over the retained window
 hearth doctor              # check the config and environment for problems
+hearth doctor-daemon       # check /etc/hearth/config.json for the root daemon
 hearth wait-ready [-t S]   # block until the runner answers, then exit 0 (1 on timeout)
 hearth install-agent       # install a login agent that keeps Hearth running (no sudo)
 hearth uninstall-agent     # remove that login agent
@@ -72,4 +73,6 @@ unknown runner or mode, a control endpoint with no token, a control port that
 collides with the runner port, backoff timings that cannot grow) and the environment
 (the runner binary exists and is executable, the runner port is free for a managed
 runner or already serving for an attached one, the log directory is writable), then
-prints each result and exits non-zero if anything is an error.
+prints each result and exits non-zero if anything is an error. `hearth doctor-daemon`
+does the same check against `/etc/hearth/config.json` for the root LaunchDaemon and
+should be run with `sudo`.

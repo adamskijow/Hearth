@@ -38,4 +38,19 @@ enum SecureFile {
         guard fm.fileExists(atPath: url.path) else { return }
         try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
+
+    /// Prepare a log or state file that other code writes through a FileHandle or
+    /// launchd. The file may be empty for now, but it should still be owner-only
+    /// before anything sensitive-adjacent is appended to it.
+    static func prepareFile(_ url: URL) {
+        let fm = FileManager.default
+        let dir = url.deletingLastPathComponent()
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true,
+                                attributes: [.posixPermissions: 0o700])
+        try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: dir.path)
+        if !fm.fileExists(atPath: url.path) {
+            fm.createFile(atPath: url.path, contents: nil)
+        }
+        try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+    }
 }

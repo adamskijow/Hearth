@@ -26,6 +26,11 @@ final class ControlServer: @unchecked Sendable {
     private let coordinator: SupervisionCoordinator
     private let metrics: MetricsProviding?
     private let queue = DispatchQueue(label: "com.hearth.control")
+    /// Set once the server is torn down (a config reload replaces it). A request
+    /// accepted before the teardown must not drive the now-replaced coordinator.
+    private let stoppedLock = NSLock()
+    private var stoppedFlag = false
+    private var isStopped: Bool { stoppedLock.withLock { stoppedFlag } }
 
     init?(host: String, port: Int, token: String, coordinator: SupervisionCoordinator, metrics: MetricsProviding? = nil) {
         guard !token.isEmpty,
@@ -61,6 +66,7 @@ final class ControlServer: @unchecked Sendable {
     }
 
     func stop() {
+        stoppedLock.withLock { stoppedFlag = true }
         listener.cancel()
     }
 
@@ -143,9 +149,16 @@ final class ControlServer: @unchecked Sendable {
                 body = data
                 contentType = "text/plain; version=0.0.4; charset=utf-8"
             case .perform(let command):
-                await coordinator.perform(command)
-                status = 202
-                body = Data(#"{"ok":true,"command":"\#(command.rawValue)"}"#.utf8)
+                if self?.isStopped ?? true {
+                    // The server was torn down (a config reload) after this request
+                    // was accepted; do not re-drive the replaced coordinator/engine.
+                    status = 503
+                    body = Self.errorJSON("server reloading")
+                } else {
+                    await coordinator.perform(command)
+                    status = 202
+                    body = Data(#"{"ok":true,"command":"\#(command.rawValue)"}"#.utf8)
+                }
             }
             // If the server was torn down mid-request (the config-reload path),
             // close the connection now rather than leaving it for the deadline.

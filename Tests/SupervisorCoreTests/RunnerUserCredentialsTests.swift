@@ -29,6 +29,16 @@ struct RunnerUserCredentialsTests {
         #expect(!creds.isRoot)
     }
 
+    @Test func supplementaryGroupsAreCappedForSetgroups() throws {
+        // macOS setgroups rejects a list longer than NGROUPS_MAX (16), so the drop
+        // must never hand it more than that. Assert the invariant for any account.
+        for user in ["root", "daemon", NSUserName()] {
+            if let creds = RunnerUserCredentials.resolve(username: user) {
+                #expect(creds.supplementaryGroups.count <= 16)
+            }
+        }
+    }
+
     @Test func unknownAccountResolvesToNil() {
         #expect(RunnerUserCredentials.resolve(username: "no_such_hearth_account_zzzz") == nil)
         #expect(RunnerUserCredentials.resolve(username: "") == nil)

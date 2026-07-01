@@ -57,7 +57,10 @@ public struct RunnerUserCredentials: Sendable, Equatable {
             raw = [Int32](repeating: 0, count: Int(count))
             _ = getgrouplist(username, Int32(bitPattern: gid), &raw, &count)
         }
-        let groups = raw.prefix(Int(max(0, count))).map { gid_t(bitPattern: $0) }
+        // macOS `setgroups` rejects a list longer than NGROUPS_MAX (16) with EINVAL,
+        // which would fail the privilege-dropped runner closed for a user in many
+        // groups. Cap the list at 16, as login and su do.
+        let groups = raw.prefix(min(Int(max(0, count)), 16)).map { gid_t(bitPattern: $0) }
         return RunnerUserCredentials(uid: uid, gid: gid, supplementaryGroups: Array(groups),
                                      home: home, name: name)
     }

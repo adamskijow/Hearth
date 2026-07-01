@@ -8,7 +8,6 @@ import SupervisorCore
 /// is running; end stops it and lets the loop wind down.
 actor SupervisionCoordinator {
     let engine: SupervisorEngine
-    private var loopTask: Task<Void, Never>?
 
     init(engine: SupervisorEngine) {
         self.engine = engine
@@ -42,14 +41,12 @@ actor SupervisionCoordinator {
     }
 
     private func ensureLoop() {
-        guard loopTask == nil else { return }
-        loopTask = Task { [weak self] in
-            await self?.engine.runLoop()
-            await self?.loopFinished()
-        }
-    }
-
-    private func loopFinished() {
-        loopTask = nil
+        // engine.runLoop() no-ops when a loop is already running (its own `looping`
+        // guard is the single source of truth), so it is always safe to spawn a task
+        // here: a redundant one returns at once. This avoids the lost-wakeup race of
+        // tracking a loopTask that is niled one await-hop after runLoop returns, in
+        // which a begin/restart in that gap would skip starting the loop and leave a
+        // freshly spawned runner unprobed.
+        Task { [weak self] in await self?.engine.runLoop() }
     }
 }

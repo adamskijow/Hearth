@@ -44,10 +44,14 @@ default:
         // Wait as a hot standby if another Hearth already supervises this config,
         // and take over only if it exits, rather than fighting it or respawn-looping
         // under launchd KeepAlive.
-        SingleInstance.acquire(wait: true, onWait: {
+        guard SingleInstance.acquire(wait: true, onWait: {
             FileHandle.standardError.write(Data(
                 "Hearth: another instance is supervising this config; standing by to take over if it exits.\n".utf8))
-        })
+        }) else {
+            FileHandle.standardError.write(Data(
+                "Hearth: could not acquire the single-instance lock; exiting rather than fighting over the runner.\n".utf8))
+            exit(1)
+        }
         HeadlessRunner(config: ConfigStore.load().config).run()
     } else {
         // The menubar app must not hang waiting; if another Hearth already

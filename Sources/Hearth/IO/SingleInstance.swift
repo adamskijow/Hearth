@@ -25,7 +25,15 @@ enum SingleInstance {
                         onWait: (() -> Void)? = nil) -> Bool {
         let lockPath = configPath.path + ".lock"
         let fd = open(lockPath, O_CREAT | O_RDWR, 0o644)
-        guard fd >= 0 else { return true }  // cannot create a lock file; do not block startup over it
+        guard fd >= 0 else {
+            // The lock file could not be created (an unwritable support directory,
+            // say). Do not fail silently: the menubar app proceeds best-effort, but
+            // the headless daemon must not fall open into a respawn fight over the
+            // runner, so it reports failure and its caller exits.
+            FileHandle.standardError.write(Data(
+                "Hearth: could not create the single-instance lock at \(lockPath) (errno \(errno)); single-instance protection is unavailable.\n".utf8))
+            return !wait
+        }
 
         if flock(fd, LOCK_EX | LOCK_NB) != 0 {
             // Contended: another instance holds the lock.

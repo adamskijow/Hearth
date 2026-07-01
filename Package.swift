@@ -47,10 +47,16 @@ let package = Package(
         .target(
             name: "SupervisorCore"
         ),
+        // A tiny C shim: fork + privilege drop + execve for the optional
+        // root-daemon runnerUser drop, which posix_spawn cannot express. Kept in C
+        // so the child, between fork and execve, touches no Swift runtime.
+        .target(
+            name: "HearthSpawn"
+        ),
         // The deployable menubar agent. Wires SupervisorCore to real I/O.
         .executableTarget(
             name: "Hearth",
-            dependencies: ["SupervisorCore"],
+            dependencies: ["SupervisorCore", "HearthSpawn"],
             // Info.plist is consumed by scripts/package-app.sh when assembling the
             // .app bundle, not as an SPM resource.
             exclude: ["Resources/Info.plist"]

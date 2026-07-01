@@ -88,6 +88,16 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     /// runner. A pure wedge then escalates to a notification instead.
     public var rebootOnlyOnProcessFailure: Bool
 
+    /// The account to drop the spawned runner to when Hearth runs as the root
+    /// daemon. The parent stays root (so it keeps the reboot capability), while the
+    /// runner it spawns, which loads untrusted models and answers the network, runs
+    /// as this lower-privileged account. nil (default) keeps today's behavior: the
+    /// runner inherits Hearth's user. Only honored when Hearth is root and the
+    /// account resolves; ignored for the non-root menubar app. See
+    /// docs/configuration.md, and test that GPU inference still works under the
+    /// account before relying on it.
+    public var runnerUser: String?
+
     public init(runner: String = "ollama",
                 mode: String = "managed",
                 ollamaBinaryPath: String = HearthConfig.defaultOllamaBinaryPath,
@@ -127,7 +137,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 rebootEscalateAfterSeconds: Double = 600,
                 rebootMinIntervalSeconds: Double = 1800,
                 rebootMaxPerDay: Int = 3,
-                rebootOnlyOnProcessFailure: Bool = false) {
+                rebootOnlyOnProcessFailure: Bool = false,
+                runnerUser: String? = nil) {
         self.runner = runner
         self.mode = mode
         self.ollamaBinaryPath = ollamaBinaryPath
@@ -168,6 +179,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.rebootMinIntervalSeconds = rebootMinIntervalSeconds
         self.rebootMaxPerDay = rebootMaxPerDay
         self.rebootOnlyOnProcessFailure = rebootOnlyOnProcessFailure
+        self.runnerUser = runnerUser
     }
 
     /// Default Ollama binary location. Apple Silicon Homebrew installs to
@@ -229,6 +241,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         rebootMinIntervalSeconds = try value(.rebootMinIntervalSeconds, defaults.rebootMinIntervalSeconds)
         rebootMaxPerDay = try value(.rebootMaxPerDay, defaults.rebootMaxPerDay)
         rebootOnlyOnProcessFailure = try value(.rebootOnlyOnProcessFailure, defaults.rebootOnlyOnProcessFailure)
+        runnerUser = try c.decodeIfPresent(String.self, forKey: .runnerUser)
     }
 
     // MARK: - Derived

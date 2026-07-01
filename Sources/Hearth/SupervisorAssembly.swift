@@ -20,7 +20,8 @@ struct SupervisorAssembly {
     static func make(config: HearthConfig, includeLocalNotifications: Bool) -> SupervisorAssembly {
         let processController = FoundationProcessController(
             logFileURL: AppPaths.runnerLogFile,
-            rotation: config.logRotationPolicy()
+            rotation: config.logRotationPolicy(),
+            runAsUser: config.runnerUser
         )
         let metricsProvider = SystemMetricsProvider(runnerResidentBytes: { [weak processController] in
             processController?.latestResidentBytes()

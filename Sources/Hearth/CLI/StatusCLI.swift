@@ -341,12 +341,9 @@ enum StatusCLI {
     }
 
     private static func isSomethingListening(host: String, port: Int) -> Bool {
-        let probeHost: String
-        switch host {
-        case "0.0.0.0": probeHost = "127.0.0.1"
-        case "::": probeHost = "::1"
-        default: probeHost = host
-        }
+        // The shared wildcard-to-loopback mapping the probe URLs use, so this
+        // port check and the readiness probe agree about where to dial.
+        let target = probeHost(for: host)
 
         var hints = addrinfo(
             ai_flags: AI_NUMERICSERV,
@@ -359,7 +356,7 @@ enum StatusCLI {
             ai_next: nil
         )
         var result: UnsafeMutablePointer<addrinfo>?
-        guard getaddrinfo(probeHost, String(port), &hints, &result) == 0, let result else {
+        guard getaddrinfo(target, String(port), &hints, &result) == 0, let result else {
             return false
         }
         defer { freeaddrinfo(result) }

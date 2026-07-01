@@ -42,4 +42,17 @@ struct PolicyClampTests {
         let fallback = runnerEndpoint(host: "bad host", port: -1, path: "/api/version")
         #expect(fallback.path == "/api/version")
     }
+
+    @Test func probeHostMapsWildcardsToLoopback() {
+        // A wildcard bind address listens on every interface but cannot be
+        // dialed, so probes target loopback; real addresses pass through.
+        #expect(probeHost(for: "0.0.0.0") == "127.0.0.1")
+        #expect(probeHost(for: "::") == "::1")
+        #expect(probeHost(for: "::0") == "::1")
+        #expect(probeHost(for: "127.0.0.1") == "127.0.0.1")
+        #expect(probeHost(for: "10.0.0.5") == "10.0.0.5")
+        // The IPv6 loopback gets its URL brackets when the endpoint is built.
+        #expect(runnerEndpoint(host: "::", port: 11434, path: "/api/version").absoluteString
+                == "http://[::1]:11434/api/version")
+    }
 }

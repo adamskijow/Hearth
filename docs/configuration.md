@@ -24,6 +24,12 @@ for the root daemon config. Switching to attached mode refuses by default unless
 compatible runner is already serving; add `--force` only when you intend to start
 that runner yourself later.
 
+`hearth mode` edits the config file only. A Hearth that is already running keeps
+its current mode until it reloads the config: Reload Config in the menu or
+`killall -HUP Hearth` for the app, `sudo launchctl kickstart -k
+system/com.hearth.daemon` for the root daemon. The command prints the matching
+reminder after a change.
+
 ## Runner
 
 | Key | Type | Default | Meaning |

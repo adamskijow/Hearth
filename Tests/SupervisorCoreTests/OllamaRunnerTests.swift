@@ -44,6 +44,18 @@ struct OllamaRunnerTests {
         #expect(runner.modelsEndpoint.absoluteString == "http://127.0.0.1:11434/api/ps")
     }
 
+    @Test func wildcardHostBindsAllInterfacesButProbesLoopback() throws {
+        let runner = OllamaRunner(binaryPath: "/x", host: "0.0.0.0", port: 11434)
+        // The bind address is untouched: the child listens on every interface.
+        #expect(runner.processSpec().environmentOverrides["OLLAMA_HOST"] == "0.0.0.0:11434")
+        // The probe URLs dial loopback, because 0.0.0.0 is not connectable, so
+        // readiness, doctor, and wait-ready agree with the raw port check.
+        #expect(runner.readinessEndpoint.absoluteString == "http://127.0.0.1:11434/api/version")
+        #expect(runner.modelsEndpoint.absoluteString == "http://127.0.0.1:11434/api/ps")
+        let deep = try #require(runner.deepReadinessRequest(model: "llama3:8b"))
+        #expect(deep.url.absoluteString == "http://127.0.0.1:11434/api/generate")
+    }
+
     @Test func parseResidentModels() throws {
         let runner = OllamaRunner(binaryPath: "/x")
         let json = Data("""

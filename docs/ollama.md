@@ -46,8 +46,11 @@ brew services stop ollama
 
 Two managers will fight over the same runner. `hearth doctor` reports this case
 and tells you which manager it found. On a fresh config, `hearth setup` switches
-to attached mode automatically when it sees Ollama is already managed by launchd,
-because that is clear evidence another supervisor owns the runner.
+to attached mode automatically when it sees Ollama already managed by launchd and
+answering on the configured port, clear evidence another supervisor owns a live
+runner. A loaded job that is not serving stops setup with the `brew services`
+commands to inspect or stop it, so a stale service cannot park Hearth in attached
+mode watching nothing.
 
 ## Ollama.app attached mode
 

@@ -82,4 +82,7 @@ should be run with `sudo`.
 `hearth mode managed|attached` edits the config explicitly. Switching to attached
 mode refuses by default unless a compatible runner is already serving at the
 configured host and port; use `--force` only when you plan to start that runner
-yourself later. Add `--daemon` with sudo to edit the root daemon config.
+yourself later. Add `--daemon` with sudo to edit the root daemon config. It only
+edits the config: reload a running Hearth for the change to take effect (Reload
+Config in the menu or `killall -HUP Hearth`; for the root daemon,
+`sudo launchctl kickstart -k system/com.hearth.daemon`).

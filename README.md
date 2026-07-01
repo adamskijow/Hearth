@@ -140,8 +140,8 @@ default, with a full example.
 
 Use `hearth mode managed` when Hearth should own the runner, or `hearth mode
 attached` when another app or service starts it. `hearth setup` now makes that
-choice automatically only for clear fresh installs, such as an existing
-brew-services Ollama job; otherwise `hearth doctor` prints the exact fix.
+choice automatically only for clear fresh installs, such as a brew-services
+Ollama job that is actually serving; otherwise `hearth doctor` prints the exact fix.
 
 ## How it works
 

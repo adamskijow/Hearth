@@ -4,11 +4,11 @@ import Testing
 @testable import SupervisorCore
 
 struct RunnerModeAdvisorTests {
-    @Test func freshSetupUsesAttachedForKnownExternalManager() {
+    @Test func freshSetupUsesAttachedForServingExternalManager() {
         let decision = RunnerModeAdvisor.freshSetupDecision(
             runner: "ollama",
             mode: "managed",
-            compatibleRunnerServing: false,
+            compatibleRunnerServing: true,
             hearthRunnerServing: false,
             managerLabel: "homebrew.mxcl.ollama"
         )
@@ -16,6 +16,25 @@ struct RunnerModeAdvisorTests {
             #expect(reason.contains("homebrew.mxcl.ollama"))
         } else {
             Issue.record("expected setup to switch to attached")
+        }
+    }
+
+    @Test func freshSetupStopsForLoadedButSilentExternalManager() {
+        // A stale launchd job whose runner is not answering must not park Hearth
+        // in attached mode: attached never spawns, so nothing would ever start
+        // the runner. Setup stops and asks the user to fix or stop the job.
+        let decision = RunnerModeAdvisor.freshSetupDecision(
+            runner: "ollama",
+            mode: "managed",
+            compatibleRunnerServing: false,
+            hearthRunnerServing: false,
+            managerLabel: "homebrew.mxcl.ollama"
+        )
+        if case .stopForUserChoice(let reason) = decision {
+            #expect(reason.contains("homebrew.mxcl.ollama"))
+            #expect(reason.contains("brew services stop ollama"))
+        } else {
+            Issue.record("expected setup to stop for user choice")
         }
     }
 

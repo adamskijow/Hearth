@@ -2,12 +2,29 @@
 
 import Foundation
 
-/// Build a runner HTTP endpoint from a configured host and port. Never traps: a
-/// malformed host or port yields an unconnectable URL, so a probe fails
+/// The host a probe should dial for a runner bound to `host`. A wildcard bind
+/// address (`0.0.0.0`, `::`) tells the runner to listen on every interface, but
+/// it is not itself a connectable destination, so probes from this machine
+/// target loopback instead. Only probing uses this mapping; a managed runner is
+/// still launched with the raw configured host as its bind address.
+public func probeHost(for host: String) -> String {
+    switch host {
+    case "0.0.0.0": return "127.0.0.1"
+    case "::", "::0": return "::1"
+    default: return host
+    }
+}
+
+/// Build a runner HTTP endpoint from a configured host and port, mapping a
+/// wildcard bind host to loopback so the URL is actually connectable. Never
+/// traps: a malformed host or port yields an unconnectable URL, so a probe fails
 /// gracefully (the supervisor treats it as not serving and restarts) instead of
 /// crashing the whole supervisor on a config typo.
 func runnerEndpoint(host: String, port: Int, path: String) -> URL {
-    URL(string: "http://\(host):\(port)\(path)")
+    let dialed = probeHost(for: host)
+    // An IPv6 literal needs brackets in a URL authority.
+    let authority = dialed.contains(":") && !dialed.hasPrefix("[") ? "[\(dialed)]" : dialed
+    return URL(string: "http://\(authority):\(port)\(path)")
         ?? URL(string: "http://127.0.0.1:0\(path)")
         ?? URL(string: "http://127.0.0.1:0/")!
 }

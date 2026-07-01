@@ -99,11 +99,13 @@ enum SetupCLI {
     }
 
     private static func stopForModeChoice(_ warning: String) -> Never {
+        // The warning already spells out the case-appropriate options (watch it in
+        // attached mode when it is serving, or stop the other manager), so let it
+        // stand on its own rather than appending a generic footer that is wrong for
+        // the loaded-but-not-serving case.
         print("")
         print("Setup stopped: \(warning)")
-        print("Choose one:")
-        print("  - To watch the running server, run `hearth mode attached`, then re-run `hearth setup`.")
-        print("  - To let Hearth own the runner, stop the other server or manager first, then re-run `hearth setup`.")
+        print("Make that choice, then re-run `hearth setup`.")
         exit(1)
     }
 

@@ -42,7 +42,9 @@ also shows a "config issues" line when it finds any.
   `brew services`. `hearth doctor` and the menu flag this; run `hearth mode
   attached` if brew should keep owning Ollama, or `brew services stop ollama` so
   Hearth is the sole supervisor. (Two Hearths can also collide; the single-instance
-  guard handles that, but a non-Hearth manager needs stopping.)
+  guard handles that, but a non-Hearth manager needs stopping.) Note that
+  `hearth mode` only edits the config: the running Hearth keeps fighting until you
+  reload it (Reload Config in the menu, or `killall -HUP Hearth`).
 - **The HTTP server answers but generations hang.** The shallow probe only proves
   the API answers. Set `probeModel` to a small model you have already pulled so
   Hearth periodically runs a one-token deep probe and catches inference-level

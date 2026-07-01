@@ -13,16 +13,26 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   attached mode refuses by default unless a compatible runner is already serving;
   use `--force` only when you intend to start that runner yourself later.
   `--daemon` applies the same edit to `/etc/hearth/config.json` when run with
-  sudo.
+  sudo. The command edits the config only, so after a change it prints how to
+  reload a running Hearth (Reload Config or SIGHUP for the app, `launchctl
+  kickstart` for the root daemon).
 
 ### Changed
 - `hearth setup` now makes the common managed-vs-attached choice more assistive
   without silently guessing at runtime. On a fresh config, a known launchd-managed
-  Ollama (`brew services`) makes setup choose attached mode; a manual runner or an
-  unknown listener still stops setup with explicit commands.
+  Ollama (`brew services`) whose server is actually answering makes setup choose
+  attached mode; a loaded-but-silent job, a manual runner, or an unknown listener
+  still stops setup with explicit commands.
 - `hearth doctor` now distinguishes a compatible already-running runner from an
   unknown listener on the port, and attached mode tells you whether nothing is
   serving or the service is not the configured runner.
+
+### Fixed
+- With `host` set to `0.0.0.0` (or `::`), readiness probes now dial loopback
+  instead of the wildcard address, which is not connectable. `hearth wait-ready`,
+  `hearth doctor`, `hearth setup`, the attached-mode gate, and the supervisor's
+  own health probe all work again for a LAN-open runner; the managed runner still
+  binds every interface.
 
 ## [0.8.0] - 2026-07-01
 

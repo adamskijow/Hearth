@@ -94,6 +94,16 @@ enum ModeCLI {
                 }
             }
         }
+
+        // This command only edits the config; nothing watches the file, so a
+        // Hearth that is already running keeps the old mode until it reloads.
+        if oldMode != targetMode {
+            if daemon {
+                print("  a running daemon applies this after: sudo launchctl kickstart -k system/com.hearth.daemon")
+            } else {
+                print("  a running Hearth applies this after Reload Config in the menu, or: killall -HUP Hearth")
+            }
+        }
         exit(0)
     }
 

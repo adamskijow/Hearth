@@ -90,7 +90,9 @@ struct HearthConfigTests {
     @Test func runnerCarriesHostAndPort() {
         let config = HearthConfig(ollamaBinaryPath: "/x", host: "0.0.0.0", port: 1234)
         let runner = config.makeOllamaRunner()
-        #expect(runner.readinessEndpoint.absoluteString == "http://0.0.0.0:1234/api/version")
+        // The wildcard host still binds every interface, but it is not a
+        // connectable destination, so the probe URL dials loopback instead.
+        #expect(runner.readinessEndpoint.absoluteString == "http://127.0.0.1:1234/api/version")
         #expect(runner.processSpec().environmentOverrides["OLLAMA_HOST"] == "0.0.0.0:1234")
     }
 

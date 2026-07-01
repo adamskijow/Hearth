@@ -97,16 +97,20 @@ compromise of the runner or a malicious model runs as root. `runnerUser` drops t
 spawned runner to a lower-privileged account while Hearth itself stays root (so it
 keeps the reboot capability). Off by default: the runner inherits Hearth's user.
 
+Hearth supplies the account's `HOME`, `USER`, and `LOGNAME` to the dropped runner
+automatically (a LaunchDaemon has no `HOME`, and Ollama refuses to start without
+one). If your models live outside that account's `~/.ollama`, set `OLLAMA_MODELS` in
+`runnerEnv` to point at them; anything you set in `runnerEnv` always wins.
+
 | Key | Type | Default | Meaning |
 |-----|------|---------|---------|
 | `runnerUser` | string | unset | Account name to run the spawned runner as, when Hearth is root. Only honored as root and when the account resolves; ignored for the non-root menubar app (it logs a note and runs normally). If the account does not resolve while root, Hearth refuses to start the runner rather than run it as root (fail closed). |
 
-Test before relying on it. On macOS a LaunchDaemon runs in a non-GUI session, and
-GPU/Metal access from a dropped, non-GUI service account is not guaranteed: the
-runner may fall back to CPU or fail to load models. After setting `runnerUser`,
-confirm inference still uses the GPU (watch memory/latency, or the runner's own
-logs) before trusting it in production. If the account cannot reach the GPU, leave
-`runnerUser` unset and keep the runner running as root.
+GPU access holds from the daemon session: verified end to end on Apple Silicon, a
+root daemon that drops the runner to a regular user still reaches Metal and offloads
+the model to the GPU. It is still worth a check on your own setup (watch the runner's
+log for the `Metal` / `offloaded N/N layers to GPU` lines); if a given account cannot
+reach the GPU, leave `runnerUser` unset and keep the runner running as root.
 
 ## Example
 

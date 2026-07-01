@@ -91,6 +91,16 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
         for (key, value) in spec.environmentOverrides {
             environment[key] = value
         }
+        // When dropping the runner to another user, supply that account's
+        // HOME/USER/LOGNAME. A LaunchDaemon runs with no HOME, and Ollama refuses to
+        // start without one ("Error: $HOME is not defined"). The config's runnerEnv
+        // still wins, so an explicit HOME override is respected.
+        if geteuid() == 0, let credentials = dropCredentials {
+            for (key, value) in [("HOME", credentials.home), ("USER", credentials.name), ("LOGNAME", credentials.name)]
+            where spec.environmentOverrides[key] == nil && !value.isEmpty {
+                environment[key] = value
+            }
+        }
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()

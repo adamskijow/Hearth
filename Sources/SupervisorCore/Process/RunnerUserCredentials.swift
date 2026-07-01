@@ -16,11 +16,18 @@ public struct RunnerUserCredentials: Sendable, Equatable {
     /// The account's supplementary groups, so the dropped runner keeps the group
     /// memberships (device/GPU access, shared data) it would have on login.
     public let supplementaryGroups: [gid_t]
+    /// The account's home directory and login name. A LaunchDaemon runs with no
+    /// HOME, and Ollama (which needs `$HOME` for its keys and config) refuses to
+    /// start without one, so the drop supplies HOME/USER/LOGNAME from the account.
+    public let home: String
+    public let name: String
 
-    public init(uid: uid_t, gid: gid_t, supplementaryGroups: [gid_t]) {
+    public init(uid: uid_t, gid: gid_t, supplementaryGroups: [gid_t], home: String, name: String) {
         self.uid = uid
         self.gid = gid
         self.supplementaryGroups = supplementaryGroups
+        self.home = home
+        self.name = name
     }
 
     /// Resolve a username to its uid, primary gid, and supplementary groups from
@@ -34,6 +41,8 @@ public struct RunnerUserCredentials: Sendable, Equatable {
         guard rc == 0, result != nil else { return nil }
         let uid = pwd.pw_uid
         let gid = pwd.pw_gid
+        let home = pwd.pw_dir.map { String(cString: $0) } ?? ""
+        let name = pwd.pw_name.map { String(cString: $0) } ?? username
 
         // Supplementary groups. getgrouplist fills an int array and, when the
         // supplied array is too small, sets the count to the number needed so we
@@ -45,6 +54,7 @@ public struct RunnerUserCredentials: Sendable, Equatable {
             _ = getgrouplist(username, Int32(bitPattern: gid), &raw, &count)
         }
         let groups = raw.prefix(Int(max(0, count))).map { gid_t(bitPattern: $0) }
-        return RunnerUserCredentials(uid: uid, gid: gid, supplementaryGroups: Array(groups))
+        return RunnerUserCredentials(uid: uid, gid: gid, supplementaryGroups: Array(groups),
+                                     home: home, name: name)
     }
 }

@@ -13,6 +13,9 @@ struct RunnerUserCredentialsTests {
         #expect(creds.gid == 0)
         // getgrouplist always includes at least the primary group.
         #expect(creds.supplementaryGroups.contains(0))
+        // Home and login name are captured so the drop can supply HOME/USER/LOGNAME.
+        #expect(creds.name == "root")
+        #expect(creds.home == "/var/root")
     }
 
     @Test func resolvesAKnownServiceAccount() throws {
@@ -20,6 +23,8 @@ struct RunnerUserCredentialsTests {
         let creds = try #require(RunnerUserCredentials.resolve(username: "daemon"))
         #expect(creds.uid == 1)
         #expect(!creds.supplementaryGroups.isEmpty)
+        #expect(creds.name == "daemon")
+        #expect(!creds.home.isEmpty)
     }
 
     @Test func unknownAccountResolvesToNil() {

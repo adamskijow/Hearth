@@ -79,6 +79,14 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     public var rebootEscalateAfterSeconds: Double
     public var rebootMinIntervalSeconds: Double
     public var rebootMaxPerDay: Int
+    /// When true, a reboot fires only if the failing streak included an actual
+    /// process exit (a crash the runner cannot fake over HTTP), never for a pure
+    /// "alive but not answering" wedge. Off by default: the wedge is exactly what
+    /// reboot-on-wedge targets, so turning this on trades unattended recovery of a
+    /// pure wedge for not letting a runner that only controls its HTTP responses
+    /// drive the machine into a reboot. For operators who do not fully trust the
+    /// runner. A pure wedge then escalates to a notification instead.
+    public var rebootOnlyOnProcessFailure: Bool
 
     public init(runner: String = "ollama",
                 mode: String = "managed",
@@ -118,7 +126,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 rebootOnWedge: Bool = false,
                 rebootEscalateAfterSeconds: Double = 600,
                 rebootMinIntervalSeconds: Double = 1800,
-                rebootMaxPerDay: Int = 3) {
+                rebootMaxPerDay: Int = 3,
+                rebootOnlyOnProcessFailure: Bool = false) {
         self.runner = runner
         self.mode = mode
         self.ollamaBinaryPath = ollamaBinaryPath
@@ -158,6 +167,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.rebootEscalateAfterSeconds = rebootEscalateAfterSeconds
         self.rebootMinIntervalSeconds = rebootMinIntervalSeconds
         self.rebootMaxPerDay = rebootMaxPerDay
+        self.rebootOnlyOnProcessFailure = rebootOnlyOnProcessFailure
     }
 
     /// Default Ollama binary location. Apple Silicon Homebrew installs to
@@ -218,6 +228,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         rebootEscalateAfterSeconds = try value(.rebootEscalateAfterSeconds, defaults.rebootEscalateAfterSeconds)
         rebootMinIntervalSeconds = try value(.rebootMinIntervalSeconds, defaults.rebootMinIntervalSeconds)
         rebootMaxPerDay = try value(.rebootMaxPerDay, defaults.rebootMaxPerDay)
+        rebootOnlyOnProcessFailure = try value(.rebootOnlyOnProcessFailure, defaults.rebootOnlyOnProcessFailure)
     }
 
     // MARK: - Derived
@@ -279,7 +290,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
             enabled: rebootOnWedge,
             escalateAfterSeconds: max(60, rebootEscalateAfterSeconds),
             minIntervalSeconds: max(300, rebootMinIntervalSeconds),
-            maxPerDay: max(1, rebootMaxPerDay)
+            maxPerDay: max(1, rebootMaxPerDay),
+            requireProcessFailure: rebootOnlyOnProcessFailure
         )
     }
 

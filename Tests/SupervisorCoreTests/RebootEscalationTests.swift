@@ -6,8 +6,9 @@ import Foundation
 
 struct RebootEscalationTests {
     private let t0 = Date(timeIntervalSince1970: 1_000_000)
-    private func policy(enabled: Bool = true) -> RebootPolicy {
-        RebootPolicy(enabled: enabled, escalateAfterSeconds: 600, minIntervalSeconds: 1800, maxPerDay: 3)
+    private func policy(enabled: Bool = true, requireProcessFailure: Bool = false) -> RebootPolicy {
+        RebootPolicy(enabled: enabled, escalateAfterSeconds: 600, minIntervalSeconds: 1800,
+                     maxPerDay: 3, requireProcessFailure: requireProcessFailure)
     }
 
     private func decide(phase: SupervisorPhase,
@@ -17,10 +18,14 @@ struct RebootEscalationTests {
                         now: Date,
                         enabled: Bool = true,
                         managed: Bool = true,
-                        bootedAt: Date? = nil) -> RebootDecision {
-        RebootEscalation.decide(policy: policy(enabled: enabled), managed: managed, phase: phase,
+                        bootedAt: Date? = nil,
+                        requireProcessFailure: Bool = false,
+                        hadProcessExit: Bool = true) -> RebootDecision {
+        RebootEscalation.decide(policy: policy(enabled: enabled, requireProcessFailure: requireProcessFailure),
+                                managed: managed, phase: phase,
                                 failingSince: failingSince, everHealthyThisSession: everHealthy,
-                                history: history, now: now, systemBootedAt: bootedAt)
+                                history: history, now: now, systemBootedAt: bootedAt,
+                                failingStreakHadProcessExit: hadProcessExit)
     }
 
     @Test func disabledNeverReboots() {
@@ -41,6 +46,28 @@ struct RebootEscalationTests {
         let managed = decide(phase: .failing, failingSince: t0, everHealthy: true,
                              now: t0.addingTimeInterval(100_000), managed: true)
         #expect(managed == .reboot)
+    }
+
+    @Test func requireProcessFailureHoldsOnAPureWedge() {
+        // Opt-in trust posture: with requireProcessFailure on, a textbook wedge that
+        // never crashed the process (a runner could fake this purely over HTTP)
+        // escalates to a human instead of rebooting.
+        let held = decide(phase: .failing, failingSince: t0, everHealthy: true,
+                          now: t0.addingTimeInterval(100_000),
+                          requireProcessFailure: true, hadProcessExit: false)
+        #expect(held == .exhausted)
+        // A streak that did see a real process exit still reboots: that is not a
+        // signal a runner can synthesize from its HTTP responses.
+        let rebooted = decide(phase: .failing, failingSince: t0, everHealthy: true,
+                             now: t0.addingTimeInterval(100_000),
+                             requireProcessFailure: true, hadProcessExit: true)
+        #expect(rebooted == .reboot)
+        // Default (off): a pure wedge reboots as before, so existing behavior is
+        // unchanged unless an operator opts in.
+        let defaultOff = decide(phase: .failing, failingSince: t0, everHealthy: true,
+                               now: t0.addingTimeInterval(100_000),
+                               requireProcessFailure: false, hadProcessExit: false)
+        #expect(defaultOff == .reboot)
     }
 
     @Test func neverHealthyMeansSetupFailureNotAWedge() {
@@ -134,5 +161,13 @@ struct RebootEscalationTests {
         #expect(policy.escalateAfterSeconds >= 60)
         #expect(policy.minIntervalSeconds >= 300)
         #expect(policy.maxPerDay >= 1)
+        #expect(!policy.requireProcessFailure)   // off by default
+
+        // The opt-in trust posture maps through from config.
+        #expect(!HearthConfig().rebootPolicy().requireProcessFailure)
+        let strict = try JSONDecoder().decode(
+            HearthConfig.self, from: Data(#"{"rebootOnWedge":true,"rebootOnlyOnProcessFailure":true}"#.utf8)
+        ).rebootPolicy()
+        #expect(strict.requireProcessFailure)
     }
 }

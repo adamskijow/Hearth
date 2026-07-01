@@ -38,7 +38,8 @@ final class RebootEscalator {
             everHealthyThisSession: everHealthy,
             history: RebootHistoryStore.load(),
             now: now,
-            systemBootedAt: system.bootedAt()
+            systemBootedAt: system.bootedAt(),
+            failingStreakHadProcessExit: state.failingStreakHadProcessExit
         ) {
         case .wait:
             break

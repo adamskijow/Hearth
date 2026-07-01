@@ -88,6 +88,7 @@ README's "Recovering a wedge a restart cannot" for the full safety story.
 | `rebootEscalateAfterSeconds` | number | `600` | How long the runner must stay failing (process restarts not helping) before a reboot is considered. Clamped to at least 60. |
 | `rebootMinIntervalSeconds` | number | `1800` | Minimum time between recovery reboots. A reboot sooner than this that did not help means Hearth stops and notifies instead of looping. Clamped to at least 300. |
 | `rebootMaxPerDay` | int | `3` | Most recovery reboots allowed in a rolling 24 hours. Clamped to at least 1. |
+| `rebootOnlyOnProcessFailure` | bool | `false` | Reboot only when the failing streak included a real process exit (a crash), never for a pure "alive but not answering" wedge. Turn this on if you do not fully trust the runner: it stops a runner that only controls its HTTP responses from driving a reboot, at the cost that a genuine wedge is escalated to a notification instead of auto-recovered. |
 
 ## Example
 

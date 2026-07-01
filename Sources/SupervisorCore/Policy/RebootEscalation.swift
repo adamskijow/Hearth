@@ -24,15 +24,22 @@ public struct RebootPolicy: Sendable, Equatable {
     public var minIntervalSeconds: Double
     /// The most recovery reboots allowed in a rolling 24 hours.
     public var maxPerDay: Int
+    /// When true, only a failing streak that included an actual process exit (a
+    /// crash the runner cannot fake over HTTP) justifies a reboot; a pure
+    /// "alive but not answering" wedge escalates to a human instead. Off by
+    /// default, so a trusted runner's wedge still auto-recovers.
+    public var requireProcessFailure: Bool
 
     public init(enabled: Bool = false,
                 escalateAfterSeconds: Double = 600,
                 minIntervalSeconds: Double = 1800,
-                maxPerDay: Int = 3) {
+                maxPerDay: Int = 3,
+                requireProcessFailure: Bool = false) {
         self.enabled = enabled
         self.escalateAfterSeconds = escalateAfterSeconds
         self.minIntervalSeconds = minIntervalSeconds
         self.maxPerDay = maxPerDay
+        self.requireProcessFailure = requireProcessFailure
     }
 }
 
@@ -64,7 +71,8 @@ public enum RebootEscalation {
                               everHealthyThisSession: Bool,
                               history: RebootHistory,
                               now: Date,
-                              systemBootedAt: Date? = nil) -> RebootDecision {
+                              systemBootedAt: Date? = nil,
+                              failingStreakHadProcessExit: Bool = true) -> RebootDecision {
         guard policy.enabled else { return .wait }
         // Attached (unmanaged) mode monitors a runner Hearth does not own and
         // cannot restart, so it cannot tell a hostile runner from a real driver
@@ -77,6 +85,14 @@ public enum RebootEscalation {
         guard everHealthyThisSession else { return .wait }
         guard phase == .failing, let failingSince else { return .wait }
         guard now.timeIntervalSince(failingSince) >= policy.escalateAfterSeconds else { return .wait }
+
+        // Opt-in: refuse to reboot for a pure "alive but not answering" wedge, the
+        // one signal a runner can synthesize purely through its HTTP responses.
+        // Escalate to a human instead, unless the streak also saw a real process
+        // exit. Off by default, since a genuine driver/GPU wedge often shows no
+        // process death and is exactly what an operator who trusts the runner wants
+        // rebooted.
+        if policy.requireProcessFailure, !failingStreakHadProcessExit { return .exhausted }
 
         // Kernel boot-time backstop, independent of the on-disk history. If the
         // Mac itself booted more recently than the minimum interval, a reboot just

@@ -53,6 +53,11 @@ struct SupervisorMachine {
     private(set) var failureTimestamps: [Date] = []
     /// When the failing phase was entered, if failing.
     private(set) var failingSince: Date? = nil
+    /// Whether the current failure streak (since the last return to healthy)
+    /// included a real process exit, as opposed to only "alive but not answering"
+    /// wedges. Reboot escalation can opt to require this, since a wedge is the one
+    /// signal a runner can fake purely through its HTTP responses.
+    private(set) var failingStreakHadProcessExit: Bool = false
     /// Start of the current healthy streak, for uptime.
     private(set) var healthySince: Date? = nil
     /// A short description of the most recent restart cause.
@@ -203,6 +208,7 @@ struct SupervisorMachine {
             consecutiveFailures = 0
             failureTimestamps.removeAll()
             failingSince = nil
+            failingStreakHadProcessExit = false
             scheduledRespawnAt = .distantFuture
             phase = .healthy
             lastTransition = now
@@ -216,6 +222,7 @@ struct SupervisorMachine {
     private mutating func handleFailure(_ reason: DownReason, killNeeded: Bool, now: Date) -> MachineOutput {
         consecutiveFailures += 1
         lastRestartReason = reason.label
+        if case .crashed = reason { failingStreakHadProcessExit = true }
         healthySince = nil
 
         // Record the failure in the sliding crash loop window.
@@ -262,6 +269,7 @@ struct SupervisorMachine {
         restartCount = 0
         failureTimestamps.removeAll()
         failingSince = nil
+        failingStreakHadProcessExit = false
         healthySince = nil
         scheduledRespawnAt = .distantFuture
         lastRestartReason = nil

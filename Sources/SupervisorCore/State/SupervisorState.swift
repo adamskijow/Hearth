@@ -45,6 +45,10 @@ public struct SupervisorState: Sendable, Equatable {
     public var consecutiveFailures: Int
     /// When the supervisor entered the failing phase, if it is failing.
     public var failingSince: Date?
+    /// Whether the current failure streak included a real process exit, not only
+    /// "alive but not answering" wedges. Drives the opt-in reboot policy that
+    /// refuses to reboot for a runner-forgeable wedge.
+    public var failingStreakHadProcessExit: Bool
     /// When the next respawn is scheduled, while down or failing.
     public var nextRetryAt: Date?
     /// When the phase last changed.
@@ -58,7 +62,8 @@ public struct SupervisorState: Sendable, Equatable {
                 consecutiveFailures: Int = 0,
                 failingSince: Date? = nil,
                 nextRetryAt: Date? = nil,
-                lastTransition: Date = Date(timeIntervalSince1970: 0)) {
+                lastTransition: Date = Date(timeIntervalSince1970: 0),
+                failingStreakHadProcessExit: Bool = false) {
         self.phase = phase
         self.residentModels = residentModels
         self.healthySince = healthySince
@@ -68,6 +73,7 @@ public struct SupervisorState: Sendable, Equatable {
         self.failingSince = failingSince
         self.nextRetryAt = nextRetryAt
         self.lastTransition = lastTransition
+        self.failingStreakHadProcessExit = failingStreakHadProcessExit
     }
 
     /// Uptime of the current healthy streak as of `reference`. Nil if not

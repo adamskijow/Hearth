@@ -8,9 +8,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 A security hardening pass from a third independent audit, a red-team across six
-attacker personas. No new features; each item closes a real finding and preserves
-existing behavior (the one intentional change is that reboot-on-wedge, already
-opt-in, no longer fires in attached mode).
+attacker personas. Each item closes a real finding and preserves existing behavior
+by default (the one non-opt-in change is that reboot-on-wedge, already opt-in, no
+longer fires in attached mode).
+
+### Added
+- `rebootOnlyOnProcessFailure` (config, off by default): when on, a reboot fires
+  only if the failing streak included a real process exit, never for a pure "alive
+  but not answering" wedge, so a runner that only controls its HTTP responses cannot
+  drive the machine into a reboot. Opt-in, for operators who do not fully trust the
+  runner; a pure wedge then escalates to a notification instead.
 
 ### Security
 - Hearth writes its own config, runner-state, reboot-history, and metrics-history

@@ -17,6 +17,31 @@ struct MachineHealthTests {
         HealthReport(isAlive: false, readiness: .unknown, exitReason: reason)
     }
 
+    @Test func failingStreakDistinguishesAWedgeFromAProcessExit() {
+        // The signal the opt-in reboot policy keys on: a pure "alive but not
+        // answering" wedge (which a runner can fake over HTTP) is not a process
+        // exit; an actual crash is; and returning to healthy clears the streak.
+        var machine = SupervisorMachine(config: RestartPolicyConfig(startupGrace: 30))
+        _ = machine.start(now: t0)
+        _ = machine.observe(ready(), now: t0.addingTimeInterval(2))
+        #expect(!machine.failingStreakHadProcessExit)
+
+        // A wedge alone does not count as a process exit.
+        _ = machine.observe(HealthReport(isAlive: true, readiness: .timedOut), now: t0.addingTimeInterval(40))
+        #expect(!machine.failingStreakHadProcessExit)
+
+        // A real crash does.
+        _ = machine.respawnNow(now: t0.addingTimeInterval(42))
+        _ = machine.observe(dead(), now: t0.addingTimeInterval(44))
+        #expect(machine.failingStreakHadProcessExit)
+
+        // Recovering to healthy resets the streak.
+        _ = machine.respawnNow(now: t0.addingTimeInterval(46))
+        _ = machine.observe(ready(), now: t0.addingTimeInterval(48))
+        #expect(machine.phase == .healthy)
+        #expect(!machine.failingStreakHadProcessExit)
+    }
+
     @Test func readinessCatchesHungButAliveRunner() {
         var machine = SupervisorMachine(config: RestartPolicyConfig(startupGrace: 30))
         _ = machine.start(now: t0)

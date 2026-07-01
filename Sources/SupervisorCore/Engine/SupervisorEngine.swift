@@ -307,7 +307,8 @@ public actor SupervisorEngine {
             consecutiveFailures: machine.consecutiveFailures,
             failingSince: machine.failingSince,
             nextRetryAt: pendingRetry,
-            lastTransition: machine.lastTransition
+            lastTransition: machine.lastTransition,
+            failingStreakHadProcessExit: machine.failingStreakHadProcessExit
         )
         current = state
         stateContinuation.yield(state)

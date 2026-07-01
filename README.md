@@ -26,6 +26,12 @@ locally. A native runner has none of the container world's health-probe and rest
 machinery, so the readiness-based recovery you would get from Kubernetes has to come
 from somewhere. Hearth is that layer.
 
+<p align="center">
+  <img src="assets/wedge-recovery.gif" alt="Hearth catching an alive-but-wedged runner by readiness and recovering it, hands-off" width="820">
+</p>
+
+<p align="center"><em>Catching a runner that is alive but wedged, and recovering it on its own (<code>make demo</code>).</em></p>
+
 **Contents** &nbsp; [Quickstart](#quickstart) · [Why this exists](#why-this-exists) · [Requirements](#requirements) · [Install](#install-and-build) · [Configure](#configure) · [How it works](#how-it-works) · [Security](#security-and-exposing-the-runner) · [Architecture](#architecture)
 
 ## Documentation

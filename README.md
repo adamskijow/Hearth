@@ -123,50 +123,6 @@ a real, always-on service on a machine nobody is sitting at.
 
 ## Install and build
 
-Hearth is a Swift Package Manager project.
-
-Build and run from a checkout:
-
-```
-swift build -c release
-swift run Hearth
-```
-
-`swift run Hearth` launches the agent directly. A flame icon appears in the
-menubar; there is no Dock icon. Running this way is fine for development, but
-two features only work from a packaged, signed app: autostart at login
-(SMAppService) and local Notification Center alerts. Run unbundled, both degrade
-gracefully and the menubar reflects the real state rather than pretending.
-
-To assemble a `.app` bundle:
-
-```
-./scripts/package-app.sh
-open dist/Hearth.app
-```
-
-To actually run it day to day before there is a notarized release, install a
-local, ad-hoc signed copy to `/Applications`:
-
-```
-make install
-open /Applications/Hearth.app
-```
-
-Ad-hoc signing gives the bundle a stable local code identity, which is what the
-login item and Notification Center alerts want, without needing a Developer ID.
-It is for your own machine, not distribution. To remove a local install (the app,
-config, logs, and state), run `make uninstall`.
-
-Hearth ships as a Developer ID signed and notarized build, not through the Mac
-App Store. This is not a preference; the App Store requires the App Sandbox, and
-the sandbox forbids a process from spawning and supervising another process,
-which is the entire job. So the distribution path is Developer ID plus
-notarization with the Hardened Runtime on and the App Sandbox off. See
-[Development](docs/development.md) for the signing pipeline.
-
-### Homebrew cask
-
 The signed release installs with Homebrew:
 
 ```
@@ -175,60 +131,49 @@ brew install --cask adamskijow/tap/hearth
 
 The cask installs `Hearth.app` and puts the `hearth` CLI (`doctor`, `status`,
 `setup`, `wait-ready`) on your PATH, so the commands in this README work straight
-after install. (`make install` does the same, symlinking `hearth` into
-`/usr/local/bin`.) The cask lives at `Casks/hearth.rb` and is mirrored to the
-`adamskijow/homebrew-tap` tap; the release pipeline bumps its `version` and `sha256`
-to match each published DMG.
+after install. The cask lives at `Casks/hearth.rb` and is mirrored to the
+`adamskijow/homebrew-tap` tap.
+
+To build from a checkout instead:
+
+```
+swift build -c release
+swift run Hearth      # runs the agent directly; a flame appears in the menubar
+```
+
+Running unbundled is fine for development, but two features only work from a
+packaged, signed app and degrade gracefully otherwise: autostart at login
+(SMAppService) and local Notification Center alerts. For a day-to-day local
+install, `make install` ad-hoc signs the app, copies it to `/Applications`, and
+symlinks the `hearth` CLI; `make uninstall` removes it. Hearth is distributed as a
+Developer ID signed, notarized build (see [Development](docs/development.md) for the
+signing and release pipeline, and [Security](#security-and-exposing-the-runner) for
+why it runs unsandboxed).
 
 ## Configure
 
-There are two ways to configure Hearth, and they edit the same file. Open
-**Preferences** from the menubar (or press Cmd-comma) for a form covering the
-runner, notifications, the control endpoint, log rotation, and the timing knobs.
-Or edit the JSON directly at:
+Configure Hearth from **Preferences** in the menubar (Cmd-comma) or by editing the
+JSON directly at `~/Library/Application Support/Hearth/config.json`. Either way,
+changes apply **without a restart** (Preferences' Save reloads live; after a hand
+edit choose "Reload Config" from the menu, or send SIGHUP), and reloading briefly
+cycles the runner. On first launch Hearth writes a starter template with the runner
+binary auto detected, every key is optional and falls back to its default, and a
+malformed file is flagged loudly rather than silently reverted. Point Hearth at a
+different file with the `HEARTH_CONFIG` environment variable.
 
-```
-~/Library/Application Support/Hearth/config.json
-```
+The keys most people set:
 
-Either way, changes apply **without a restart**: the Preferences window's Save
-reloads live, and after editing the file by hand you choose "Reload Config" from
-the menu (or send the agent SIGHUP). Reloading briefly restarts the runner.
-
-On first launch, if the file is missing, Hearth writes a starter template with
-the runner binary auto detected (it probes Homebrew, the Ollama.app install, and
-your PATH), so first run does not fail on a wrong path. If the runner still is not
-found, the menubar says so and offers a one-click fix. Every key is optional;
-anything you leave out falls back to its default. A malformed file is
-flagged loudly and your running setup is kept rather than silently reverted. To
-point Hearth at a config somewhere else, set the `HEARTH_CONFIG` environment
-variable to that path.
-
-The keys most people touch:
-
-- `runner` and `mode`: which runner (`ollama`, `lmstudio`, or `mlx`) and whether
-  Hearth launches it (`managed`) or only watches one you started (`attached`).
+- `runner` and `mode`: which runner (`ollama`, `lmstudio`, `mlx`) and whether Hearth
+  launches it (`managed`) or only watches one you started (`attached`).
 - `ollamaBinaryPath` (or `lmStudioBinaryPath` / `mlxBinaryPath`): where the runner
-  binary is, if it is not at the default.
+  binary is, if not at the default.
 - `host` and `port`: the address the runner serves on (default `127.0.0.1:11434`;
-  set `host` to `0.0.0.0` to reach it from another machine on your LAN, see
-  [Troubleshooting](#troubleshooting)).
-- `ntfyTopic`: a long, unguessable ntfy topic for phone alerts.
-- `controlEnabled` and `controlToken`: turn on the HTTP control endpoint and set
-  the bearer token every request must carry.
-- `maintenanceRestartHours`: cycle a healthy runner this often (for example `24`)
-  to clear memory creep. Off by default.
-- `probeModel`: turn on the deep readiness probe by naming a model. Hearth then runs
-  a one-token generation against it on an interval, catching a model or GPU hang the
-  shallow `/api/version` probe misses. Off by default; it does GPU work.
-- `runnerEnv`: extra environment variables for a managed runner (for example
-  `OLLAMA_LOAD_TIMEOUT` or `OLLAMA_KEEP_ALIVE`), set from the **Set Env** button in
-  Preferences or as a config map. Hearth sets `OLLAMA_HOST` itself from `host`/`port`.
-
-Everything else has a sensible default: the probe and backoff timing, the
-crash-loop brake, the pressure-alert thresholds, log rotation, and the reboot
-escalation. The [configuration reference](docs/configuration.md) lists every key,
-its type, and its default.
+  set `host` to `0.0.0.0` to reach it from your LAN, see [Troubleshooting](#troubleshooting)).
+- `ntfyTopic`: a long, unguessable topic for phone alerts. Treat it like a secret;
+  anyone who knows a public topic can read it. Subscribe to the same topic in the
+  ntfy app on your phone.
+- `controlEnabled` and `controlToken`: turn on the HTTP control endpoint and the
+  bearer token every request must carry.
 
 A typical config:
 
@@ -246,9 +191,12 @@ A typical config:
 }
 ```
 
-To get phone notifications, set `ntfyTopic` to a long, unguessable string and
-subscribe to that same topic in the ntfy app on your phone. Anyone who knows a
-public ntfy topic can read it, so treat the topic name like a secret.
+Everything else, the probe and backoff timing, the crash-loop brake, the deep probe
+(`probeModel`), maintenance restarts (`maintenanceRestartHours`), extra runner
+environment (`runnerEnv`), the pressure thresholds, log rotation, and reboot
+escalation, has a sensible default. The
+[configuration reference](docs/configuration.md) lists every key, its type, and its
+default.
 
 ## How it works
 
@@ -568,44 +516,35 @@ look.
 
 ## Security and exposing the runner
 
-Hearth runs unsandboxed, by necessity: supervising another process is exactly what
-the App Sandbox forbids, so it ships with the App Sandbox off and the Hardened
-Runtime on, as a Developer ID notarized build. It spawns and owns the runner child
-and reads that runner's local API to judge health. It sends only short status text
-to notifiers; no prompts, model data, or runner content ever leave the machine.
+Hearth runs unsandboxed by necessity: supervising another process is exactly what
+the App Sandbox forbids, so it ships with the sandbox off and the Hardened Runtime
+on, as a Developer ID notarized build. It spawns and owns the runner child and reads
+that runner's local API to judge health; it sends only short status text to
+notifiers, never prompts, model data, or runner content.
 
-It is also conservative about putting the runner on the network. By default the
-runner listens on `127.0.0.1`, reachable only from this Mac. For another machine on
-a network you trust (a home LAN behind a firewall), setting `host` to `0.0.0.0` is
-the simple path: `hearth doctor` reports the URL to use and the firewall caveat (see
-[Troubleshooting](#troubleshooting)). What you should not do is expose it raw to an
-untrusted network or the internet, since the runner has no authentication of its
-own. For that, keep it on `127.0.0.1` and put an authenticating reverse proxy in
-front, bound to a private (Tailscale) address; proxying inference traffic is a job
-for a battle-tested proxy, not something Hearth should reimplement. The
-[reverse-proxy guide](docs/reverse-proxy.md) has Caddy and nginx examples, plus the
-unauthenticated `/healthz` route for uptime monitors. Hearth's own control endpoint
-is separate: off by default, a bearer token required when on, bound to a private
-interface, and only for supervision (status, start, stop, restart), never inference.
+It is conservative about putting the runner on the network. By default the runner
+listens on `127.0.0.1`. For another machine on a network you trust, setting `host`
+to `0.0.0.0` is the simple path (`hearth doctor` prints the URL and the firewall
+caveat, see [Troubleshooting](#troubleshooting)). Do not expose the runner raw to an
+untrusted network: it has no authentication of its own, so keep it on `127.0.0.1`
+behind an authenticating reverse proxy bound to a private (Tailscale) address. The
+[reverse-proxy guide](docs/reverse-proxy.md) has Caddy and nginx examples plus the
+`/healthz` route for uptime monitors. Hearth's own control endpoint is separate: off
+by default, a bearer token required when on, bound to a private interface, and only
+for supervision, never inference.
 
 ## Architecture
 
-The code is split into a logic half and a presentation half, with a hard line
-between them.
-
-`SupervisorCore` is a library that holds all the decision logic and imports no
-AppKit and no SwiftUI. Time, process control, HTTP, power, and notifications all
-sit behind protocols, so the whole thing is unit testable with fakes and never
-touches real I/O in a test. The heart is an explicit restart state machine and a
-pure exit classifier; both take the current time as an argument rather than
-reading a clock, so their behavior is fully determined by their inputs. The
-runner specifics (Ollama, LM Studio, mlx_lm), the control endpoint's routing and
-auth, and the metrics and tailnet helpers also live here as pure, tested code.
-
-`Hearth` is the executable: the menubar agent that wires the core to real process
-spawning (`posix_spawn` in a dedicated process group), URLSession, IOKit, the
-Network framework, SMAppService, and UserNotifications, and renders the published
-state.
+The code splits into a logic half and a presentation half with a hard line between.
+`SupervisorCore` holds all the decision logic and imports no AppKit or SwiftUI: time,
+process control, HTTP, power, and notifications sit behind protocols, so it is unit
+tested with fakes and never touches real I/O. Its heart is an explicit restart state
+machine and a pure exit classifier that take the current time as an argument, so
+their behavior is fully determined by their inputs; the runner specifics, the control
+endpoint's routing and auth, and the metrics and tailnet helpers live here too as
+pure, tested code. `Hearth` is the executable that wires the core to real process
+spawning (`posix_spawn` in a dedicated process group), URLSession, IOKit, the Network
+framework, SMAppService, and UserNotifications, and renders the published state.
 
 ## Roadmap
 
@@ -619,14 +558,12 @@ Near term intentions:
 
 ## Contributing
 
-Contributions are welcome. The project values the split between logic and
-presentation: decision logic belongs in `SupervisorCore`, behind protocols, with
-tests, and never imports AppKit or SwiftUI. Anything runner specific belongs
-inside the runner implementation, not leaked into the engine or the UI. Please
-keep new dependencies out unless there is a strong reason, and prefer permissive
-licenses if one is unavoidable. Run `make test` before sending a change. Running
-the full test suite and cutting a release are covered in
-[docs/development.md](docs/development.md).
+Contributions are welcome. The project values the logic/presentation split:
+decision logic belongs in `SupervisorCore`, behind protocols, with tests, and never
+imports AppKit or SwiftUI; anything runner specific belongs in the runner
+implementation, not the engine or the UI. Keep new dependencies out unless there is
+a strong reason. Run `make test` before sending a change; testing and releasing are
+covered in [docs/development.md](docs/development.md).
 
 ## License
 

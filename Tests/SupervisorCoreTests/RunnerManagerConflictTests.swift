@@ -9,6 +9,9 @@ struct RunnerManagerConflictTests {
             runner: "ollama", mode: "managed",
             loadedLabels: ["homebrew.mxcl.ollama", "com.apple.something"])
         #expect(warning?.contains("brew services stop ollama") == true)
+        #expect(warning?.contains("hearth mode attached") == true)
+        #expect(RunnerManagerConflict.competingLabel(
+            runner: "ollama", loadedLabels: ["homebrew.mxcl.ollama"]) == "homebrew.mxcl.ollama")
     }
 
     @Test func attachedModeIsFine() {

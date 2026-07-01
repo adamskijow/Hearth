@@ -10,7 +10,8 @@ import SupervisorCore
 enum SetupCLI {
     static func run() -> Never {
         print("Hearth setup")
-        var config = ConfigStore.load().config
+        let load = ConfigStore.load()
+        var config = load.config
         let runner = config.runner
 
         // 1. Detect the runner binary and point the config at it.
@@ -26,13 +27,37 @@ enum SetupCLI {
             print("  `brew install \(runner)`) and re-run, or set the path in Preferences.")
         }
 
+        let loadedLabels = LaunchdLabels.loaded()
+        let portProbe = StatusCLI.probeRunnerPort(config: config)
+        if load.createdDefault {
+            let managerLabel = RunnerManagerConflict.competingLabel(runner: config.runner, loadedLabels: loadedLabels)
+            switch RunnerModeAdvisor.freshSetupDecision(
+                runner: config.runner,
+                mode: config.mode,
+                compatibleRunnerServing: portProbe.compatibleRunnerReady,
+                hearthRunnerServing: portProbe.hearthRunner != nil,
+                managerLabel: managerLabel
+            ) {
+            case .switchToAttached(let reason):
+                config.mode = "attached"
+                ConfigStore.save(config)
+                print("  \(reason)")
+                print("  set mode to attached in the config")
+            case .stopForUserChoice(let reason):
+                stopForModeChoice(reason)
+            case .keepCurrent:
+                break
+            }
+        } else if let warning = RunnerManagerConflict.warning(
+            runner: config.runner,
+            mode: config.mode,
+            loadedLabels: loadedLabels
+        ) {
+            stopForModeChoice(warning)
+        }
+
         if let warning = preexistingRunnerWarning(config: config) {
-            print("")
-            print("Setup stopped: \(warning)")
-            print("Choose one:")
-            print("  - For Ollama.app or a server you start yourself, set `mode` to `attached` and re-run `hearth setup`.")
-            print("  - For Homebrew managed by Hearth, stop the other manager first (for example `brew services stop ollama`) and re-run.")
-            exit(1)
+            stopForModeChoice(warning)
         }
 
         // 2. Install the login agent.
@@ -54,25 +79,32 @@ enum SetupCLI {
     }
 
     private static func preexistingRunnerWarning(config: HearthConfig) -> String? {
-        guard config.isManaged,
-              StatusCLI.isRunnerReady(config: config, timeout: 1),
-              !recordedHearthRunnerAlive() else {
+        guard config.isManaged else {
             return nil
         }
-        return PreexistingRunner.warning(
+        let probe = StatusCLI.probeRunnerPort(config: config)
+        guard probe.portOccupied, probe.hearthRunner == nil else { return nil }
+        if probe.compatibleRunnerReady {
+            return PreexistingRunner.warning(
+                runner: config.runner,
+                mode: config.mode,
+                foreignRunnerServing: true
+            )
+        }
+        return PreexistingRunner.unknownListenerWarning(
             runner: config.runner,
-            mode: config.mode,
-            foreignRunnerServing: true
+            host: config.host,
+            port: config.port
         )
     }
 
-    private static func recordedHearthRunnerAlive() -> Bool {
-        guard let data = try? Data(contentsOf: RunnerStateStore.url),
-              let recorded = try? JSONDecoder().decode(RunnerProcessIdentity.self, from: data),
-              let live = RunnerStateStore.liveIdentity(pid: recorded.pid) else {
-            return false
-        }
-        return live.startTimeSeconds == recorded.startTimeSeconds && kill(recorded.pid, 0) == 0
+    private static func stopForModeChoice(_ warning: String) -> Never {
+        print("")
+        print("Setup stopped: \(warning)")
+        print("Choose one:")
+        print("  - To watch the running server, run `hearth mode attached`, then re-run `hearth setup`.")
+        print("  - To let Hearth own the runner, stop the other server or manager first, then re-run `hearth setup`.")
+        exit(1)
     }
 
 }

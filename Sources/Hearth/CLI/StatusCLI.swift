@@ -22,6 +22,8 @@ enum StatusCLI {
           Hearth metrics            Show memory and thermal history over the retained window.
           Hearth doctor             Check the config and environment for problems.
           Hearth doctor-daemon      Check the root daemon config at /etc/hearth/config.json.
+          Hearth mode managed|attached [--daemon] [--force]
+                                    Set whether Hearth starts the runner or watches one.
           Hearth setup              Turnkey: detect the runner, install the login agent, wait for ready.
           Hearth wait-ready [-t S]  Block until the runner answers (exit 0), or time out (exit 1).
           Hearth install-agent      Install a login agent that keeps Hearth running (no sudo).
@@ -183,6 +185,20 @@ enum StatusCLI {
         return false
     }
 
+    struct RunnerPortProbe {
+        var portOccupied: Bool
+        var compatibleRunnerReady: Bool
+        var hearthRunner: RunnerProcessIdentity?
+    }
+
+    static func probeRunnerPort(config: HearthConfig) -> RunnerPortProbe {
+        RunnerPortProbe(
+            portOccupied: isSomethingListening(host: config.host, port: config.port),
+            compatibleRunnerReady: isRunnerReady(config: config, timeout: 1),
+            hearthRunner: liveRecordedRunner()
+        )
+    }
+
     // MARK: - doctor
 
     static func printDoctor() -> Never {
@@ -246,21 +262,28 @@ enum StatusCLI {
         }
 
         // Runner port: free for a managed runner, or already serving for attached.
-        let serving = isSomethingListening(host: config.host, port: config.port)
+        let runnerPort = probeRunnerPort(config: config)
         if config.isManaged {
-            if !serving {
+            if !runnerPort.portOccupied {
                 print(mark(nil) + " runner port \(config.host):\(config.port) is free")
-            } else if let identity = recordedRunner(), kill(identity.pid, 0) == 0 {
+            } else if let identity = runnerPort.hearthRunner {
                 print(mark(nil) + " runner port \(config.host):\(config.port) served by Hearth's runner (pid \(identity.pid))")
-            } else {
+            } else if runnerPort.compatibleRunnerReady {
                 report(Diagnostic(.warning, PreexistingRunner.warning(
                     runner: config.runner, mode: config.mode, foreignRunnerServing: true)
-                    ?? "Something other than Hearth's runner is listening on \(config.host):\(config.port); a managed runner may fail to bind."))
+                    ?? "A compatible runner is already serving on \(config.host):\(config.port)."))
+            } else {
+                report(Diagnostic(.warning, PreexistingRunner.unknownListenerWarning(
+                    runner: config.runner, host: config.host, port: config.port)))
             }
-        } else if serving {
+        } else if runnerPort.compatibleRunnerReady {
             print(mark(nil) + " attached target is serving on \(config.host):\(config.port)")
         } else {
-            report(Diagnostic(.warning, "Attached mode, but nothing is serving on \(config.host):\(config.port) yet."))
+            report(Diagnostic(.warning, PreexistingRunner.attachedMissingWarning(
+                runner: config.runner,
+                host: config.host,
+                port: config.port,
+                listenerPresent: runnerPort.portOccupied)))
         }
 
         // Reachability: can another machine on the network reach the runner, or is
@@ -318,9 +341,42 @@ enum StatusCLI {
     }
 
     private static func isSomethingListening(host: String, port: Int) -> Bool {
-        guard let url = URL(string: "http://\(host):\(port)/") else { return false }
-        let (_, response, error) = syncGET(url, bearer: nil, timeout: 2)
-        return response != nil || !isUnreachable(error)
+        let probeHost: String
+        switch host {
+        case "0.0.0.0": probeHost = "127.0.0.1"
+        case "::": probeHost = "::1"
+        default: probeHost = host
+        }
+
+        var hints = addrinfo(
+            ai_flags: AI_NUMERICSERV,
+            ai_family: AF_UNSPEC,
+            ai_socktype: SOCK_STREAM,
+            ai_protocol: IPPROTO_TCP,
+            ai_addrlen: 0,
+            ai_canonname: nil,
+            ai_addr: nil,
+            ai_next: nil
+        )
+        var result: UnsafeMutablePointer<addrinfo>?
+        guard getaddrinfo(probeHost, String(port), &hints, &result) == 0, let result else {
+            return false
+        }
+        defer { freeaddrinfo(result) }
+
+        var cursor: UnsafeMutablePointer<addrinfo>? = result
+        while let info = cursor {
+            let fd = socket(info.pointee.ai_family, info.pointee.ai_socktype, info.pointee.ai_protocol)
+            if fd >= 0 {
+                var timeout = timeval(tv_sec: 0, tv_usec: 500_000)
+                setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
+                let connected = connect(fd, info.pointee.ai_addr, info.pointee.ai_addrlen) == 0
+                close(fd)
+                if connected { return true }
+            }
+            cursor = info.pointee.ai_next
+        }
+        return false
     }
 
     private static func directoryIsWritable(_ url: URL) -> Bool {
@@ -332,6 +388,14 @@ enum StatusCLI {
     private static func recordedRunner() -> RunnerProcessIdentity? {
         guard let data = try? Data(contentsOf: RunnerStateStore.url) else { return nil }
         return try? JSONDecoder().decode(RunnerProcessIdentity.self, from: data)
+    }
+
+    private static func liveRecordedRunner() -> RunnerProcessIdentity? {
+        guard let recorded = recordedRunner(),
+              let live = RunnerStateStore.liveIdentity(pid: recorded.pid),
+              RunnerSweep.shouldSweep(recorded: recorded, live: live),
+              kill(recorded.pid, 0) == 0 else { return nil }
+        return recorded
     }
 
     // MARK: - metrics
@@ -440,7 +504,11 @@ enum StatusCLI {
             semaphore.signal()
         }
         task.resume()
-        _ = semaphore.wait(timeout: .now() + timeout + 1)
+        let completed = semaphore.wait(timeout: .now() + timeout + 1) == .success
+        if !completed {
+            task.cancel()
+            return (nil, nil, NSError(domain: NSURLErrorDomain, code: NSURLErrorTimedOut))
+        }
         return box.value
     }
 }

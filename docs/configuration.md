@@ -12,6 +12,17 @@ restart.
 Run `hearth doctor` after editing to catch problems (bad ports, an unknown runner
 or mode, a control endpoint with no token, timings that cannot grow). For the root
 daemon config at `/etc/hearth/config.json`, run `sudo hearth doctor-daemon`.
+You can switch supervision mode without hand-editing JSON:
+
+```sh
+hearth mode managed
+hearth mode attached
+```
+
+Use `sudo hearth mode managed --daemon` or `sudo hearth mode attached --daemon`
+for the root daemon config. Switching to attached mode refuses by default unless a
+compatible runner is already serving; add `--force` only when you intend to start
+that runner yourself later.
 
 ## Runner
 

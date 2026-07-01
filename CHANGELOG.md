@@ -5,6 +5,25 @@ All notable changes to Hearth are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+- `hearth mode managed|attached`: explicitly switch whether Hearth starts and
+  restarts the runner or watches a runner started by something else. Switching to
+  attached mode refuses by default unless a compatible runner is already serving;
+  use `--force` only when you intend to start that runner yourself later.
+  `--daemon` applies the same edit to `/etc/hearth/config.json` when run with
+  sudo.
+
+### Changed
+- `hearth setup` now makes the common managed-vs-attached choice more assistive
+  without silently guessing at runtime. On a fresh config, a known launchd-managed
+  Ollama (`brew services`) makes setup choose attached mode; a manual runner or an
+  unknown listener still stops setup with explicit commands.
+- `hearth doctor` now distinguishes a compatible already-running runner from an
+  unknown listener on the port, and attached mode tells you whether nothing is
+  serving or the service is not the configured runner.
+
 ## [0.8.0] - 2026-07-01
 
 Least privilege, plus a security hardening pass from a third independent audit (a

@@ -10,10 +10,10 @@ also shows a "config issues" line when it finds any.
   `which ollama`, in Preferences or the config. `hearth doctor` reports the path
   it tried.
 - **LM Studio keeps restarting (down, restarting, down).** Managed mode does not
-  work with LM Studio: `lms server start` exits immediately. Set `mode` to
-  `attached` and start LM Studio's server yourself; Hearth will watch it.
+  work with LM Studio: `lms server start` exits immediately. Start LM Studio's
+  server yourself, then run `hearth mode attached`; Hearth will watch it.
 - **I use the official Ollama app.** The app already starts Ollama's server. Set
-  `runner` to `ollama` and `mode` to `attached` so Hearth watches that server
+  `runner` to `ollama` and run `hearth mode attached` so Hearth watches that server
   instead of launching a second one. See [Ollama setup with Hearth](ollama.md).
 - **mlx_lm never reaches healthy.** `mlx_lm.server`'s `/v1/models` errors until at
   least one MLX model is in your HuggingFace cache. Download any model once.
@@ -39,10 +39,10 @@ also shows a "config issues" line when it finds any.
   Hearth own the next one.
 - **The runner keeps restarting and the state churns (managed mode).** Something
   else is also managing the runner and fighting Hearth over it, most often
-  `brew services`. `hearth doctor` and the menu flag this; run
-  `brew services stop ollama` so Hearth is the sole supervisor. (Two Hearths can
-  also collide; the single-instance guard handles that, but a non-Hearth manager
-  needs stopping.)
+  `brew services`. `hearth doctor` and the menu flag this; run `hearth mode
+  attached` if brew should keep owning Ollama, or `brew services stop ollama` so
+  Hearth is the sole supervisor. (Two Hearths can also collide; the single-instance
+  guard handles that, but a non-Hearth manager needs stopping.)
 - **The HTTP server answers but generations hang.** The shallow probe only proves
   the API answers. Set `probeModel` to a small model you have already pulled so
   Hearth periodically runs a one-token deep probe and catches inference-level

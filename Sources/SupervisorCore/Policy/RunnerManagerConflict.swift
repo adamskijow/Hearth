@@ -18,13 +18,18 @@ public enum RunnerManagerConflict {
         }
     }
 
+    public static func competingLabel(runner: String, loadedLabels: Set<String>) -> String? {
+        guard let label = brewServicesLabel(forRunner: runner),
+              loadedLabels.contains(label) else { return nil }
+        return label
+    }
+
     /// A warning if, in managed mode, another launchd job already manages the
     /// runner. nil otherwise. Attached mode is fine: a brew-services-managed runner
     /// is exactly the kind of thing attached mode is meant to watch.
     public static func warning(runner: String, mode: String, loadedLabels: Set<String>) -> String? {
         guard mode.lowercased() == "managed",
-              let label = brewServicesLabel(forRunner: runner),
-              loadedLabels.contains(label) else { return nil }
-        return "\(runner) is also managed by launchd (\(label), likely `brew services`). Two managers fight over the runner; run `brew services stop \(runner)` so Hearth is the sole supervisor."
+              let label = competingLabel(runner: runner, loadedLabels: loadedLabels) else { return nil }
+        return "\(runner) is also managed by launchd (\(label), likely `brew services`). Two managers fight over the runner; run `hearth mode attached` if that manager should own it, or run `brew services stop \(runner)` so Hearth is the sole supervisor."
     }
 }

@@ -14,6 +14,17 @@ public enum PreexistingRunner {
         let example = runner.lowercased() == "ollama"
             ? "often the Ollama app, or an `ollama serve` you started"
             : "a runner you started yourself"
-        return "Something is already serving on the runner's port (\(example)). In managed mode Hearth launches its own and they fight over the port; set mode to attached so Hearth watches the running one, or quit it so Hearth can manage its own."
+        return "A compatible runner is already serving on the configured port (\(example)). In managed mode Hearth launches its own and they fight over the port; run `hearth mode attached` to watch the running one, or quit it so Hearth can manage its own."
+    }
+
+    public static func unknownListenerWarning(runner: String, host: String, port: Int) -> String {
+        "Something is listening on \(host):\(port), but it did not answer as \(runner). In managed mode Hearth may fail to bind this port; stop that process or change Hearth's host/port before starting managed supervision."
+    }
+
+    public static func attachedMissingWarning(runner: String, host: String, port: Int, listenerPresent: Bool) -> String {
+        if listenerPresent {
+            return "Attached mode is set, but the service on \(host):\(port) did not answer as \(runner). Start the matching runner there, switch runner/port, or run `hearth mode managed` so Hearth starts its own."
+        }
+        return "Attached mode is set, but nothing is serving on \(host):\(port). Start \(runner), or run `hearth mode managed` so Hearth starts and restarts its own runner."
     }
 }

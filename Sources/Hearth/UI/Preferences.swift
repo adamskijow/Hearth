@@ -111,10 +111,11 @@ struct PreferencesView: View {
             }
             .help("Which local LLM server Hearth supervises.")
             Picker("Mode", selection: $model.config.mode) {
-                Text("Managed (Hearth launches it)").tag("managed")
-                Text("Attached (monitor only)").tag("attached")
+                Text("Hearth starts runner").tag("managed")
+                Text("Watch existing runner").tag("attached")
             }
-            .help("Managed: Hearth starts and restarts the runner. Attached: Hearth only watches a runner you start yourself.")
+            .pickerStyle(.segmented)
+            .help("Choose whether Hearth starts and restarts the runner, or only watches a runner started by something else.")
             HStack {
                 TextField("Binary path", text: binaryPath)
                 Button("Detect") {

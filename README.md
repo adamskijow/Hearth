@@ -118,7 +118,7 @@ brew install --cask adamskijow/tap/hearth
 ```
 
 The cask installs `Hearth.app` and puts the `hearth` CLI (`doctor`, `status`,
-`setup`, `wait-ready`) on your PATH. To build from a checkout instead,
+`setup`, `mode`, `wait-ready`) on your PATH. To build from a checkout instead,
 `swift build -c release && swift run Hearth`; for a day-to-day local install,
 `make install` ad-hoc signs the app into `/Applications` (and `make uninstall`
 removes it). Hearth is distributed as a Developer ID signed, notarized build, not via
@@ -137,6 +137,11 @@ and `controlEnabled`/`controlToken` for the
 [control endpoint](docs/remote-control.md). The
 [configuration reference](docs/configuration.md) lists every key, its type, and its
 default, with a full example.
+
+Use `hearth mode managed` when Hearth should own the runner, or `hearth mode
+attached` when another app or service starts it. `hearth setup` now makes that
+choice automatically only for clear fresh installs, such as an existing
+brew-services Ollama job; otherwise `hearth doctor` prints the exact fix.
 
 ## How it works
 

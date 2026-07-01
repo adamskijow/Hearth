@@ -195,13 +195,18 @@ renders the published state.
 
 ## Roadmap
 
-Near term intentions:
+The core is solid: a tested state machine, readiness and deep probes, and the full
+recovery ladder. Ollama, LM Studio, and mlx_lm are supported today, and adding
+another runner is a small, contained change when someone needs one.
 
-- A tokens per second readout, alongside the existing thermal and memory metrics.
-- Full Tailscale auto configuration (tailnet address detection is already done).
-- A first class authenticating proxy (today Hearth ships a documented Caddy
-  config at `deploy/Caddyfile.example`).
-- More runners behind the `Runner` protocol as people want them.
+Where it is heading:
+
+- **Least privilege.** Building on the opt-in `runnerUser` drop, a minimal root
+  helper so the supervisor itself need not run as root.
+- **Reach.** Full Tailscale auto-configuration (address detection already ships),
+  and turnkey setup for the authenticating reverse proxy it documents today.
+- **Metrics.** A tokens-per-second readout, alongside the existing thermal and
+  memory ones.
 
 ## Contributing
 

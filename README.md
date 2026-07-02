@@ -18,10 +18,10 @@ notices that too and restarts it. It keeps the Mac awake while models are meant 
 be serving, and alerts you (including on your phone) when something breaks. LM
 Studio and mlx_lm are supported alongside Ollama.
 
-It is not a chat UI and it does not run models itself: your apps keep talking to
-the runner exactly as they do now, and Hearth stands behind it keeping it up. It
-earns its keep on any Mac that serves models with nobody watching: a Mac mini in
-a closet, a home-lab server, or the desktop you leave running overnight.
+Your apps keep talking to the runner exactly as they do now, and Hearth stands
+behind it keeping it up. It earns its keep on any Mac that serves models with
+nobody watching: a Mac mini in a closet, a home-lab server, or the desktop you
+leave running overnight.
 
 <p align="center">
   <img src="assets/wedge-recovery.gif" alt="Hearth catching a runner that is still running but stuck, and recovering it hands-off" width="820">

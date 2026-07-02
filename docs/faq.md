@@ -13,8 +13,8 @@ or anything that talks to `localhost:11434`), yes. Hearth restarts the runner
 when it crashes, notices when it is running but no longer answering, keeps the
 Mac awake while it serves, and alerts you when something breaks.
 
-Hearth is not a chat UI, does not run models itself, and does not install or
-download models. It stands behind the runner you already use.
+Hearth does not run, install, or download models. It stands behind the runner
+you already use.
 
 ## Does it work on a normal Mac, or only a server?
 

@@ -163,6 +163,14 @@ public actor SupervisorEngine {
                 readiness = .timedOut   // the HTTP server answers, but inference is wedged
             }
             guard readiness == .ready else {
+                // A hang (or failed deep probe) means something is still there
+                // and stuck: report it alive so the down reason reads as wedged
+                // rather than an invented exit. Kill and spawn are skipped in
+                // attached mode either way. Anything else (refused, error) means
+                // the runner is gone as far as a watcher can tell.
+                if readiness == .timedOut {
+                    return HealthReport(isAlive: true, readiness: readiness, exitReason: .running)
+                }
                 return HealthReport(isAlive: false, readiness: readiness, exitReason: .unknown)
             }
             let models = await fetchModels() ?? currentModels

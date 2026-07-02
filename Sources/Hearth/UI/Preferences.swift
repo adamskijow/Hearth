@@ -12,6 +12,10 @@ final class PreferencesController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private let model: PreferencesModel
     private let onSave: (HearthConfig) -> Void
+    /// The config this window started from, so an external change (a file edit
+    /// plus SIGHUP, the CLI, a menu switch) can be told apart from the user's own
+    /// in-window edits.
+    private var baseline: HearthConfig?
 
     init(config: HearthConfig, onSave: @escaping (HearthConfig) -> Void) {
         self.model = PreferencesModel(config)
@@ -19,12 +23,39 @@ final class PreferencesController: NSObject, NSWindowDelegate {
         super.init()
     }
 
+    /// Called after a reload applied a config that did not come from this window.
+    /// If the user has not edited anything yet, adopt the new values so Save
+    /// cannot silently revert them; if they have, warn instead of discarding
+    /// either side's changes.
+    func externalConfigDidChange(_ new: HearthConfig) {
+        guard window?.isVisible == true else {
+            model.config = new
+            baseline = new
+            return
+        }
+        if new == model.config {
+            baseline = new
+            return
+        }
+        if model.config == baseline {
+            model.config = new
+            baseline = new
+            model.status = "Config changed outside this window; now showing the new values."
+        } else {
+            model.status = "Config changed outside this window while you were editing; Save will overwrite that change."
+        }
+    }
+
     func show(config: HearthConfig) {
         model.config = config
+        baseline = config
         if window == nil {
             let view = PreferencesView(
                 model: model,
-                onSave: { [weak self] in self?.onSave($0) },
+                onSave: { [weak self] config in
+                    self?.baseline = config
+                    self?.onSave(config)
+                },
                 onClose: { [weak self] in self?.window?.close() }
             )
             let hosting = NSHostingController(rootView: view)

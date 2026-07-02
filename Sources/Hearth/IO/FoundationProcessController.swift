@@ -73,6 +73,7 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
     // One shared, size rotated log for the runner's stdout and stderr.
     private var logHandle: FileHandle?
     private var logBytes: Int = 0
+    private var warnedLogOpenFailure = false
 
     init(logFileURL: URL,
          maxStderrLines: Int = 200,
@@ -314,7 +315,10 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
                 }
             }
         }
-        guard pid > 0 else { throw SpawnError(code: errno) }
+        // The shim reports a fork failure as a negative errno in its return value;
+        // raw errno cannot be trusted here because the closure unwinding above runs
+        // Swift runtime code that may clobber it.
+        guard pid > 0 else { throw SpawnError(code: pid < 0 ? -pid : EAGAIN) }
         return pid
     }
 
@@ -333,7 +337,13 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
             if result == 0 {
                 return ProcessStatus(isAlive: true, exit: nil, recentStderr: entry.stderrRing)
             }
-            let exit = result == entry.pid ? ProcessExit.from(waitpidStatus: raw) : ProcessExit(code: 0, wasSignaled: true, signal: SIGKILL)
+            // waitpid can also fail (ECHILD) when the child was already reaped by
+            // the deferred teardown path. The process is gone either way, but the
+            // cause is unknown then; say so rather than fabricating a SIGKILL,
+            // which would surface as "force-killed" in notifications.
+            let exit = result == entry.pid
+                ? ProcessExit.from(waitpidStatus: raw)
+                : ProcessExit(code: 0, wasSignaled: true, signal: nil)
             entry.exit = exit
             entry.reaped = true
             finishReading(entry)
@@ -399,7 +409,17 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
         }
         if needsReap {
             var raw: Int32 = 0
-            _ = waitpid(pid, &raw, 0)   // the group SIGKILL has landed, so this returns at once
+            var result: pid_t
+            repeat {
+                result = waitpid(pid, &raw, 0)   // the group SIGKILL has landed, so this returns at once
+            } while result == -1 && errno == EINTR
+            // ECHILD means someone else already reaped it; the child is gone
+            // either way. Any other failure means the reap is NOT confirmed, so
+            // keep the entry and the crash-recovery record rather than forgetting
+            // a possibly live process; a later status probe or sweep retries.
+            if result != pid, !(result == -1 && errno == ECHILD) {
+                return
+            }
         }
         let reapedIdentity: RunnerProcessIdentity? = lock.withLock {
             var identity: RunnerProcessIdentity?
@@ -477,12 +497,24 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
         let fm = FileManager.default
         SecureFile.prepareFile(logFileURL)
         logHandle = try? FileHandle(forWritingTo: logFileURL)
+        // A failed open must not be silent: every later append would no-op and
+        // the user's Open Logs would quietly show nothing. Warn once per failure
+        // streak; appendLogLocked retries the open so a transient failure heals.
+        if logHandle == nil {
+            if !warnedLogOpenFailure {
+                warnedLogOpenFailure = true
+                warn("cannot open the runner log at \(logFileURL.path); runner output is being dropped until it can be reopened")
+            }
+        } else {
+            warnedLogOpenFailure = false
+        }
         logHandle?.seekToEndOfFile()
         let attributes = try? fm.attributesOfItem(atPath: logFileURL.path)
         logBytes = (attributes?[.size] as? Int) ?? 0
     }
 
     private func appendLogLocked(_ data: Data) {
+        if logHandle == nil { openLogLocked() }
         logHandle?.write(data)
         logBytes += data.count
         if rotation.shouldRotate(currentBytes: logBytes) {

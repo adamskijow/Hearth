@@ -6,6 +6,7 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <grp.h>
+#include <errno.h>
 
 pid_t hearth_spawn_as_user(const char *path,
                            char *const argv[],
@@ -16,10 +17,28 @@ pid_t hearth_spawn_as_user(const char *path,
                            gid_t gid,
                            const gid_t *groups,
                            int ngroups) {
+    // Everything the child needs that is not async-signal-safe is computed
+    // BEFORE the fork: the fd table size (getdtablesize may allocate), the
+    // default-signal action, and the empty mask. The forked child of a
+    // multithreaded parent may only use async-signal-safe calls, and the stack
+    // copies carry these values across.
+    int maxfd = getdtablesize();
+    struct sigaction dfl;
+    dfl.sa_handler = SIG_DFL;
+    sigemptyset(&dfl.sa_mask);
+    dfl.sa_flags = 0;
+    sigset_t empty;
+    sigemptyset(&empty);
+
+    errno = 0;
     pid_t pid = fork();
-    if (pid != 0) {
-        // Parent (pid > 0) or fork failure (pid == -1). Nothing to clean up here;
-        // the caller owns the pipe fds.
+    if (pid < 0) {
+        // Fork failure: hand the error back as a negative errno so the caller
+        // does not have to read errno after its own runtime has run.
+        return (pid_t)(errno > 0 ? -errno : -1);
+    }
+    if (pid > 0) {
+        // Parent. Nothing to clean up here; the caller owns the pipe fds.
         return pid;
     }
 
@@ -36,19 +55,17 @@ pid_t hearth_spawn_as_user(const char *path,
     // Close every other inherited fd so none of Hearth's descriptors (the log, the
     // control socket, the single-instance lock) leak into the runner. This mirrors
     // POSIX_SPAWN_CLOEXEC_DEFAULT on the default path.
-    int maxfd = getdtablesize();
     for (int fd = 3; fd < maxfd; fd++) {
         close(fd);
     }
 
     // Hearth leaves SIGTERM/SIGINT/SIGHUP ignored and blocked for its dispatch
     // signal sources; SIG_IGN and the blocked mask survive execve, so reset them or
-    // the runner would not die from Hearth's graceful SIGTERM.
-    signal(SIGTERM, SIG_DFL);
-    signal(SIGINT, SIG_DFL);
-    signal(SIGHUP, SIG_DFL);
-    sigset_t empty;
-    sigemptyset(&empty);
+    // the runner would not die from Hearth's graceful SIGTERM. sigaction is
+    // async-signal-safe; signal() is not.
+    sigaction(SIGTERM, &dfl, NULL);
+    sigaction(SIGINT, &dfl, NULL);
+    sigaction(SIGHUP, &dfl, NULL);
     sigprocmask(SIG_SETMASK, &empty, NULL);
 
     // Drop privileges. The group list and gid must be set before the uid: once the

@@ -36,17 +36,25 @@ final class LocalNotifier: Notifier, @unchecked Sendable {
 
     func notify(_ notification: HearthNotification) async {
         guard Self.isAvailable else { return }
-        let content = UNMutableNotificationContent()
-        content.title = notification.title
-        content.body = notification.body
-        if notification.level == .critical {
-            content.interruptionLevel = .critical
+        // Fire and forget, like the network notifiers: the engine awaits notify()
+        // on its actor, and a slow Notification Center must not stall the
+        // supervision loop behind a banner.
+        let title = notification.title
+        let body = notification.body
+        let critical = notification.level == .critical
+        Task.detached {
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = body
+            if critical {
+                content.interruptionLevel = .critical
+            }
+            let request = UNNotificationRequest(
+                identifier: UUID().uuidString,
+                content: content,
+                trigger: nil
+            )
+            try? await UNUserNotificationCenter.current().add(request)
         }
-        let request = UNNotificationRequest(
-            identifier: UUID().uuidString,
-            content: content,
-            trigger: nil
-        )
-        try? await UNUserNotificationCenter.current().add(request)
     }
 }

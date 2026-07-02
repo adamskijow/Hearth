@@ -66,7 +66,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             await coordinator.end()
             semaphore.signal()
         }
-        _ = semaphore.wait(timeout: .now() + 2)
+        // Pump the main run loop while waiting instead of blocking on the
+        // semaphore: teardown may itself need the main thread (a notifier, a
+        // MainActor hop), and a blocked main thread would turn every quit into
+        // the full timeout plus a forced kill. Same bound either way.
+        let deadline = Date().addingTimeInterval(2)
+        while semaphore.wait(timeout: .now()) == .timedOut, Date() < deadline {
+            RunLoop.main.run(mode: .default, before: Date().addingTimeInterval(0.05))
+        }
         // Ensure a wedged child is dead before we exit, rather than relying on the
         // engine's deferred SIGKILL which exit would outrun.
         RunnerStateStore.killRecordedGroupNow()
@@ -115,6 +122,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         configNote = loaded.note
         configProblem = loaded.isProblem
         configDiagnostics = ConfigDiagnostics.check(loaded.config)
+        // Keep an open Preferences window honest about what is now on disk.
+        preferences?.externalConfigDidChange(loaded.config)
         competingManagerWarning = RunnerManagerConflict.warning(
             runner: loaded.config.runner, mode: loaded.config.mode, loadedLabels: LaunchdLabels.loaded())
         binaryMissingPath = nil

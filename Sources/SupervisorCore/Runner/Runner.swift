@@ -128,12 +128,21 @@ public enum RunnerHeuristics {
                                 stderr: [String],
                                 oomSignatures: [String] = RunnerHeuristics.oomSignatures) -> ExitReason {
         guard let exit else { return .running }
-        let haystack = stderr.joined(separator: "\n").lowercased()
-        if !haystack.isEmpty, oomSignatures.contains(where: { haystack.contains($0.lowercased()) }) {
-            return .outOfMemory
+        // Only an abnormal end consults the signatures: a runner that logged a
+        // transient allocation complaint at some point and then exited cleanly
+        // must not be reported as an out-of-memory kill.
+        if exit.wasSignaled || exit.code != 0 {
+            let haystack = stderr.joined(separator: "\n").lowercased()
+            if !haystack.isEmpty, oomSignatures.contains(where: { haystack.contains($0.lowercased()) }) {
+                return .outOfMemory
+            }
         }
         if exit.wasSignaled {
-            return .signal(exit.signal ?? 0)
+            // A signaled exit with no recorded signal number is a reap whose
+            // detail was lost (waitpid raced another reaper); the cause is
+            // unknown, not a phantom signal 0.
+            guard let sig = exit.signal, sig > 0 else { return .unknown }
+            return .signal(sig)
         }
         if exit.code == 0 {
             return .cleanExit

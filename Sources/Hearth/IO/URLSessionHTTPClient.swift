@@ -16,6 +16,20 @@ final class URLSessionHTTPClient: HTTPClient, @unchecked Sendable {
     /// an unbounded body to exhaust the supervisor's memory would ever hit.
     private static let maxResponseBytes = 16 * 1024 * 1024
 
+    /// Refuses redirects. The runner is a declared trust boundary: following a
+    /// 3xx would let a misbehaving or compromised runner point the probe at some
+    /// other host, whose answer would then be scored as the runner's health, and
+    /// a redirected deep probe would replay its POST body off-box. A redirect
+    /// simply surfaces as its 3xx status, which is not-ready.
+    private final class NoRedirectDelegate: NSObject, URLSessionTaskDelegate {
+        func urlSession(_ session: URLSession, task: URLSessionTask,
+                        willPerformHTTPRedirection response: HTTPURLResponse,
+                        newRequest request: URLRequest,
+                        completionHandler: @escaping (URLRequest?) -> Void) {
+            completionHandler(nil)
+        }
+    }
+
     init() {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.waitsForConnectivity = false
@@ -26,7 +40,9 @@ final class URLSessionHTTPClient: HTTPClient, @unchecked Sendable {
         // bytes just under the stall timeout to keep a probe alive indefinitely;
         // without it that request would never return.
         configuration.timeoutIntervalForResource = 300
-        self.session = URLSession(configuration: configuration)
+        self.session = URLSession(configuration: configuration,
+                                  delegate: NoRedirectDelegate(),
+                                  delegateQueue: nil)
     }
 
     func get(_ url: URL, timeout: TimeInterval) async -> HTTPOutcome {

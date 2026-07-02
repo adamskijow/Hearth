@@ -12,7 +12,7 @@ enum RunnerCollision {
     /// Hearth's own recorded, live runner.
     static func foreignRunnerServing(config: HearthConfig) async -> Bool {
         guard config.isManaged else { return false }
-        guard await portIsServing(host: config.host, port: config.port) else { return false }
+        guard await answersAsRunner(at: config.makeRunner().readinessEndpoint) else { return false }
         return !hearthRunnerAlive()
     }
 
@@ -28,22 +28,18 @@ enum RunnerCollision {
         }
     }
 
-    private static func portIsServing(host: String, port: Int) async -> Bool {
-        // Dial through the shared wildcard-to-loopback mapping the probes use (a
-        // wildcard bind host is not itself connectable) and bracket an IPv6
-        // literal, mirroring runnerEndpoint; otherwise a foreign runner on a
-        // 0.0.0.0 or ::1 config is silently missed.
-        let dialed = probeHost(for: host)
-        guard let url = URL(string: "http://\(urlAuthorityHost(for: dialed)):\(port)/") else { return false }
-        var request = URLRequest(url: url)
+    /// True only when the service on the port answers the runner's own readiness
+    /// endpoint with success. An unrelated HTTP service that happens to hold the
+    /// port (a 404 or 500 on this path) is a port conflict, not a compatible
+    /// runner, and must not trigger the switch-to-attached advice; attaching to
+    /// it would supervise something that is not a runner. The runner's endpoint
+    /// already applies the wildcard-to-loopback dial mapping and IPv6 bracketing
+    /// the probes use.
+    private static func answersAsRunner(at endpoint: URL) async -> Bool {
+        var request = URLRequest(url: endpoint)
         request.timeoutInterval = 1.5
-        do {
-            _ = try await URLSession.shared.data(for: request)
-            return true   // any HTTP response means something is listening
-        } catch {
-            // Connection refused is the only outcome that means nothing is there.
-            let ns = error as NSError
-            return !(ns.domain == NSURLErrorDomain && ns.code == NSURLErrorCannotConnectToHost)
-        }
+        guard let (_, response) = try? await URLSession.shared.data(for: request),
+              let http = response as? HTTPURLResponse else { return false }
+        return (200..<300).contains(http.statusCode)
     }
 }

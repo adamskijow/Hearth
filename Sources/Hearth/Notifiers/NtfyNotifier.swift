@@ -24,11 +24,25 @@ final class NtfyNotifier: Notifier, @unchecked Sendable {
         self.session = URLSession(configuration: configuration)
     }
 
+    /// The characters allowed through unencoded in the topic path segment.
+    /// Deliberately stricter than `.urlPathAllowed`, which passes `/` (and `..`)
+    /// through: a topic with a slash would otherwise become extra path segments
+    /// and post to a different endpoint than the one the user subscribed to.
+    private static let topicAllowed = CharacterSet(
+        charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~")
+
     func notify(_ notification: HearthNotification) async {
-        // Percent-encode the topic so a topic with a space or other URL-illegal
-        // character does not silently produce a nil URL and drop the alert.
-        let encodedTopic = topic.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? topic
-        guard let url = URL(string: "\(server)/\(encodedTopic)") else { return }
+        // Percent-encode the topic so a topic with a space, slash, or other
+        // URL-significant character stays one path segment instead of silently
+        // producing a nil URL or posting somewhere else.
+        let encodedTopic = topic.addingPercentEncoding(withAllowedCharacters: Self.topicAllowed) ?? topic
+        guard let url = URL(string: "\(server)/\(encodedTopic)") else {
+            // A malformed server URL would otherwise silently eat every alert the
+            // user believes they configured.
+            FileHandle.standardError.write(
+                Data("Hearth: ntfy alert dropped: \"\(server)/\(encodedTopic)\" is not a valid URL; check ntfyServer in the config\n".utf8))
+            return
+        }
         var request = URLRequest(url: url, timeoutInterval: 10)
         request.httpMethod = "POST"
         request.httpBody = Data(notification.body.utf8)

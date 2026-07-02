@@ -15,9 +15,11 @@
 // Fork, drop to (uid, gid, groups) in the child, redirect stdout/stderr to the
 // given fds, close all other inherited fds, reset SIGTERM/SIGINT/SIGHUP to their
 // default disposition and clear the signal mask, then execve(path, argv, envp).
-// Returns the child pid in the parent, or -1 on fork failure. The child fails
-// closed with _exit(127) on any error, so it can never exec the runner as root.
-// All pointers must remain valid for the duration of the call.
+// Returns the child pid in the parent, or the negated errno of the failed fork
+// (a value < 0); the caller must not read raw errno, which its own runtime may
+// have clobbered by the time it looks. The child fails closed with _exit(127)
+// on any error, so it can never exec the runner as root. All pointers must
+// remain valid for the duration of the call.
 pid_t hearth_spawn_as_user(const char *path,
                            char *const argv[],
                            char *const envp[],

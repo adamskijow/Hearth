@@ -92,6 +92,7 @@ struct PreferencesView: View {
     let onSave: (HearthConfig) -> Void
     let onClose: () -> Void
     @State private var showingEnvEditor = false
+    @State private var showingTokensEditor = false
     @State private var showAdvancedTuning = false
 
     var body: some View {
@@ -124,12 +125,25 @@ struct PreferencesView: View {
                 onCancel: { showingEnvEditor = false }
             )
         }
+        .sheet(isPresented: $showingTokensEditor) {
+            TokensEditorView(
+                tokens: model.config.controlTokens,
+                onDone: { model.config.controlTokens = $0; showingTokensEditor = false },
+                onCancel: { showingTokensEditor = false }
+            )
+        }
     }
 
     /// A short summary of the configured runner environment for the Preferences row.
     private var envSummary: String {
         let count = model.config.runnerEnv.count
         return count == 0 ? "None" : "\(count) variable\(count == 1 ? "" : "s")"
+    }
+
+    /// A short summary of the named control tokens for the Preferences row.
+    private var tokensSummary: String {
+        let count = model.config.controlTokens.count
+        return count == 0 ? "None" : "\(count) token\(count == 1 ? "" : "s")"
     }
 
     // MARK: Sections
@@ -191,6 +205,12 @@ struct PreferencesView: View {
             TextField("Heartbeat URL", text: optional(\.heartbeatURL),
                       prompt: Text("Uptime Kuma push or healthchecks.io URL (optional)"))
                 .help("While the runner is healthy, Hearth pings this URL on an interval; silence then means down, and the monitor you already run does the alerting.")
+            number("Heartbeat interval", $model.config.heartbeatIntervalSeconds,
+                   help: "Seconds between heartbeat pings while the runner is healthy. Match it to the monitor's expected period.")
+            Toggle("Thermal alerts", isOn: $model.config.thermalAlerts)
+                .help("Alert when the Mac's thermal state turns serious or critical, which throttles inference long before anything crashes.")
+            numberInt("Memory alert percent", $model.config.memoryAlertPercent,
+                      help: "Alert when system memory used reaches this percent, a precursor to the runner being killed under pressure. 0 disables it.")
             Toggle("Pause all notifications", isOn: $model.config.notificationsPaused)
                 .help("Vacation mode: silence local, ntfy, and webhook alerts without clearing their settings. Events are still logged.")
             Toggle("Include runner log tail in alerts", isOn: $model.config.alertsIncludeLogTail)
@@ -221,7 +241,18 @@ struct PreferencesView: View {
                 Button("Generate") { model.config.controlToken = Self.randomToken() }
             }
             .help("Required secret on every control request. Generate makes a random one.")
+            HStack {
+                Text("Named tokens")
+                Spacer()
+                Text(tokensSummary).foregroundStyle(.secondary)
+                Button("Edit Tokens\u{2026}") { showingTokensEditor = true }
+            }
+            .help("Optional: give each caller its own named token, so start, stop, and restart actions are logged with the caller's name. The bearer token above keeps working and is logged as default.")
             Button("Copy phone URL") { copyPhoneURL() }
+            Toggle("Tokens-per-second metrics proxy", isOn: $model.config.metricsProxyEnabled)
+                .help("Opt-in: a transparent relay in front of the runner that reads the throughput numbers generations already report, surfaced on the status page, hearth status, and /metrics. Point your clients at the proxy port instead of the runner port; hearth proxy-setup prints ready-made snippets.")
+            numberInt("Metrics proxy port", $model.config.metricsProxyPort,
+                      help: "Port the metrics proxy listens on. Clients use this port in place of the runner port while the proxy is enabled.")
         } header: {
             Text("Remote control")
         } footer: {
@@ -261,6 +292,10 @@ struct PreferencesView: View {
                        help: "Time window, in seconds, for counting failures toward the threshold above.")
                 number("Failing retry interval", $model.config.failingProbeIntervalSeconds,
                        help: "How often to retry once the runner is failing repeatedly.")
+                number("Busy timeout", $model.config.busyTimeoutSeconds,
+                       help: "How long an uninterrupted busy (queue full) streak is believed before it is treated as a hang and restarted. A real queue drains; a 503 that never ends is a wedge. Floored at 30.")
+                numberInt("Memory limit (MB)", $model.config.runnerMemoryLimitMB,
+                          help: "Restart a healthy Hearth-started runner whose resident memory crosses this many megabytes, catching slow memory creep before it wedges. 0 disables the watchdog.")
                 TextField("Deep probe model", text: optional(\.probeModel),
                           prompt: Text("optional, e.g. qwen2.5:0.5b"))
                     .help("Optional: periodically generate one token with this model (pick a small one you have pulled) to catch a runner whose API answers while the model itself is stuck.")
@@ -361,7 +396,9 @@ struct PreferencesView: View {
         model.status = "Copied \(url)"
     }
 
-    private static func randomToken() -> String {
+    /// Shared with the named-tokens editor, so every generated secret has the
+    /// same shape.
+    static func randomToken() -> String {
         let bytes = (0..<24).map { _ in UInt8.random(in: 0...255) }
         return bytes.map { String(format: "%02x", $0) }.joined()
     }

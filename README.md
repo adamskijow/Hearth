@@ -182,7 +182,12 @@ alive; readiness asks whether the runner's endpoint actually answers in time.
 Readiness is the important half, because it catches the alive-but-wedged runner a
 liveness check calls healthy. The optional deep probe (`probeModel`) goes one level
 deeper, running a one-token generation on a slower interval to catch a model or GPU
-hang while the HTTP server still answers.
+hang while the HTTP server still answers. This is not hypothetical: a real GPU crash
+(image generation exhausting unified memory) was caught this way live, with
+`/api/version` answering in under a millisecond while a one-token generation hung
+for 40 seconds, then a heavier repeat driving a memory-pressure kill, crash loop,
+and recovery. The run is written up in the [validation
+report](VALIDATION-REPORT.md#live-gpu-crash-test).
 
 When the runner stops serving, Hearth restarts it on an exponential backoff. If
 failures keep coming (a crash loop), it stops thrashing, enters a failing state, and

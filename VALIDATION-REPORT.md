@@ -165,6 +165,83 @@ The orphaned `llama-server` grandchild (85131) dies with the group because the
 sweep uses `killpg` on the recorded process group, not just the serve PID. The
 residual gap is only the window between the crash and the next launch.
 
+## Live GPU-crash test
+
+Scenarios 1 through 6 induce failures synthetically (SIGKILL, SIGSTOP, a hard kill
+of Hearth). This is the real thing, on 2026-07-02: a GPU crash caused by generating
+images in a separate app while Ollama served a 14 GB model. It is the first
+observation of Hearth's readiness detection against an actual GPU wedge rather than
+a SIGSTOP stand-in, and the run walked Ollama down the full failure ladder.
+
+Setup: Ollama 0.30.11 serving `qwen2.5:14b-instruct` (14 GB resident, 32K context).
+Two instruments, both independent of the machine's live managed daemon (which was a
+pre-0.9.0 binary, not the subject of the detection claims):
+
+- a ground-truth probe loop every 2s: a shallow `GET /api/version` and a deep
+  one-token `POST /api/generate`, both timed;
+- a fresh 0.9.0 build in attached mode with a deep probe (`probeModel
+  qwen2.5:14b-instruct`), reporting via its control endpoint. Attached mode never
+  spawns or kills, so it only observed.
+
+### Episode 1: an inference wedge a shallow probe misses
+
+As the image model loaded and contended for the GPU, deep-probe latency climbed and
+then hung, while the shallow HTTP endpoint stayed instant throughout:
+
+```
+baseline      shallow ~0.5ms   deep 0.25-0.6s      healthy
+12:47:58      shallow ~0.5ms   deep 1.23s          (GPU starting to starve)
+12:48:07      shallow ~0.5ms   deep 10.0s TIMEOUT  <- inference wedged
+12:48:19..43  shallow ~0.5ms   deep 10.0s TIMEOUT  (sustained ~40s)
+12:48:55      shallow ~0.5ms   deep 0.34s          <- recovered on its own
+```
+
+The 0.9.0 watcher reported `lastDown=wedged`, phase down then restarting.
+`ollama serve` (74418) and its `llama-server` child (98378) never changed pid: the
+wedge cleared by itself once the GPU freed, so no restart was needed. This is
+scenario 3's liveness-vs-readiness result on a real GPU wedge instead of a SIGSTOP.
+`/api/version` answered in half a millisecond the entire time a liveness check
+would have called the runner healthy, while a real one-token generation hung for 40
+seconds. Only the deep probe caught it.
+
+### Episode 2: heavier contention, then kill, crash loop, recovery
+
+A second, heavier generation pushed unified memory to exhaustion and took the whole
+server down, not just inference:
+
+```
+12:50:32   deep FAIL, shallow ok        (inference wedge again)
+12:50:42   shallow FAIL + deep FAIL     (whole endpoint wedged, process still alive)
+12:50:45   ollama serve killed          (memory pressure), watcher=down
+12:51:03   watcher=failing              (crash-loop state entered)
+12:51:10   a respawn (new pids) that died again under the continued load
+12:51:35   shallow ok + deep ok         (recovered), fresh serve 16645 / llama 16739
+12:51:42   watcher=healthy
+```
+
+The original `ollama serve` (74418) was killed under memory pressure (a macOS jetsam
+SIGKILL, not an Ollama-internal allocation error), respawned, died again under the
+sustained load, and finally came back healthy as a fresh process once the image
+generation released memory. The live managed daemon (still running) is what
+respawned it through the crash loop; the 0.9.0 watcher independently tracked the
+same episode through down, failing, and healthy.
+
+### Caveats
+
+- The streaming monitor tracked pids with `pgrep -f "ollama serve"`, whose pattern
+  also matched the monitor's own command line, so its per-sample pid columns were
+  unreliable (they bounced to the monitor's own pid). The trustworthy signals are
+  the shallow/deep latencies and a full-path `pgrep -fl "/opt/homebrew/bin/ollama
+  serve"` check, which confirmed the real restart 74418 -> 16645. An earlier read
+  of the streaming pids as a restart was wrong and was corrected.
+- One machine, one run; not a scripted, repeatable gate like scenarios 1 through 6.
+- This does NOT close the out-of-memory classification gap below. A jetsam SIGKILL
+  carries no `ggml`/`metal` stderr signature (those come from Ollama's own Metal
+  allocation-failure path, a different mode than the OS killing the process), and
+  the runner stderr at the crash was not captured. What the run does show is the
+  behavior Hearth handles: deep-probe detection of a real GPU wedge, and a real
+  memory-pressure process death, crash loop, and recovery.
+
 ## Real API fixtures
 
 Captured into `tests/Fixtures/real/` and reconciled with the parser. A
@@ -271,10 +348,14 @@ There is no foreground flag for `lms server start`, so LM Studio is attached onl
 
 Honest gaps, with the steps to close each.
 
-- Real out of memory classification. Not inducible on 128 GiB hardware.
+- Real out of memory classification. Not inducible on 128 GiB hardware. The live
+  GPU-crash test above produced a real memory-pressure kill, but as a jetsam
+  SIGKILL with no `ggml`/`metal` stderr, so it does not exercise the OOM signature
+  path (a different failure mode).
   - To verify: on a smaller-memory Mac, run a model far larger than RAM, or set
     a very large context, capture the runner stderr at the crash, and confirm
-    `classifyExit` returns `.outOfMemory`. Add the captured lines as a fixture.
+    `classifyExit` returns `.outOfMemory`. `scripts/capture-oom.sh <model>`
+    automates the capture and checks it against the shipped signatures.
 
 ## How to reproduce
 

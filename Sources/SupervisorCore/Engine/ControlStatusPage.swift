@@ -45,12 +45,15 @@ public enum ControlStatusPage {
           if (!r.ok) { document.getElementById('err').textContent = r.status === 401 ? 'Wrong token.' : ('Error ' + r.status); return; }
           document.getElementById('err').textContent = '';
           const s = await r.json();
-          let h = row('phase', s.phase, 'phase-' + s.phase);
+          let h = row('phase', s.busy ? s.phase + ' (busy)' : s.phase, 'phase-' + s.phase);
           if (s.uptimeSeconds != null) h += row('uptime', dur(s.uptimeSeconds));
           h += row('restarts', s.restartCount);
+          if (s.lastDownCategory) h += row('last failure', s.lastDownCategory);
           if (s.models && s.models.length) h += row('models', s.models.join(', '));
+          if (s.tokensPerSecond != null) h += row('throughput', s.tokensPerSecond + ' tok/s');
           if (s.memoryUsedPercent != null) h += row('memory', s.memoryUsedPercent + '%');
           if (s.thermal) h += row('thermal', s.thermal);
+          if (s.deepProbeConfigured) h += row('deep probe', 'on');
           document.getElementById('status').innerHTML = h;
         } catch (e) { document.getElementById('err').textContent = 'Cannot reach Hearth.'; }
       }

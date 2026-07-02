@@ -48,7 +48,7 @@ public enum ControlRouting {
         if trimmedPath(path) == "/metrics" {
             return .prometheus(prometheusText(state, now: now, metrics: metrics, tokens: tokens))
         }
-        return .status(statusJSON(state, now: now, metrics: metrics))
+        return .status(statusJSON(state, now: now, metrics: metrics, tokens: tokens))
     }
 
     /// The outcome for every route that needs no supervisor state or metrics, so
@@ -120,7 +120,9 @@ public enum ControlRouting {
     }
 
     /// A compact status document for the phone.
-    public static func statusJSON(_ state: SupervisorState, now: Date, metrics: SystemMetrics? = nil) -> Data {
+    public static func statusJSON(_ state: SupervisorState, now: Date,
+                                  metrics: SystemMetrics? = nil,
+                                  tokens: TokenMetricsStore.Snapshot? = nil) -> Data {
         let payload = StatusPayload(
             phase: state.phase.rawValue,
             busy: state.busy,
@@ -133,7 +135,9 @@ public enum ControlRouting {
             deepProbeConfigured: state.deepProbeConfigured,
             thermal: metrics.flatMap { $0.thermal == .unknown ? nil : $0.thermal.rawValue },
             memoryUsedPercent: metrics?.memoryUsedFraction.map { Int(($0 * 100).rounded()) },
-            runnerResidentBytes: metrics?.runnerResidentBytes
+            runnerResidentBytes: metrics?.runnerResidentBytes,
+            tokensPerSecond: tokens?.lastTokensPerSecond.map { ($0 * 10).rounded() / 10 },
+            generationTokensTotal: tokens?.generationTokensTotal
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -216,4 +220,6 @@ private struct StatusPayload: Encodable {
     var thermal: String?
     var memoryUsedPercent: Int?
     var runnerResidentBytes: Int64?
+    var tokensPerSecond: Double?
+    var generationTokensTotal: Int?
 }

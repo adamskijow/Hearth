@@ -90,8 +90,8 @@ with `KeepAlive`, which relaunch the runner when the process exits. That handles
 clean crash. It does not handle the failure that actually wastes your afternoon:
 the runner is still running, but no longer answering.
 
-That "alive but wedged" state is common and well reported: the runner hangs after a
-few requests with no error ([ollama#6616](https://github.com/ollama/ollama/issues/6616)),
+That "alive but wedged" state has shown up in user reports: the runner hangs
+after a few requests with no error ([ollama#6616](https://github.com/ollama/ollama/issues/6616)),
 the GPU stops responding and "the service needs to be rebooted"
 ([Framework](https://community.frame.work/t/ollama-model-runner-unexpectedly-stopped-gpu-hang/76220)),
 or Ollama silently reverts to CPU and spins for hours

@@ -54,6 +54,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `controlHost: "tailscale"`: a sentinel that resolves to this Mac's tailnet
   IPv4 at bind time (loopback when none is found), so the control endpoint
   follows the tailnet instead of a hand-copied address going stale.
+- Opt-in `alertsIncludeLogTail`: down and failing alerts can carry the
+  runner's last log lines (bounded, sanitized) so the alert itself says why.
+  Off by default because log lines are runner content and alerts leave the
+  box; the doctor warns when the flag rides the public ntfy.sh, and the
+  README's privacy statement names the exception explicitly.
 - EXPERIMENTAL `rebootViaHelper` and the `hearth-reboot-helper` root daemon:
   the least-privilege split for reboot-on-wedge. The helper's entire API is
   "reboot, if you are the configured uid and not too often" on a root-owned

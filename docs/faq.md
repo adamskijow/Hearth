@@ -77,6 +77,13 @@ The only things it ever sends are the short status alerts you explicitly
 configure (macOS notifications, an ntfy topic for your phone, or a webhook),
 and those contain status text like "Runner down", nothing more.
 
+The one exception is opt-in and off by default: `alertsIncludeLogTail` appends
+the runner's last few log lines to down alerts so the alert says why. Log
+lines are runner content (file paths, model names, and with debug modes even
+request text), and they travel to whatever notifier you configured, including
+the public ntfy.sh server unless you self-host. `hearth doctor` warns about
+that combination; leave the flag off if in doubt.
+
 ## Do I need ntfy, Tailscale, or the "control endpoint"?
 
 No; all three are optional extras for checking on a Mac you are away from. The

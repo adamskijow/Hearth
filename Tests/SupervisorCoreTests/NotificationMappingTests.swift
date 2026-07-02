@@ -45,6 +45,31 @@ struct NotificationMappingTests {
         #expect(!SupervisorEvent.becameHealthy.isNotable)
     }
 
+    @Test func logTailIsAppendedOnlyWhereOptedInAndOnlyToFailureAlerts() throws {
+        let tail = ["ggml_metal: failed to allocate buffer", "llama runner exited"]
+        let down = try #require(SupervisorEngine.notification(for: .down(.crashed(.outOfMemory)), logTail: tail))
+        #expect(down.body.contains("Runner log tail (alertsIncludeLogTail):"))
+        #expect(down.body.contains("failed to allocate buffer"))
+        let failing = try #require(SupervisorEngine.notification(
+            for: .enteredFailing(restartsInWindow: 5, window: 60), logTail: tail))
+        #expect(failing.body.contains("llama runner exited"))
+        // The all-clear never carries log content, opted in or not.
+        let recovered = try #require(SupervisorEngine.notification(for: .recovered, logTail: tail))
+        #expect(!recovered.body.contains("log tail"))
+        // Without the opt-in (the default), nothing changes.
+        let quiet = try #require(SupervisorEngine.notification(for: .down(.wedged)))
+        #expect(!quiet.body.contains("log tail"))
+    }
+
+    @Test func logTailIsBoundedAndStripped() {
+        let noisy = (1...20).map { "line \($0)" } + [String(repeating: "x", count: 500) + "\u{1B}[31mred\u{07}"]
+        let tail = SupervisorEngine.sanitizedLogTail(noisy)
+        #expect(tail.count == 5)
+        #expect(tail.last?.count ?? 0 <= 201)   // 200 plus the ellipsis
+        #expect(!(tail.last?.contains("\u{1B}") ?? true))
+        #expect(!(tail.last?.contains("\u{07}") ?? true))
+    }
+
     @Test func aFailedWarmupWarnsAndACleanOneIsQuiet() throws {
         let failed = try #require(SupervisorEngine.notification(for: .warmupFinished(missing: ["llama3:8b"])))
         #expect(failed.level == .warning)

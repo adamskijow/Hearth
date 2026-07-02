@@ -113,6 +113,13 @@ public enum ConfigDiagnostics {
             }
         }
 
+        // The log-tail opt-in sends runner content off the box; over the PUBLIC
+        // ntfy.sh that content transits a third party. Say so, every doctor run.
+        if config.alertsIncludeLogTail,
+           let topic = config.ntfyTopic?.trimmingCharacters(in: .whitespaces), !topic.isEmpty,
+           config.ntfyServer.localizedCaseInsensitiveContains("ntfy.sh") {
+            issues.append(.init(.warning, "alertsIncludeLogTail sends runner log lines (paths, model names, possibly request content) through the public ntfy.sh server. Use a self-hosted ntfy server with this flag, or turn it off."))
+        }
         if let topic = config.ntfyTopic, topic.localizedCaseInsensitiveContains("CHANGE-ME") {
             issues.append(.init(.warning, "ntfyTopic is still the placeholder; status would post to a guessable public topic. Set a long, unguessable topic, or null to disable ntfy."))
         } else if let topic = config.ntfyTopic?.trimmingCharacters(in: .whitespaces), !topic.isEmpty, topic.count < 16 {

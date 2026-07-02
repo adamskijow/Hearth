@@ -68,4 +68,23 @@ struct MaintenanceWindowTests {
             $0.message.contains("maintenanceWindow") || $0.message.contains("heartbeatURL")
         })
     }
+
+    @Test func logTailOverPublicNtfyDrawsAWarning() {
+        let risky = HearthConfig(ntfyTopic: "a-long-unguessable-topic-name",
+                                 alertsIncludeLogTail: true)
+        #expect(ConfigDiagnostics.check(risky).contains {
+            $0.message.contains("alertsIncludeLogTail") && $0.message.contains("ntfy.sh")
+        })
+        // Self-hosted ntfy, or the flag off, draws none.
+        let selfHosted = HearthConfig(ntfyTopic: "a-long-unguessable-topic-name",
+                                      ntfyServer: "https://ntfy.example.net",
+                                      alertsIncludeLogTail: true)
+        #expect(!ConfigDiagnostics.check(selfHosted).contains {
+            $0.message.contains("alertsIncludeLogTail")
+        })
+        let off = HearthConfig(ntfyTopic: "a-long-unguessable-topic-name")
+        #expect(!ConfigDiagnostics.check(off).contains {
+            $0.message.contains("alertsIncludeLogTail")
+        })
+    }
 }

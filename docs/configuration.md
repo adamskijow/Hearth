@@ -106,6 +106,7 @@ See [ollama.md](ollama.md) for the full Ollama setup guide, including deep probe
 | `memoryAlertPercent` | int | `90` | Alert when system memory used reaches this percent (the precursor to the runner being killed under pressure). `0` disables the memory alert. |
 | `thermalAlerts` | bool | `true` | Alert when the Mac's thermal state goes serious or critical. |
 | `notificationsPaused` | bool | `false` | Vacation mode: silence every channel (local, ntfy, webhook) without touching their settings. Events are still logged. Also togglable from the menu (Pause Notifications). |
+| `alertsIncludeLogTail` | bool | `false` | PRIVACY TRADE, opt-in: append the runner's last log lines (at most 5, bounded, control characters stripped) to down and failing alerts, so the alert itself says why. Log lines are runner content: file paths, model names, and with debug modes even request text, and they travel to every configured notifier. Use a self-hosted ntfy server with this on; `hearth doctor` warns about the public ntfy.sh combination. Managed mode only. |
 | `heartbeatURL` | string or null | `null` | Dead-man's-switch heartbeat: while the runner is healthy, GET this URL on an interval. Point it at an Uptime Kuma push monitor or a healthchecks.io check; silence then means down, and the monitor you already run does the alerting. Null disables it. |
 | `heartbeatIntervalSeconds` | number | `60` | How often to send the heartbeat while healthy. Floored at 10. |
 

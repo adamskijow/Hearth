@@ -78,6 +78,13 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     /// Silence every notification channel (local, ntfy, webhook) without
     /// touching their configuration: vacation mode. Events are still logged.
     public var notificationsPaused: Bool
+    /// OPT-IN PRIVACY TRADE: append the runner's last few log lines to down and
+    /// failing alerts, so the alert itself says why. Off by default because log
+    /// lines are runner content (paths, model names, with debug modes even
+    /// request fragments) and alerts transit whatever notifier you configured,
+    /// including the public ntfy.sh. Prefer a self-hosted ntfy server with this
+    /// on. Managed mode only; a watched runner's log is not Hearth's to read.
+    public var alertsIncludeLogTail: Bool
     /// Optional dead-man's-switch heartbeat: while the runner is healthy, GET
     /// this URL on an interval (an Uptime Kuma push monitor or a
     /// healthchecks.io check). Silence then means down, and the monitor you
@@ -172,6 +179,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 memoryAlertPercent: Int = 90,
                 thermalAlerts: Bool = true,
                 notificationsPaused: Bool = false,
+                alertsIncludeLogTail: Bool = false,
                 heartbeatURL: String? = nil,
                 heartbeatIntervalSeconds: Double = 60,
                 controlEnabled: Bool = false,
@@ -225,6 +233,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.memoryAlertPercent = memoryAlertPercent
         self.thermalAlerts = thermalAlerts
         self.notificationsPaused = notificationsPaused
+        self.alertsIncludeLogTail = alertsIncludeLogTail
         self.heartbeatURL = heartbeatURL
         self.heartbeatIntervalSeconds = heartbeatIntervalSeconds
         self.controlEnabled = controlEnabled
@@ -303,6 +312,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         memoryAlertPercent = try value(.memoryAlertPercent, defaults.memoryAlertPercent)
         thermalAlerts = try value(.thermalAlerts, defaults.thermalAlerts)
         notificationsPaused = try value(.notificationsPaused, defaults.notificationsPaused)
+        alertsIncludeLogTail = try value(.alertsIncludeLogTail, defaults.alertsIncludeLogTail)
         heartbeatURL = try c.decodeIfPresent(String.self, forKey: .heartbeatURL)
         heartbeatIntervalSeconds = try value(.heartbeatIntervalSeconds, defaults.heartbeatIntervalSeconds)
         controlEnabled = try value(.controlEnabled, defaults.controlEnabled)

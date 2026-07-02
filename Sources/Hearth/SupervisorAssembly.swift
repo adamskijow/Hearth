@@ -65,7 +65,8 @@ struct SupervisorAssembly {
             warmModels: config.warmModelsAfterRestart,
             memoryLimitBytes: Int64(max(0, config.runnerMemoryLimitMB)) * 1_048_576,
             drainSeconds: max(0, config.drainSeconds),
-            inFlight: inFlight
+            inFlight: inFlight,
+            includeLogTail: config.alertsIncludeLogTail
         )
         let coordinator = SupervisionCoordinator(engine: engine)
 

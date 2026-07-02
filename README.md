@@ -206,7 +206,10 @@ memory and thermal pressure alerts.
 Hearth runs unsandboxed by necessity: supervising another process is exactly what the
 App Sandbox forbids, so it ships with the sandbox off and the Hardened Runtime on, as
 a Developer ID notarized build. It sends only short status text to notifiers, never
-prompts, model data, or runner content.
+prompts, model data, or runner content, with one explicit exception: the opt-in
+`alertsIncludeLogTail` appends the runner's last log lines (which are runner
+content and can include paths or request text) to down alerts. It is off by
+default, and `hearth doctor` warns when it is combined with the public ntfy.sh.
 
 It is conservative about putting the runner on the network. By default the runner
 listens on `127.0.0.1`. For a machine on a network you trust, setting `host` to

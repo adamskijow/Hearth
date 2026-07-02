@@ -193,6 +193,8 @@ struct PreferencesView: View {
                 .help("While the runner is healthy, Hearth pings this URL on an interval; silence then means down, and the monitor you already run does the alerting.")
             Toggle("Pause all notifications", isOn: $model.config.notificationsPaused)
                 .help("Vacation mode: silence local, ntfy, and webhook alerts without clearing their settings. Events are still logged.")
+            Toggle("Include runner log tail in alerts", isOn: $model.config.alertsIncludeLogTail)
+                .help("Privacy trade-off, off by default: appends the runner's last log lines to down and failing alerts so the alert says why. Log lines are runner content (paths, model names, possibly request text) and travel to your notifiers, including the public ntfy.sh unless you self-host. hearth doctor warns about that combination.")
             Button("Send test notification") { sendTest() }
         }
     }

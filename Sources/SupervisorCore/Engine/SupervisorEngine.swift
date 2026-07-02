@@ -31,6 +31,13 @@ public actor SupervisorEngine {
     /// ceiling, catching the RSS-creep slow death before it becomes a wedge.
     /// Zero disables the watchdog.
     private let memoryLimitBytes: Int64
+    /// OPT-IN PRIVACY TRADE (alertsIncludeLogTail): append a sanitized tail of
+    /// the runner's recent stderr to down and failing alerts. Off by default;
+    /// log lines are runner content and alerts leave the box.
+    private let includeLogTail: Bool
+    /// The most recent captured stderr from a managed probe, so a down or
+    /// failing alert can carry it when the flag above is on.
+    private var lastStderrTail: [String] = []
     /// How long a routine restart (scheduled maintenance, a binary upgrade) may
     /// wait for in-flight work to finish before proceeding anyway. Zero restarts
     /// immediately, as before. Failure restarts never wait: the runner is down.
@@ -95,7 +102,8 @@ public actor SupervisorEngine {
                 warmModels: Bool = false,
                 memoryLimitBytes: Int64 = 0,
                 drainSeconds: TimeInterval = 0,
-                inFlight: (@Sendable () -> Int)? = nil) {
+                inFlight: (@Sendable () -> Int)? = nil,
+                includeLogTail: Bool = false) {
         self.clock = clock
         self.processes = processes
         self.http = http
@@ -109,6 +117,7 @@ public actor SupervisorEngine {
         self.memoryLimitBytes = memoryLimitBytes
         self.drainSeconds = drainSeconds
         self.inFlight = inFlight
+        self.includeLogTail = includeLogTail
         self.machine = SupervisorMachine(config: policy)
 
         let (stateStream, stateCont) = AsyncStream.makeStream(of: SupervisorState.self)
@@ -218,6 +227,9 @@ public actor SupervisorEngine {
             // recovery). Re-step immediately instead.
             if machine.phase == .stopped || generation != controlGeneration { return 0 }
             runnerBusy = report.readiness == .busy
+            if !report.recentStderr.isEmpty {
+                lastStderrTail = report.recentStderr
+            }
             let output = machine.observe(report, now: now)
             // A busy probe carries no model list (the fetch would queue behind
             // the very work making it busy); keep the current one.
@@ -457,8 +469,22 @@ public actor SupervisorEngine {
             break
         }
         eventContinuation.yield(event)
-        if event.isNotable, let notification = Self.notification(for: event) {
+        if event.isNotable, let notification = Self.notification(
+            for: event,
+            logTail: includeLogTail ? Self.sanitizedLogTail(lastStderrTail) : []) {
             await notifier.notify(notification)
+        }
+    }
+
+    /// The tail the opt-in flag appends to an alert: a few lines, bounded in
+    /// length, control characters stripped, so a hostile or chatty runner can
+    /// neither bloat the alert nor smuggle terminal escapes into it.
+    static func sanitizedLogTail(_ lines: [String], maxLines: Int = 5, maxLineLength: Int = 200) -> [String] {
+        lines.suffix(maxLines).map { line in
+            let cleaned = String(String.UnicodeScalarView(
+                line.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }))
+            guard cleaned.count > maxLineLength else { return cleaned }
+            return String(cleaned.prefix(maxLineLength)) + "\u{2026}"
         }
     }
 
@@ -523,14 +549,16 @@ public actor SupervisorEngine {
 
     /// Map a notable event onto a notification. Notifications fire on down,
     /// recovered, and failing. Each body ends with where to look next; a phone
-    /// alert with no next step just worries the reader.
-    static func notification(for event: SupervisorEvent) -> HearthNotification? {
+    /// alert with no next step just worries the reader. `logTail` is non-empty
+    /// only when the user opted into alertsIncludeLogTail; it is appended to
+    /// the down and failing bodies, the two alerts whose "why" is in the log.
+    static func notification(for event: SupervisorEvent, logTail: [String] = []) -> HearthNotification? {
         switch event {
         case .down(let reason):
             return HearthNotification(
                 level: .warning,
                 title: "Runner down",
-                body: "The runner stopped serving: \(reason.label). Details and recent activity: the Hearth menu, or `hearth status` in a terminal.",
+                body: appendLogTail("The runner stopped serving: \(reason.label). Details and recent activity: the Hearth menu, or `hearth status` in a terminal.", logTail),
                 event: event
             )
         case .recovered:
@@ -544,7 +572,7 @@ public actor SupervisorEngine {
             return HearthNotification(
                 level: .critical,
                 title: "Runner failing",
-                body: "The runner keeps failing: \(count) times in \(Int(window))s. Hearth is still retrying, more slowly. The runner log shows why (Open Logs in the Hearth menu, or `hearth logs`); `hearth doctor` checks the setup.",
+                body: appendLogTail("The runner keeps failing: \(count) times in \(Int(window))s. Hearth is still retrying, more slowly. The runner log shows why (Open Logs in the Hearth menu, or `hearth logs`); `hearth doctor` checks the setup.", logTail),
                 event: event
             )
         case .warmupFinished(let missing) where !missing.isEmpty:
@@ -564,5 +592,10 @@ public actor SupervisorEngine {
         default:
             return nil
         }
+    }
+
+    private static func appendLogTail(_ body: String, _ tail: [String]) -> String {
+        guard !tail.isEmpty else { return body }
+        return body + "\n\nRunner log tail (alertsIncludeLogTail):\n" + tail.joined(separator: "\n")
     }
 }

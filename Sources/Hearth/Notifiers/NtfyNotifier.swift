@@ -8,7 +8,10 @@ import SupervisorCore
 /// the phone is out of band (the ntfy app or a self hosted server).
 ///
 /// ntfy only ever receives a short title and body describing a supervision
-/// transition. No runner content, prompts, or model data is sent.
+/// transition. No runner content, prompts, or model data is sent, unless the
+/// user opted into alertsIncludeLogTail, which appends a bounded runner log
+/// tail to down and failing bodies (the doctor warns when that rides the
+/// public ntfy.sh).
 final class NtfyNotifier: Notifier, @unchecked Sendable {
     private let server: String
     private let topic: String

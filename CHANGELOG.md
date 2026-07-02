@@ -7,8 +7,15 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
-The road-to-1.0 hardening pass: closing the gaps a new user hits in week one,
-and writing down what 1.0 will promise.
+## [1.0.0] - 2026-07-02
+
+The 1.0 release. Hearth's core, keeping a local LLM runner alive through
+crashes, wedges, and GPU hangs, has been validated end to end against a real
+Ollama (see VALIDATION-REPORT.md, including a live GPU crash from image
+generation that only the deep probe caught) and now carries a written stability
+contract (docs/stability.md). This release is the road-to-1.0 hardening pass:
+closing the gaps a new user hits in week one, and writing down what 1.0
+promises.
 
 ### Added
 

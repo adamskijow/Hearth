@@ -12,7 +12,7 @@ public enum DownReason: Sendable, Equatable {
 
     public var label: String {
         switch self {
-        case .wedged: return "wedged (alive but not answering)"
+        case .wedged: return "stuck (still running, but not answering)"
         case .crashed(let reason): return reason.label
         }
     }

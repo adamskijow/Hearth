@@ -49,3 +49,24 @@ also shows a "config issues" line when it finds any.
   the API answers. Set `probeModel` to a small model you have already pulled so
   Hearth periodically runs a one-token deep probe and catches inference-level
   wedges too.
+- **The menu says "Crash loop" (or you got a "Runner failing" alert).** The runner
+  failed several times in a row right after starting, so Hearth stopped restarting
+  it rapidly and now retries slowly. Hearth has not given up: the moment the
+  underlying problem clears, it recovers on its own. To find the problem, click
+  **Open Logs** in the menu and read the last lines of `runner.log`: the usual
+  causes are a model too large for the Mac's memory (the log ends in an
+  out-of-memory error), another process holding the port (`hearth doctor` flags
+  this), or a broken runner install after an upgrade. Fix the cause and Hearth
+  brings it back; **Restart** in the menu retries immediately.
+- **The status shows "spawn failed" / "No such file or directory" /
+  "Permission denied."** Hearth tried to launch the runner and the launch itself
+  failed, so the path in the config points at something missing or not executable.
+  Run `hearth doctor` (it reports the path Hearth tried and the path it detected),
+  then fix the binary path in Preferences (the Detect button finds the usual
+  install locations).
+- **The activity log says "stuck (still running, but not answering)."** The
+  runner's process was alive but its API stopped answering in time: the hang
+  (sometimes called a wedge) that Hearth exists to catch. Hearth restarts the
+  runner when this happens; if it happens often, the
+  [Ollama setup guide](ollama.md) covers deep probes, and a recurring hang after
+  heavy load is usually the runner or GPU, not Hearth.

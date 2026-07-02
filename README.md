@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/hearth-banner.svg" alt="Hearth: keeps your local LLM runner alive on a headless Mac" width="100%">
+  <img src="assets/hearth-banner.svg" alt="Hearth: keeps your local LLM runner alive and serving" width="100%">
 </p>
 
 # Hearth
@@ -11,26 +11,23 @@
   <img src="https://img.shields.io/badge/macOS-14%2B-black?logo=apple&logoColor=white" alt="macOS 14+">
 </p>
 
-Hearth is a background supervisor that keeps a local LLM runner (Ollama, with LM
-Studio and mlx_lm support) alive and serving on a headless Mac.
+Hearth keeps Ollama running on a Mac so it is always ready when your apps need it.
+If Ollama crashes, Hearth restarts it. If Ollama is still running but has quietly
+stopped answering (a hang the built-in macOS restart tools cannot see), Hearth
+notices that too and restarts it. It keeps the Mac awake while models are meant to
+be serving, and alerts you (including on your phone) when something breaks. LM
+Studio and mlx_lm are supported alongside Ollama.
 
-It is an availability layer, not an inference layer. Hearth watches the runner,
-restarts it when it dies **or wedges**, keeps the Mac awake while it is meant to be
-serving, and tells you when something goes wrong. It is not a chat UI or a
-replacement for Ollama or LM Studio; it supervises the runner you already run.
-
-Why a Mac-specific tool, and not Docker? On Apple Silicon you run Ollama natively:
-[Docker on macOS has no GPU passthrough and runs CPU-only](https://github.com/ollama/ollama/blob/main/docs/faq.mdx#how-do-i-use-ollama-with-gpu-acceleration-in-docker),
-throwing away the Metal GPU and unified memory that are the whole reason to run
-locally. A native runner has none of the container world's health-probe and restart
-machinery, so the readiness-based recovery you would get from Kubernetes has to come
-from somewhere. Hearth is that layer.
+It is not a chat UI and it does not run models itself: your apps keep talking to
+the runner exactly as they do now, and Hearth stands behind it keeping it up. It
+earns its keep on any Mac that serves models with nobody watching: a Mac mini in
+a closet, a home-lab server, or the desktop you leave running overnight.
 
 <p align="center">
-  <img src="assets/wedge-recovery.gif" alt="Hearth catching an alive-but-wedged runner by readiness and recovering it, hands-off" width="820">
+  <img src="assets/wedge-recovery.gif" alt="Hearth catching a runner that is still running but stuck, and recovering it hands-off" width="820">
 </p>
 
-<p align="center"><em>Catching a runner that is alive but wedged, and recovering it on its own (<code>make demo</code>).</em></p>
+<p align="center"><em>Catching a runner that is still running but stuck (not answering), and recovering it on its own (<code>make demo</code>).</em></p>
 
 **Contents** &nbsp; [Quickstart](#quickstart) · [Why this exists](#why-this-exists) · [Requirements](#requirements) · [Install](#install-and-build) · [Configure](#configure) · [How it works](#how-it-works) · [Security](#security-and-exposing-the-runner) · [Architecture](#architecture)
 
@@ -38,6 +35,7 @@ from somewhere. Hearth is that layer.
 
 The README is the tour; the operational detail lives in `docs/`:
 
+- **[FAQ](docs/faq.md):** is Hearth for me, which mode do I want, how do I know it is working, how do I uninstall.
 - **[Configuration reference](docs/configuration.md):** every config key, its type, and its default.
 - **[Ollama setup guide](docs/ollama.md):** Homebrew Ollama, Ollama.app, deep probes, and integration wording.
 - **[Remote control and local status](docs/remote-control.md):** the HTTP control endpoint, the `hearth` CLI, and monitoring.
@@ -60,27 +58,33 @@ open /Applications/Hearth.app
 
 A flame appears in the menubar. Hearth auto-detects Ollama at the Homebrew path,
 starts supervising it, and keeps the Mac awake while it serves. That is the whole
-setup. Check it from a terminal with `hearth doctor` (config and environment
-preflight) and `hearth status` (phase, uptime, restarts, resident models). If your
+setup. **You know it is working when** the menubar flame has no warning badge and
+the menu says **Healthy**; from a terminal, `hearth doctor` checks your setup for
+problems and `hearth status` shows health, uptime, and loaded models. If your
 runner is elsewhere or you want LM Studio or mlx_lm, see
 [Configure](#configure); if something looks off, see
-[Troubleshooting](docs/troubleshooting.md).
+[Troubleshooting](docs/troubleshooting.md) and the [FAQ](docs/faq.md).
 
 Two common Ollama setups:
 
-- **Homebrew Ollama:** stop `brew services` if it is already supervising Ollama,
-  then let Hearth run managed mode. `hearth doctor` warns when another manager
-  would fight Hearth over the same port.
-- **Ollama.app:** the official app already starts its own server. Use attached
-  mode so Hearth watches that server instead of launching a second one. See the
+- **Homebrew Ollama:** stop `brew services` if it is already keeping Ollama alive
+  (`brew services stop ollama`), then let Hearth start and manage it. `hearth
+  doctor` warns when another manager would fight Hearth over the same runner.
+- **Ollama.app:** the official app already starts its own server. Have Hearth
+  watch that server instead of launching a second one (attached mode); Hearth
+  offers this switch as one click when it notices the collision. See the
   [Ollama setup guide](docs/ollama.md#ollamaapp-attached-mode).
+
+Changed your mind? `brew uninstall --cask hearth` removes the app, and adding
+`--zap` also removes its config and logs. Ollama is untouched either way.
 
 ## Why this exists
 
-If you run a local model server on a Mac you leave in a closet, the usual fix is a
-launchd plist or `brew services` with `KeepAlive`, which relaunches the runner when
-the process exits. That handles a clean crash. It does not handle the failure that
-actually wastes your afternoon: the runner is still running, but no longer answering.
+If you run a local model server on a Mac you leave in a closet, the usual fix is
+one of macOS's built-in keep-it-running tools: a launchd plist or `brew services`
+with `KeepAlive`, which relaunch the runner when the process exits. That handles a
+clean crash. It does not handle the failure that actually wastes your afternoon:
+the runner is still running, but no longer answering.
 
 That "alive but wedged" state is common and well reported: the runner hangs after a
 few requests with no error ([ollama#6616](https://github.com/ollama/ollama/issues/6616)),
@@ -99,6 +103,13 @@ keeps the Mac awake while serving, pins `OLLAMA_HOST` so the runner binds where 
 expect, and alerts you when something breaks. It runs on top of launchd, not instead
 of it, to make a local runner behave like a real, always-on service on a machine
 nobody is sitting at.
+
+Why a Mac-specific tool, and not Docker? On Apple Silicon you run Ollama natively:
+[Docker on macOS has no GPU passthrough and runs CPU-only](https://github.com/ollama/ollama/blob/main/docs/faq.mdx#how-do-i-use-ollama-with-gpu-acceleration-in-docker),
+throwing away the Metal GPU and unified memory that are the whole reason to run
+locally. A native runner has none of the container world's health-probe and restart
+machinery, so the readiness-based recovery you would get from Kubernetes has to come
+from somewhere. Hearth is that layer.
 
 ## Requirements
 
@@ -121,8 +132,15 @@ The cask installs `Hearth.app` and puts the `hearth` CLI (`doctor`, `status`,
 `setup`, `mode`, `wait-ready`) on your PATH. To build from a checkout instead,
 `swift build -c release && swift run Hearth`; for a day-to-day local install,
 `make install` ad-hoc signs the app into `/Applications` (and `make uninstall`
-removes it). Hearth is distributed as a Developer ID signed, notarized build, not via
-the App Store, whose sandbox forbids the process supervision that is the whole job.
+removes it).
+
+**Is it safe to install?** The release is Developer ID signed and notarized:
+Apple has scanned the exact build you download and Gatekeeper verifies it on
+launch. Hearth is not in the App Store because the App Store sandbox forbids
+supervising another process, which is Hearth's whole job; it runs unsandboxed for
+that reason, sends nothing anywhere except the short status alerts you configure,
+and the full source is this repository. Removing it is one command:
+`brew uninstall --cask hearth` (add `--zap` to remove config and logs too).
 The build, signing, and release pipeline is in [Development](docs/development.md).
 
 ## Configure
@@ -138,10 +156,13 @@ and `controlEnabled`/`controlToken` for the
 [configuration reference](docs/configuration.md) lists every key, its type, and its
 default, with a full example.
 
-Use `hearth mode managed` when Hearth should own the runner, or `hearth mode
-attached` when another app or service starts it. `hearth setup` now makes that
-choice automatically only for clear fresh installs, such as a brew-services
-Ollama job that is actually serving; otherwise `hearth doctor` prints the exact fix.
+The two modes in plain words: **managed** means Hearth starts the runner and
+restarts it when it fails; **attached** means something else starts it (the
+Ollama app, `brew services`) and Hearth only watches and alerts. Switch with
+`hearth mode managed` or `hearth mode attached`, or the Mode toggle in
+Preferences. `hearth setup` makes the choice automatically for clear fresh
+installs, such as a brew-services Ollama job that is actually serving; otherwise
+`hearth doctor` prints the exact fix.
 
 ## How it works
 

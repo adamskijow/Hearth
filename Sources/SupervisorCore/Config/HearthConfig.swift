@@ -319,6 +319,9 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     /// The runner kind these settings select, resolving the `runner` aliases once.
     public var runnerKind: RunnerKind { RunnerKind(fromConfigString: runner) }
 
+    /// The supervision mode these settings select, resolving the `mode` string once.
+    public var modeKind: ModeKind { ModeKind(fromConfigString: mode) }
+
     /// The runner these settings select.
     public func makeRunner() -> any Runner {
         switch runnerKind {

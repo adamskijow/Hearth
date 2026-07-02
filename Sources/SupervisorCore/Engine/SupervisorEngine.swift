@@ -325,14 +325,15 @@ public actor SupervisorEngine {
     }
 
     /// Map a notable event onto a notification. Notifications fire on down,
-    /// recovered, and failing.
+    /// recovered, and failing. Each body ends with where to look next; a phone
+    /// alert with no next step just worries the reader.
     static func notification(for event: SupervisorEvent) -> HearthNotification? {
         switch event {
         case .down(let reason):
             return HearthNotification(
                 level: .warning,
                 title: "Runner down",
-                body: "The runner stopped serving: \(reason.label).",
+                body: "The runner stopped serving: \(reason.label). Details and recent activity: the Hearth menu, or `hearth status` in a terminal.",
                 event: event
             )
         case .recovered:
@@ -346,7 +347,7 @@ public actor SupervisorEngine {
             return HearthNotification(
                 level: .critical,
                 title: "Runner failing",
-                body: "Crash loop: \(count) failures within \(Int(window))s. Backing off and retrying slowly.",
+                body: "The runner keeps failing: \(count) times in \(Int(window))s. Hearth is still retrying, more slowly. The runner log shows why (Open Logs in the Hearth menu, or `hearth logs`); `hearth doctor` checks the setup.",
                 event: event
             )
         default:

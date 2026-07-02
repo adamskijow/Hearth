@@ -34,9 +34,10 @@ public enum StatusText {
 
     /// The detail line under the headline: what is being supervised and for how
     /// long. Folds in the runner and mode (a separate static row before) alongside
-    /// uptime and restart count, so the line actually changes.
+    /// uptime and restart count, so the line actually changes. The mode is said in
+    /// plain words rather than managed/attached, matching the Preferences toggle.
     public static func contextLine(_ state: SupervisorState, runnerName: String, managed: Bool, now: Date) -> String {
-        var parts = ["\(runnerName), \(managed ? "managed" : "attached")"]
+        var parts = ["\(runnerName), \((managed ? ModeKind.managed : .attached).statusPhrase)"]
         if let uptime = state.uptime(asOf: now) {
             parts.append("Up \(duration(uptime))")
         }
@@ -44,6 +45,20 @@ public enum StatusText {
             parts.append("\(state.restartCount) restart\(state.restartCount == 1 ? "" : "s")")
         }
         return parts.joined(separator: " \u{00B7} ")
+    }
+
+    /// Next-step guidance for the two states that do not resolve on their own.
+    /// Lives here rather than in the menu builder so the wording is locked by
+    /// tests, like every other user-facing warning.
+    public static let crashLoopGuidance = [
+        "The runner keeps failing right after starting; Hearth is still retrying, more slowly.",
+        "Open Logs below shows why it is failing; `hearth doctor` in Terminal checks the setup."
+    ]
+
+    /// Shown when a watched (attached-mode) runner is down: in that mode nothing
+    /// restarts it, and the user needs to know that plainly.
+    public static func watchingOnlyNotice(runnerName: String) -> String {
+        "Hearth is watching only; it will not start \(runnerName) itself in this mode."
     }
 
     public static func model(_ model: ResidentModel) -> String {

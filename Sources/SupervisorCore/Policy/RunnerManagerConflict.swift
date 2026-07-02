@@ -30,6 +30,6 @@ public enum RunnerManagerConflict {
     public static func warning(runner: String, mode: String, loadedLabels: Set<String>) -> String? {
         guard mode.lowercased() == "managed",
               let label = competingLabel(runner: runner, loadedLabels: loadedLabels) else { return nil }
-        return "\(runner) is also managed by launchd (\(label), likely `brew services`). Two managers fight over the runner; run `hearth mode attached` if that manager should own it, or run `brew services stop \(runner)` so Hearth is the sole supervisor."
+        return "Something else is already keeping \(runner) alive (\(label), likely `brew services`). If Hearth also starts it, each restarts what the other stops. Either have Hearth watch the existing one instead (attached mode: one click in Hearth's menu, or `hearth mode attached`), or run `brew services stop \(runner)` in Terminal so Hearth is the only manager."
     }
 }

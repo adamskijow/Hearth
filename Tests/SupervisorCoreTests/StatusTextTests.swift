@@ -45,18 +45,31 @@ struct StatusTextTests {
         let s = SupervisorState(phase: .healthy, healthySince: t0, restartCount: 2)
         let now = t0.addingTimeInterval(125) // 2m 5s
         let line = StatusText.contextLine(s, runnerName: "Ollama", managed: true, now: now)
-        #expect(line == "Ollama, managed \u{00B7} Up 2m 5s \u{00B7} 2 restarts")
+        #expect(line == "Ollama, started by Hearth \u{00B7} Up 2m 5s \u{00B7} 2 restarts")
     }
 
     @Test func contextLineSingularRestartAndAttachedMode() {
         let s = SupervisorState(phase: .healthy, healthySince: t0, restartCount: 1)
         let line = StatusText.contextLine(s, runnerName: "LM Studio", managed: false, now: t0)
-        #expect(line == "LM Studio, attached \u{00B7} Up 0s \u{00B7} 1 restart")
+        #expect(line == "LM Studio, watched (started elsewhere) \u{00B7} Up 0s \u{00B7} 1 restart")
     }
 
     @Test func contextLineOmitsUptimeWhenNotHealthy() {
         let s = SupervisorState(phase: .down) // no healthySince
-        #expect(StatusText.contextLine(s, runnerName: "Ollama", managed: true, now: t0) == "Ollama, managed")
+        #expect(StatusText.contextLine(s, runnerName: "Ollama", managed: true, now: t0) == "Ollama, started by Hearth")
+    }
+
+    // MARK: guidance
+
+    @Test func crashLoopGuidanceNamesTheNextSteps() {
+        let joined = StatusText.crashLoopGuidance.joined(separator: " ")
+        #expect(joined.contains("Open Logs"))
+        #expect(joined.contains("hearth doctor"))
+    }
+
+    @Test func watchingOnlyNoticeNamesTheRunner() {
+        let notice = StatusText.watchingOnlyNotice(runnerName: "Ollama")
+        #expect(notice == "Hearth is watching only; it will not start Ollama itself in this mode.")
     }
 
     // MARK: duration / bytes / model
@@ -79,7 +92,7 @@ struct StatusTextTests {
     @Test func describesEveryEvent() {
         #expect(StatusText.describe(.started) == "Started")
         #expect(StatusText.describe(.becameHealthy) == "Became healthy")
-        #expect(StatusText.describe(.down(.wedged)) == "Down: wedged (alive but not answering)")
+        #expect(StatusText.describe(.down(.wedged)) == "Down: stuck (still running, but not answering)")
         #expect(StatusText.describe(.restartScheduled(attempt: 1, backoff: 4)) == "Restart scheduled (attempt 1, in 4s)")
         #expect(StatusText.describe(.restarted(attempt: 2)) == "Restarted (attempt 2)")
         #expect(StatusText.describe(.recovered) == "Recovered")

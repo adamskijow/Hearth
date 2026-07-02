@@ -61,6 +61,7 @@ struct PreferencesView: View {
     let onSave: (HearthConfig) -> Void
     let onClose: () -> Void
     @State private var showingEnvEditor = false
+    @State private var showAdvancedTuning = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -111,8 +112,8 @@ struct PreferencesView: View {
             }
             .help("Which local LLM server Hearth supervises.")
             Picker("Mode", selection: $model.config.mode) {
-                Text("Hearth starts runner").tag("managed")
-                Text("Watch existing runner").tag("attached")
+                Text(ModeKind.managed.pickerLabel).tag(ModeKind.managed.rawValue)
+                Text(ModeKind.attached.pickerLabel).tag(ModeKind.attached.rawValue)
             }
             .pickerStyle(.segmented)
             .help("Choose whether Hearth starts and restarts the runner, or only watches a runner started by something else.")
@@ -200,38 +201,42 @@ struct PreferencesView: View {
 
     private var advancedSection: some View {
         Section {
-            number("Probe interval", $model.config.probeIntervalSeconds,
-                   help: "How often to check the runner's health while it is up.")
-            number("Probe timeout", $model.config.probeTimeoutSeconds,
-                   help: "How long a health probe waits before it counts as a failure.")
-            number("Startup grace", $model.config.startupGraceSeconds,
-                   help: "How long to allow for the runner to come up before treating it as failed.")
-            number("Initial backoff", $model.config.initialBackoffSeconds,
-                   help: "Wait before the first restart attempt.")
-            number("Backoff multiplier", $model.config.backoffMultiplier,
-                   help: "Each failed restart multiplies the wait by this.")
-            number("Max backoff", $model.config.maxBackoffSeconds,
-                   help: "Upper limit on the wait between restarts.")
-            numberInt("Crash loop threshold", $model.config.crashLoopThreshold,
-                      help: "Restarts within the window that trip the crash-loop brake.")
-            number("Crash loop window", $model.config.crashLoopWindowSeconds,
-                   help: "Time window for counting restarts toward the crash-loop brake.")
-            number("Failing retry interval", $model.config.failingProbeIntervalSeconds,
-                   help: "How often to retry while in the crash-loop (failing) state.")
-            TextField("Deep probe model", text: optional(\.probeModel),
-                      prompt: Text("optional, e.g. qwen2.5:0.5b"))
-                .help("Optional: periodically run a one-token generation against this model to catch an inference-level wedge.")
-            number("Maintenance restart hours", $model.config.maintenanceRestartHours,
-                   help: "Optional: restart a long-healthy managed runner this often. 0 disables it.")
-            Toggle("Restart on binary change", isOn: $model.config.restartOnBinaryChange)
-                .help("Restart a managed runner after its binary changes on disk, for example after a Homebrew upgrade.")
-            TextField("Runner user (root daemon)", text: optional(\.runnerUser),
-                      prompt: Text("required for root daemon managed mode"))
-                .help("Only used by the root LaunchDaemon. Managed root-daemon mode refuses to start the runner unless this is a non-root account.")
+            Text("The defaults here suit almost every setup; a normal install never needs to touch them.")
+                .font(.callout).foregroundStyle(.secondary)
+            DisclosureGroup("Timing and tuning", isExpanded: $showAdvancedTuning) {
+                number("Probe interval", $model.config.probeIntervalSeconds,
+                       help: "How often Hearth asks the runner \u{201C}are you still answering?\u{201D} while it is up.")
+                number("Probe timeout", $model.config.probeTimeoutSeconds,
+                       help: "If the runner does not answer within this many seconds, that check counts as a failure.")
+                number("Startup grace", $model.config.startupGraceSeconds,
+                       help: "How long a freshly started runner gets to come up before Hearth treats it as failed. Large models load slowly.")
+                number("Initial backoff", $model.config.initialBackoffSeconds,
+                       help: "Wait before the first restart attempt.")
+                number("Backoff multiplier", $model.config.backoffMultiplier,
+                       help: "Each failed restart multiplies the wait by this, so a broken runner is not restarted in a tight loop.")
+                number("Max backoff", $model.config.maxBackoffSeconds,
+                       help: "Upper limit on the wait between restarts.")
+                numberInt("Crash loop threshold", $model.config.crashLoopThreshold,
+                          help: "This many failures inside the window and Hearth slows down: it keeps retrying, but at the failing retry interval.")
+                number("Crash loop window", $model.config.crashLoopWindowSeconds,
+                       help: "Time window, in seconds, for counting failures toward the threshold above.")
+                number("Failing retry interval", $model.config.failingProbeIntervalSeconds,
+                       help: "How often to retry once the runner is failing repeatedly.")
+                TextField("Deep probe model", text: optional(\.probeModel),
+                          prompt: Text("optional, e.g. qwen2.5:0.5b"))
+                    .help("Optional: periodically generate one token with this model (pick a small one you have pulled) to catch a runner whose API answers while the model itself is stuck.")
+                number("Maintenance restart hours", $model.config.maintenanceRestartHours,
+                       help: "Optional: restart a long-healthy Hearth-started runner this often. 0 disables it.")
+                Toggle("Restart on binary change", isOn: $model.config.restartOnBinaryChange)
+                    .help("Restart a Hearth-started runner after its program file changes on disk, for example after a Homebrew upgrade.")
+                TextField("Runner user (root daemon)", text: optional(\.runnerUser),
+                          prompt: Text("only for the headless root daemon"))
+                    .help("Only used by the headless root LaunchDaemon (see docs/running-headless.md); the menubar app ignores it.")
+            }
         } header: {
             Text("Advanced")
         } footer: {
-            Text("The defaults suit most setups. Deep probes are optional. For root-daemon managed mode, set Runner user and verify with hearth doctor-daemon.")
+            Text("Deep probes are optional. For the headless root daemon, set Runner user and verify with hearth doctor-daemon.")
         }
     }
 

@@ -254,6 +254,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
 
+        // The status item is installed before the first config load finishes, so a
+        // click in that first instant would dereference the engine components
+        // applyConfig has not built yet. Show a starting row instead of crashing.
+        guard runner != nil, metricsProvider != nil else {
+            menu.addItem(disabled("Starting\u{2026}"))
+            return
+        }
+
         let now = Date()
 
         // Setup problems first, prominent, with one-click fixes where possible.
@@ -284,12 +292,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let conflict = competingManagerWarning {
             menu.addItem(infoRow(headlineAttr("\u{26A0} Competing manager", color: .systemYellow)))
             menu.addItem(infoRow(detailAttr("   \(conflict)")))
+            addAction("Watch the Existing Runner Instead", #selector(switchToAttachedTapped), enabled: true)
             menu.addItem(.separator())
         }
         if let warning = preexistingRunnerWarning {
             menu.addItem(infoRow(headlineAttr("\u{26A0} Already running", color: .systemYellow)))
             menu.addItem(infoRow(detailAttr("   \(warning)")))
-            addAction("Switch to Attached Mode", #selector(switchToAttachedTapped), enabled: true)
+            addAction("Watch the Existing Runner Instead", #selector(switchToAttachedTapped), enabled: true)
             menu.addItem(.separator())
         }
 
@@ -306,6 +315,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             latestState, runnerName: runner.name, managed: config.isManaged, now: now))))
         if latestState.phase != .healthy, let reason = latestState.lastRestartReason {
             menu.addItem(infoRow(detailAttr("Last: \(reason)")))
+        }
+        // The two not-recovering states each get a next step, not just a status:
+        // a crash loop points at the crash output, and a watched runner that is
+        // down says plainly that Hearth will not start it in this mode.
+        if config.isManaged, latestState.phase == .failing {
+            for line in StatusText.crashLoopGuidance {
+                menu.addItem(infoRow(detailAttr(line)))
+            }
+        }
+        if !config.isManaged, latestState.phase == .down || latestState.phase == .failing {
+            menu.addItem(infoRow(detailAttr(StatusText.watchingOnlyNotice(runnerName: runner.name))))
+            addAction("Have Hearth Start It Instead", #selector(switchToManagedTapped), enabled: true)
         }
 
         let metrics = metricsProvider.sample()
@@ -501,7 +522,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         var lines: [String] = []
         let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "dev"
         lines.append("Hearth \(version)")
-        lines.append("Runner: \(config.runner) (\(config.isManaged ? "managed" : "attached")) at \(config.host):\(config.port)")
+        lines.append("Runner: \(config.runner), mode \(config.mode) (\(config.modeKind.statusPhrase)) at \(config.host):\(config.port)")
         lines.append("Status: \(StatusText.headline(latestState, now: now))")
         lines.append(StatusText.contextLine(latestState, runnerName: runner.name, managed: config.isManaged, now: now))
         let metrics = metricsProvider.sample()
@@ -548,14 +569,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Task { await reloadFromDisk(firstRun: false) }
     }
 
-    /// Resolve the pre-existing-runner collision in one click: stop fighting for the
-    /// port and watch the runner that is already up.
-    @objc private func switchToAttachedTapped() {
+    private func saveMode(_ mode: String) {
         var updated = config
-        updated.mode = "attached"
+        updated.mode = mode
         ConfigStore.save(updated)
         Task { await reloadFromDisk(firstRun: false) }
     }
+
+    /// Resolve the pre-existing-runner collision in one click: stop fighting for the
+    /// port and watch the runner that is already up.
+    @objc private func switchToAttachedTapped() { saveMode("attached") }
+
+    /// The inverse one-click fix: a watched runner is down and nothing else is
+    /// going to start it, so let Hearth start and restart its own.
+    @objc private func switchToManagedTapped() { saveMode("managed") }
 
     @objc private func openPreferencesTapped() {
         if preferences == nil {

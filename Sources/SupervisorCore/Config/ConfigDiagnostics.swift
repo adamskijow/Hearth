@@ -48,7 +48,7 @@ public enum ConfigDiagnostics {
             issues.append(.init(.error, "Unknown runner \"\(config.runner)\"; expected ollama, lmstudio, or mlx."))
         }
         let mode = config.mode.lowercased()
-        if mode != "managed" && mode != "attached" {
+        if !ModeKind.knownConfigStrings.contains(mode) {
             issues.append(.init(.error, "Unknown mode \"\(config.mode)\"; expected managed or attached."))
         }
         // LM Studio's `lms server start` exits immediately (the server runs in LM

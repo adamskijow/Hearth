@@ -68,15 +68,28 @@ public enum ExitReason: Sendable, Equatable {
     /// Dead, but the cause could not be classified.
     case unknown
 
-    /// A short human label for notifications and the menubar.
+    /// A short human label for notifications and the menubar. Written for a
+    /// reader who does not know signal numbers: say what happened in plain words
+    /// first and keep the raw code in parentheses.
     public var label: String {
         switch self {
         case .running: return "running"
         case .cleanExit: return "clean exit"
-        case .crash(let code): return "crash (code \(code))"
-        case .outOfMemory: return "out of memory"
-        case .signal(let sig): return "killed by signal \(sig)"
+        case .crash(let code): return "crashed (exit code \(code))"
+        case .outOfMemory: return "ran out of memory"
+        case .signal(let sig): return Self.signalLabel(sig)
         case .unknown: return "unknown exit"
+        }
+    }
+
+    /// A bare SIGKILL with no out-of-memory stderr signature is most often the
+    /// system reclaiming memory; SIGTERM is another process asking it to stop.
+    /// Anything else is presented as a crash with the number kept for search.
+    private static func signalLabel(_ sig: Int32) -> String {
+        switch sig {
+        case SIGKILL: return "force-killed (signal 9, often the system reclaiming memory)"
+        case SIGTERM: return "asked to stop by another process (signal 15)"
+        default: return "crashed (signal \(sig))"
         }
     }
 }

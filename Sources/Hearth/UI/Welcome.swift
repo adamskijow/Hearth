@@ -107,6 +107,11 @@ struct WelcomeView: View {
                 .disabled(notificationsEnabled)
             }
 
+            Label("If anything ever looks off, run `hearth doctor` in Terminal for a full checkup.",
+                  systemImage: "stethoscope")
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
             Divider()
 
             HStack {
@@ -171,7 +176,7 @@ struct WelcomeView: View {
                 Text(message)
                     .font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Button("Switch to attached mode", action: onSwitchToAttached)
+                Button("Watch the existing runner instead", action: onSwitchToAttached)
                     .controlSize(.small)
             }
             Spacer(minLength: 0)

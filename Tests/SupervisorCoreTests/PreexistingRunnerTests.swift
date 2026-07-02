@@ -27,7 +27,7 @@ struct PreexistingRunnerTests {
     @Test func unknownListenerMessageDoesNotPretendItIsARunner() {
         let w = PreexistingRunner.unknownListenerWarning(runner: "ollama", host: "127.0.0.1", port: 11434)
         #expect(w.contains("did not answer as ollama"))
-        #expect(w.contains("stop that process"))
+        #expect(w.contains("quit that process"))
     }
 
     @Test func attachedMissingMessagePointsToBothFixes() {
@@ -37,6 +37,6 @@ struct PreexistingRunnerTests {
 
         let wrong = PreexistingRunner.attachedMissingWarning(runner: "ollama", host: "127.0.0.1", port: 11434, listenerPresent: true)
         #expect(wrong.contains("did not answer as ollama"))
-        #expect(wrong.contains("switch runner/port"))
+        #expect(wrong.contains("fix the runner or port"))
     }
 }

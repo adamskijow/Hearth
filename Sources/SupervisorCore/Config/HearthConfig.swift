@@ -97,6 +97,11 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     // numbers the runner itself reports, surfaced in /metrics.
     public var metricsProxyEnabled: Bool
     public var metricsProxyPort: Int
+    /// How long a routine restart (scheduled maintenance, a binary upgrade) may
+    /// wait for in-flight generations to finish before proceeding anyway.
+    /// Needs the metrics proxy (the only place in-flight work is observable);
+    /// zero restarts immediately. Failure restarts never wait.
+    public var drainSeconds: Double
 
     // Runner log rotation
     public var logMaxBytes: Int
@@ -116,6 +121,12 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     /// drive the machine into a reboot. For operators who do not fully trust the
     /// runner. A pure wedge then escalates to a notification instead.
     public var rebootOnlyOnProcessFailure: Bool
+    /// EXPERIMENTAL: send the recovery reboot through the hearth-reboot-helper
+    /// root daemon instead of rebooting directly, so the supervisor itself need
+    /// not run as root. Needs the helper installed (see docs/running-headless.md).
+    public var rebootViaHelper: Bool
+    /// The helper's unix socket path.
+    public var rebootHelperSocket: String
 
     /// The account to drop the spawned runner to when Hearth runs as the root
     /// daemon. The parent stays root (so it keeps the reboot capability), while the
@@ -169,6 +180,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 controlToken: String? = nil,
                 metricsProxyEnabled: Bool = false,
                 metricsProxyPort: Int = 11436,
+                drainSeconds: Double = 0,
                 logMaxBytes: Int = 5_000_000,
                 logKeepFiles: Int = 3,
                 rebootOnWedge: Bool = false,
@@ -176,6 +188,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 rebootMinIntervalSeconds: Double = 1800,
                 rebootMaxPerDay: Int = 3,
                 rebootOnlyOnProcessFailure: Bool = false,
+                rebootViaHelper: Bool = false,
+                rebootHelperSocket: String = "/var/run/hearth-reboot.sock",
                 runnerUser: String? = nil) {
         self.runner = runner
         self.mode = mode
@@ -219,6 +233,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.controlToken = controlToken
         self.metricsProxyEnabled = metricsProxyEnabled
         self.metricsProxyPort = metricsProxyPort
+        self.drainSeconds = drainSeconds
         self.logMaxBytes = logMaxBytes
         self.logKeepFiles = logKeepFiles
         self.rebootOnWedge = rebootOnWedge
@@ -226,6 +241,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.rebootMinIntervalSeconds = rebootMinIntervalSeconds
         self.rebootMaxPerDay = rebootMaxPerDay
         self.rebootOnlyOnProcessFailure = rebootOnlyOnProcessFailure
+        self.rebootViaHelper = rebootViaHelper
+        self.rebootHelperSocket = rebootHelperSocket
         self.runnerUser = runnerUser
     }
 
@@ -294,6 +311,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         controlToken = try c.decodeIfPresent(String.self, forKey: .controlToken)
         metricsProxyEnabled = try value(.metricsProxyEnabled, defaults.metricsProxyEnabled)
         metricsProxyPort = try value(.metricsProxyPort, defaults.metricsProxyPort)
+        drainSeconds = try value(.drainSeconds, defaults.drainSeconds)
         logMaxBytes = try value(.logMaxBytes, defaults.logMaxBytes)
         logKeepFiles = try value(.logKeepFiles, defaults.logKeepFiles)
         rebootOnWedge = try value(.rebootOnWedge, defaults.rebootOnWedge)
@@ -301,6 +319,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         rebootMinIntervalSeconds = try value(.rebootMinIntervalSeconds, defaults.rebootMinIntervalSeconds)
         rebootMaxPerDay = try value(.rebootMaxPerDay, defaults.rebootMaxPerDay)
         rebootOnlyOnProcessFailure = try value(.rebootOnlyOnProcessFailure, defaults.rebootOnlyOnProcessFailure)
+        rebootViaHelper = try value(.rebootViaHelper, defaults.rebootViaHelper)
+        rebootHelperSocket = try value(.rebootHelperSocket, defaults.rebootHelperSocket)
         runnerUser = try c.decodeIfPresent(String.self, forKey: .runnerUser)
     }
 

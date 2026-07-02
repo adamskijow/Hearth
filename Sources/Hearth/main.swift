@@ -29,6 +29,8 @@ case "wait-ready":
     StatusCLI.waitReady(Array(arguments.dropFirst()))  // exits
 case "update":
     UpdateCLI.run()  // exits
+case "proxy-setup":
+    ProxySetupCLI.run(Array(arguments.dropFirst()))  // exits
 case "setup":
     SetupCLI.run()  // exits
 case "install-agent":

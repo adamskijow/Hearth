@@ -38,7 +38,8 @@ let package = Package(
     ],
     products: [
         .library(name: "SupervisorCore", targets: ["SupervisorCore"]),
-        .executable(name: "Hearth", targets: ["Hearth"])
+        .executable(name: "Hearth", targets: ["Hearth"]),
+        .executable(name: "hearth-reboot-helper", targets: ["HearthRebootHelper"])
     ],
     targets: [
         // Pure decision logic. No AppKit, no SwiftUI, no real I/O.
@@ -52,6 +53,13 @@ let package = Package(
         // so the child, between fork and execve, touches no Swift runtime.
         .target(
             name: "HearthSpawn"
+        ),
+        // The experimental least-privilege split: a tiny root daemon whose whole
+        // API is "reboot, if you are the configured uid and not too often", so
+        // the supervisor itself need not run as root to keep the recovery
+        // ladder. No dependencies, deliberately boring.
+        .executableTarget(
+            name: "HearthRebootHelper"
         ),
         // The deployable menubar agent. Wires SupervisorCore to real I/O.
         .executableTarget(

@@ -45,7 +45,13 @@ final class HeadlessRunner {
         let rebootPolicy = config.rebootPolicy()
         if rebootPolicy.enabled && config.isManaged {
             let notifier = assembly.notifier
-            let escalator = RebootEscalator(policy: rebootPolicy, managed: true, system: SystemController()) { message in
+            // EXPERIMENTAL rebootViaHelper: a non-root daemon sends the reboot
+            // through the hearth-reboot-helper root daemon instead of holding
+            // root itself. Without it, the reboot needs this process to be root.
+            let system: SystemControlling = config.rebootViaHelper
+                ? HelperSystemController(socketPath: config.rebootHelperSocket)
+                : SystemController()
+            let escalator = RebootEscalator(policy: rebootPolicy, managed: true, system: system) { message in
                 FileHandle.standardError.write(Data("Hearth headless: \(message)\n".utf8))
                 Task.detached {
                     await notifier.notify(HearthNotification(

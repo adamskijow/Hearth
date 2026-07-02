@@ -24,6 +24,14 @@ final class MetricsProxy: @unchecked Sendable {
     private let upstreamPort: UInt16
     private let store: TokenMetricsStore
     private let queue = DispatchQueue(label: "com.hearth.metrics-proxy")
+    private let activeLock = NSLock()
+    private var active = 0
+
+    /// Connections currently open through the proxy, for the graceful-drain
+    /// gate on routine restarts.
+    func inFlightConnections() -> Int {
+        activeLock.withLock { active }
+    }
 
     /// Listens on `host:port` and relays to the runner at `upstreamHost:upstreamPort`.
     init?(host: String, port: Int, upstreamHost: String, upstreamPort: Int, store: TokenMetricsStore) {
@@ -58,25 +66,47 @@ final class MetricsProxy: @unchecked Sendable {
         listener.cancel()
     }
 
+    /// Balances the accept-side increment exactly once per connection pair,
+    /// however many relay paths report the close.
+    private final class CloseOnce: @unchecked Sendable {
+        private let lock = NSLock()
+        private var closed = false
+        private let onClose: () -> Void
+        init(onClose: @escaping () -> Void) { self.onClose = onClose }
+        func close() {
+            let first = lock.withLock { () -> Bool in
+                if closed { return false }
+                closed = true
+                return true
+            }
+            if first { onClose() }
+        }
+    }
+
     private func accept(_ downstream: NWConnection) {
         let upstream = NWConnection(
             host: NWEndpoint.Host(upstreamHost),
             port: NWEndpoint.Port(rawValue: upstreamPort)!,
             using: .tcp
         )
+        activeLock.withLock { active += 1 }
+        let closer = CloseOnce { [weak self] in
+            self?.activeLock.withLock { self!.active -= 1 }
+        }
         let down = ConnectionBox(downstream)
         let up = ConnectionBox(upstream)
         downstream.start(queue: queue)
         upstream.start(queue: queue)
         // Request side: client -> runner, untouched and unscanned.
-        relay(from: down, to: up, scanner: nil)
+        relay(from: down, to: up, scanner: nil, closer: closer)
         // Response side: runner -> client, scanned for throughput numbers.
-        relay(from: up, to: down, scanner: TokenStreamScanner())
+        relay(from: up, to: down, scanner: TokenStreamScanner(), closer: closer)
     }
 
     /// Pump bytes one way until either side ends, closing both when done. The
     /// optional scanner taps the stream for samples as it passes.
-    private func relay(from source: ConnectionBox, to sink: ConnectionBox, scanner: TokenStreamScanner?) {
+    private func relay(from source: ConnectionBox, to sink: ConnectionBox,
+                       scanner: TokenStreamScanner?, closer: CloseOnce) {
         var scanner = scanner
         let store = self.store
         source.connection.receive(minimumIncompleteLength: 1, maximumLength: 262_144) { [weak self] data, _, isComplete, error in
@@ -88,17 +118,19 @@ final class MetricsProxy: @unchecked Sendable {
                     if sendError != nil || isComplete || error != nil {
                         source.connection.cancel()
                         sink.connection.cancel()
+                        closer.close()
                         return
                     }
-                    self?.relay(from: source, to: sink, scanner: scanner)
+                    self?.relay(from: source, to: sink, scanner: scanner, closer: closer)
                 })
                 return
             }
             if isComplete || error != nil {
                 source.connection.cancel()
                 sink.connection.cancel()
+                closer.close()
             } else {
-                self?.relay(from: source, to: sink, scanner: scanner)
+                self?.relay(from: source, to: sink, scanner: scanner, closer: closer)
             }
         }
     }

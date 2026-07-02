@@ -43,6 +43,24 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   numbers the runner itself reports and feeds `hearth_tokens_per_second`,
   `hearth_generation_tokens_total`, and `hearth_generation_requests_total`
   in `/metrics`. Bytes pass through untouched; nothing scanned is stored.
+- Graceful drain (`drainSeconds`): with the metrics proxy watching traffic, a
+  routine restart (scheduled maintenance, a binary upgrade) waits for
+  in-flight generations to finish, bounded by the budget, instead of cutting
+  one off mid-token. Failure restarts never wait.
+- `hearth proxy-setup`: generates a ready-to-run authenticating Caddy reverse
+  proxy config from the actual Hearth config, with a real random bearer token
+  and the tailnet address when one is present, making the documented
+  reverse-proxy pattern turnkey.
+- `controlHost: "tailscale"`: a sentinel that resolves to this Mac's tailnet
+  IPv4 at bind time (loopback when none is found), so the control endpoint
+  follows the tailnet instead of a hand-copied address going stale.
+- EXPERIMENTAL `rebootViaHelper` and the `hearth-reboot-helper` root daemon:
+  the least-privilege split for reboot-on-wedge. The helper's entire API is
+  "reboot, if you are the configured uid and not too often" on a root-owned
+  socket with peer verification and its own rate limit, so the headless
+  supervisor need not run as root to keep the recovery ladder.
+  `scripts/install-reboot-helper.sh` installs it; the classic root daemon
+  remains the default.
 - A beginner-oriented FAQ (`docs/faq.md`): is Hearth for me, which mode do I
   want, how do I know it is working, does my data leave the machine, and how to
   uninstall. Troubleshooting gained entries for the crash loop, spawn failures,

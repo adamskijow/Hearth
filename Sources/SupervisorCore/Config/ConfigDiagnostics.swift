@@ -88,8 +88,8 @@ public enum ConfigDiagnostics {
             }
         } else if runningAsRoot && config.isManaged {
             issues.append(.init(.error, "Hearth is running as root in managed mode but runnerUser is unset; the root daemon refuses to start the LLM runner as root. Set runnerUser to an unprivileged account or use attached mode."))
-        } else if !runningAsRoot && config.isManaged && config.rebootOnWedge && runnerUser == nil {
-            issues.append(.init(.warning, "rebootOnWedge needs the root daemon, and managed root daemon mode requires runnerUser. Set runnerUser before enabling unattended reboot recovery."))
+        } else if !runningAsRoot && config.isManaged && config.rebootOnWedge && runnerUser == nil && !config.rebootViaHelper {
+            issues.append(.init(.warning, "rebootOnWedge needs the root daemon, and managed root daemon mode requires runnerUser. Set runnerUser before enabling unattended reboot recovery (or use the experimental rebootViaHelper)."))
         }
 
         if config.controlEnabled {
@@ -168,14 +168,17 @@ public enum ConfigDiagnostics {
                 issues.append(.init(.warning, "metricsProxyEnabled without controlEnabled: throughput is collected but nothing serves /metrics. Enable the control endpoint to read it."))
             }
         }
+        if config.drainSeconds > 0, !config.metricsProxyEnabled {
+            issues.append(.init(.warning, "drainSeconds needs the metrics proxy (the only place in-flight work is observable); without metricsProxyEnabled routine restarts do not wait."))
+        }
         if config.maxBackoffSeconds < config.initialBackoffSeconds {
             issues.append(.init(.warning, "Max backoff is less than the initial backoff, so backoff cannot grow."))
         }
         if config.crashLoopThreshold < 1 {
             issues.append(.init(.warning, "Crash loop threshold below 1 trips the crash-loop brake immediately."))
         }
-        if config.rebootOnWedge && !runningAsRoot {
-            issues.append(.init(.warning, "Reboot escalation (rebootOnWedge) only takes effect when Hearth runs as root, the headless LaunchDaemon; it is a no-op in the menubar app."))
+        if config.rebootOnWedge && !runningAsRoot && !config.rebootViaHelper {
+            issues.append(.init(.warning, "Reboot escalation (rebootOnWedge) only takes effect when Hearth runs as root, the headless LaunchDaemon; it is a no-op in the menubar app. The experimental rebootViaHelper lifts the root requirement for the headless daemon."))
         }
 
         return issues

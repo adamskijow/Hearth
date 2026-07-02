@@ -31,6 +31,15 @@ public actor SupervisorEngine {
     /// ceiling, catching the RSS-creep slow death before it becomes a wedge.
     /// Zero disables the watchdog.
     private let memoryLimitBytes: Int64
+    /// How long a routine restart (scheduled maintenance, a binary upgrade) may
+    /// wait for in-flight work to finish before proceeding anyway. Zero restarts
+    /// immediately, as before. Failure restarts never wait: the runner is down.
+    private let drainSeconds: TimeInterval
+    /// Connections currently open through the metrics proxy, when it is
+    /// enabled; nil means in-flight work is not observable and drain is a no-op.
+    private let inFlight: (@Sendable () -> Int)?
+    /// The point at which an ongoing drain gives up and restarts anyway.
+    private var drainDeadline: Date?
 
     private var machine: SupervisorMachine
     private var currentHandle: ProcessHandleID?
@@ -84,7 +93,9 @@ public actor SupervisorEngine {
                 managed: Bool = true,
                 deepProbe: DeepProbeConfig? = nil,
                 warmModels: Bool = false,
-                memoryLimitBytes: Int64 = 0) {
+                memoryLimitBytes: Int64 = 0,
+                drainSeconds: TimeInterval = 0,
+                inFlight: (@Sendable () -> Int)? = nil) {
         self.clock = clock
         self.processes = processes
         self.http = http
@@ -96,6 +107,8 @@ public actor SupervisorEngine {
         self.deepProbe = deepProbe
         self.warmModels = warmModels
         self.memoryLimitBytes = memoryLimitBytes
+        self.drainSeconds = drainSeconds
+        self.inFlight = inFlight
         self.machine = SupervisorMachine(config: policy)
 
         let (stateStream, stateCont) = AsyncStream.makeStream(of: SupervisorState.self)
@@ -228,6 +241,12 @@ public actor SupervisorEngine {
             if managed, machine.phase == .healthy,
                policy.maintenanceRestartDue(healthySince: machine.healthySince, now: now,
                                             minuteOfDay: Self.minuteOfDay(of: now)) || binaryWasUpgraded() {
+                // A routine restart can afford manners: with the metrics proxy
+                // watching traffic, wait for in-flight generations to finish
+                // (bounded by drainSeconds) instead of cutting one off mid-token.
+                if shouldDrainBeforeRoutineRestart(now: now) {
+                    return policy.probeInterval
+                }
                 let maintenance = machine.maintenanceRestart(now: now)
                 await apply(maintenance, models: nil)
                 return maintenance.nextWait
@@ -326,6 +345,26 @@ public actor SupervisorEngine {
         lastDeepProbeAt = nil
         lastDeepProbeFailedAt = now
         return false
+    }
+
+    /// Whether a due routine restart should wait for in-flight work. True while
+    /// the proxy reports open connections and the drain budget has not run out;
+    /// the deadline is set once per drain so a busy server cannot defer forever.
+    private func shouldDrainBeforeRoutineRestart(now: Date) -> Bool {
+        guard drainSeconds > 0, let inFlight else { return false }
+        guard inFlight() > 0 else {
+            drainDeadline = nil
+            return false
+        }
+        if let deadline = drainDeadline {
+            if now >= deadline {
+                drainDeadline = nil
+                return false
+            }
+            return true
+        }
+        drainDeadline = now.addingTimeInterval(drainSeconds)
+        return true
     }
 
     /// Minutes since local midnight, for the maintenance window check. Uses the

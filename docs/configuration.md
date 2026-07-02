@@ -115,13 +115,14 @@ See [ollama.md](ollama.md) for the full Ollama setup guide, including deep probe
 |-----|------|---------|---------|
 | `metricsProxyEnabled` | bool | `false` | A transparent relay in front of the runner: point your apps at the proxy port instead of the runner port, and every byte passes through untouched while the response side is scanned for the throughput numbers the runner itself reports (`eval_count`/`eval_duration`, or `completion_tokens`). Feeds `hearth_tokens_per_second`, `hearth_generation_tokens_total`, and `hearth_generation_requests_total` in `/metrics`. Approximate by design: it is a metrics tap, not a parser of record, and clients that keep talking to the runner directly are simply not counted. |
 | `metricsProxyPort` | int | `11436` | Port the proxy listens on, on the same host as the runner. Must differ from the runner and control ports. |
+| `drainSeconds` | number | `0` | With the proxy enabled, a routine restart (scheduled maintenance, a binary upgrade) waits up to this long for in-flight generations to finish before proceeding, instead of cutting one off mid-token. `0` restarts immediately. Failure restarts never wait: the runner is already down. |
 
 ## Control endpoint (phone-side remote control)
 
 | Key | Type | Default | Meaning |
 |-----|------|---------|---------|
 | `controlEnabled` | bool | `false` | Serve a small HTTP API so a phone can check status and start/stop/restart. |
-| `controlHost` | string | `"127.0.0.1"` | Address the control endpoint binds to. Use a private or Tailscale address, never `0.0.0.0` on the open internet. |
+| `controlHost` | string | `"127.0.0.1"` | Address the control endpoint binds to. Use a private or Tailscale address, never `0.0.0.0` on the open internet. The sentinel `"tailscale"` resolves to this Mac's tailnet IPv4 at bind time (falling back to loopback if none is found), so the address cannot go stale. |
 | `controlPort` | int | `11435` | Control endpoint port. Must differ from `port`. |
 | `controlToken` | string or null | `null` | Required bearer token on every control request. The endpoint refuses to start without one. |
 
@@ -150,6 +151,8 @@ for the full safety story.
 | `rebootMinIntervalSeconds` | number | `1800` | Minimum time between recovery reboots. A reboot sooner than this that did not help means Hearth stops and notifies instead of looping. Clamped to at least 300. |
 | `rebootMaxPerDay` | int | `3` | Most recovery reboots allowed in a rolling 24 hours. Clamped to at least 1. |
 | `rebootOnlyOnProcessFailure` | bool | `false` | Reboot only when the failing streak included a real process exit (a crash), never for a pure "alive but not answering" wedge. Turn this on if you do not fully trust the runner: it stops a runner that only controls its HTTP responses from driving a reboot, at the cost that a genuine wedge is escalated to a notification instead of auto-recovered. |
+| `rebootViaHelper` | bool | `false` | EXPERIMENTAL: send the recovery reboot through the `hearth-reboot-helper` root daemon instead of rebooting directly, so the headless supervisor itself need not run as root. Needs the helper installed (`sudo ./scripts/install-reboot-helper.sh`); see [Running headless](running-headless.md). |
+| `rebootHelperSocket` | string | `"/var/run/hearth-reboot.sock"` | The helper's unix socket path. |
 
 ## Runner privilege drop (root daemon)
 

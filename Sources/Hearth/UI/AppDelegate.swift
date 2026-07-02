@@ -520,7 +520,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard config.controlEnabled, controlServer != nil else { return nil }
         return PhoneAccess.url(
             tailnetIPv4: NetworkInterfaces.tailnetIPv4(),
-            controlHost: config.controlHost,
+            controlHost: ControlHostResolver.resolve(config.controlHost),
             controlPort: config.controlPort)
     }
 

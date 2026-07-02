@@ -21,7 +21,9 @@ struct EngineTests {
     private func makeHarness(policy: RestartPolicyConfig = RestartPolicyConfig(startupGrace: 30),
                              deepProbe: DeepProbeConfig? = nil,
                              warmModels: Bool = false,
-                             memoryLimitBytes: Int64 = 0) -> Harness {
+                             memoryLimitBytes: Int64 = 0,
+                             drainSeconds: TimeInterval = 0,
+                             inFlight: (@Sendable () -> Int)? = nil) -> Harness {
         let clock = ManualClock(now: Date(timeIntervalSince1970: 0))
         let processes = FakeProcessController()
         let http = FakeHTTPClient()
@@ -38,7 +40,9 @@ struct EngineTests {
             policy: policy,
             deepProbe: deepProbe,
             warmModels: warmModels,
-            memoryLimitBytes: memoryLimitBytes
+            memoryLimitBytes: memoryLimitBytes,
+            drainSeconds: drainSeconds,
+            inFlight: inFlight
         )
         return Harness(engine: engine, clock: clock, processes: processes, http: http,
                        power: power, notifier: notifier, runner: runner)
@@ -244,6 +248,55 @@ struct EngineTests {
         #expect(await h.engine.snapshot().phase == .healthy)
         let recovered = await h.notifier.received.contains { $0.event == .recovered }
         #expect(!recovered)
+    }
+
+    @Test func routineRestartWaitsForInFlightWorkThenProceeds() async {
+        final class Traffic: @unchecked Sendable {
+            private let lock = NSLock()
+            private var count = 0
+            func set(_ value: Int) { lock.withLock { count = value } }
+            func get() -> Int { lock.withLock { count } }
+        }
+        let traffic = Traffic()
+        traffic.set(1)
+        let h = makeHarness(
+            policy: RestartPolicyConfig(startupGrace: 30, restartOnBinaryChange: true),
+            drainSeconds: 60,
+            inFlight: { traffic.get() }
+        )
+        makeServing(h)
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+        #expect(h.processes.spawnCount == 1)
+
+        // A binary upgrade makes a routine restart due, but a generation is in
+        // flight: the restart waits instead of cutting it off mid-token.
+        h.processes.setExecutableFingerprint("v2")
+        _ = await h.engine.stepOnce()
+        #expect(h.processes.spawnCount == 1)
+
+        // The generation finishes; the deferred restart proceeds.
+        traffic.set(0)
+        _ = await h.engine.stepOnce()
+        #expect(h.processes.spawnCount == 2)
+    }
+
+    @Test func aDrainThatOverstaysItsBudgetRestartsAnyway() async {
+        let h = makeHarness(
+            policy: RestartPolicyConfig(startupGrace: 30, restartOnBinaryChange: true),
+            drainSeconds: 30,
+            inFlight: { 5 }   // traffic that never lets up
+        )
+        makeServing(h)
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+        h.processes.setExecutableFingerprint("v2")
+        _ = await h.engine.stepOnce()
+        #expect(h.processes.spawnCount == 1)   // deferred
+
+        h.clock.advance(by: 31)
+        _ = await h.engine.stepOnce()
+        #expect(h.processes.spawnCount == 2)   // budget spent; proceed anyway
     }
 
     @Test func memoryWatchdogIsOffByDefault() async {

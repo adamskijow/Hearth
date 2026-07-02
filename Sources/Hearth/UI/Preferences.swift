@@ -349,7 +349,7 @@ struct PreferencesView: View {
     private func copyPhoneURL() {
         guard let url = PhoneAccess.url(
             tailnetIPv4: NetworkInterfaces.tailnetIPv4(),
-            controlHost: model.config.controlHost,
+            controlHost: ControlHostResolver.resolve(model.config.controlHost),
             controlPort: model.config.controlPort) else {
             model.status = "Bind host is loopback, which a phone cannot reach. Use a Tailscale or private address."
             return

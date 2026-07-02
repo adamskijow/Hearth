@@ -23,6 +23,7 @@ enum StatusCLI {
           Hearth doctor             Check the config and environment for problems.
           Hearth doctor-daemon      Check the root daemon config at /etc/hearth/config.json.
           Hearth update             Upgrade a Homebrew Ollama, then have Hearth adopt the new binary.
+          Hearth proxy-setup        Generate an authenticating Caddy reverse proxy config for the runner.
           Hearth mode managed|attached [--daemon] [--force]
                                     Set whether Hearth starts the runner or watches one.
           Hearth setup              Turnkey: detect the runner, install the login agent, wait for ready.
@@ -48,8 +49,9 @@ enum StatusCLI {
         // same way every other URL builder does; a bare literal makes URL(string:)
         // nil and this is a user-facing command, so fall back to the reduced
         // status rather than trapping.
+        let controlHost = ControlHostResolver.resolve(config.controlHost)
         if config.controlEnabled, let token = config.controlToken, !token.isEmpty,
-           let url = URL(string: "http://\(urlAuthorityHost(for: config.controlHost)):\(config.controlPort)/status") {
+           let url = URL(string: "http://\(urlAuthorityHost(for: controlHost)):\(config.controlPort)/status") {
             let (data, response, _) = syncGET(url, bearer: token, timeout: 3)
             if let data, (response as? HTTPURLResponse)?.statusCode == 200,
                let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {

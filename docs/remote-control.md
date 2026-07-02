@@ -62,6 +62,9 @@ the Mac needed.
 set the bare address in the config and Hearth brackets it wherever a URL is
 built, including `hearth status` and the advertised phone-access URL. In your
 own curl invocations, bracket it yourself (`http://[fd7a::...]:11435/status`).
+Or skip the address entirely: `"controlHost": "tailscale"` resolves to this
+Mac's tailnet IPv4 at bind time and falls back to loopback when no Tailscale
+interface is present, so a re-addressed tailnet cannot leave a stale bind.
 
 ## Local status and logs
 

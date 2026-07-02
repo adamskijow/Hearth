@@ -115,8 +115,8 @@ from somewhere. Hearth is that layer.
 
 macOS 14 or later, and an existing runner install (Hearth supervises the runner, it
 does not install it). Ollama is the default, expected at `/opt/homebrew/bin/ollama`;
-LM Studio (in attached mode) and mlx_lm are also supported, selected with `runner`
-and the matching binary path. The [configuration reference](docs/configuration.md)
+LM Studio (in attached mode), mlx_lm, and Osaurus are also supported, selected with
+`runner` and the matching binary path. The [configuration reference](docs/configuration.md)
 and [Troubleshooting](docs/troubleshooting.md) have the per-runner notes. Hearth has
 no third-party Swift dependencies; it builds against Apple system frameworks only.
 
@@ -129,7 +129,7 @@ brew install --cask adamskijow/tap/hearth
 ```
 
 The cask installs `Hearth.app` and puts the `hearth` CLI (`doctor`, `status`,
-`setup`, `mode`, `wait-ready`) on your PATH. To build from a checkout instead,
+`setup`, `mode`, `update`, `proxy-setup`, `wait-ready`) on your PATH. To build from a checkout instead,
 `swift build -c release && swift run Hearth`; for a day-to-day local install,
 `make install` ad-hoc signs the app into `/Applications` (and `make uninstall`
 removes it).
@@ -236,14 +236,21 @@ The core is solid: a tested state machine, readiness and deep probes, and the fu
 recovery ladder. Ollama, LM Studio, and mlx_lm are supported today, and adding
 another runner is a small, contained change when someone needs one.
 
-Where it is heading:
+Recently landed: post-restart model warm-up, a busy-aware readiness probe, a
+memory-limit watchdog, heartbeat pushes for Uptime Kuma and healthchecks.io,
+maintenance windows, supervised `hearth update`, Osaurus as a fourth runner,
+an opt-in tokens-per-second metrics tap with graceful drain, turnkey
+`hearth proxy-setup`, the `"tailscale"` control-host sentinel, and an
+experimental least-privilege reboot helper.
 
-- **Least privilege.** Building on the root daemon's required `runnerUser` drop, a
-  minimal root helper so the supervisor itself need not run as root.
-- **Reach.** Full Tailscale auto-configuration (address detection already ships),
-  and turnkey setup for the authenticating reverse proxy it documents today.
-- **Metrics.** A tokens-per-second readout, alongside the existing thermal and
-  memory ones.
+Where it is heading next:
+
+- **Accountability.** Per-client tokens and an audit trail for control
+  actions, so a shared Mac Studio can tell who restarted what.
+- **History.** Analytics over the event log: wedge frequency, recovery times,
+  and trends, not just the tail.
+- **Validation.** A captured real out-of-memory fixture, closing the one
+  remaining heuristic gap in exit classification.
 
 ## Contributing
 

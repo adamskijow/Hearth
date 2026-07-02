@@ -31,23 +31,9 @@ struct SupervisorAssembly {
         let runner = config.makeRunner()
         let notifier = makeNotifier(config: config, includeLocal: includeLocalNotifications)
 
-        let engine = SupervisorEngine(
-            clock: SystemClock(),
-            processes: processController,
-            http: URLSessionHTTPClient(),
-            runner: runner,
-            power: IOKitPowerManager(),
-            notifier: notifier,
-            policy: config.policy(),
-            managed: config.isManaged,
-            deepProbe: config.deepProbe(),
-            warmModels: config.warmModelsAfterRestart,
-            memoryLimitBytes: Int64(max(0, config.runnerMemoryLimitMB)) * 1_048_576
-        )
-        let coordinator = SupervisionCoordinator(engine: engine)
-
         // The opt-in tokens-per-second tap. The proxy listens where the runner
-        // does (same host semantics) and relays to it; the store feeds /metrics.
+        // does (same host semantics) and relays to it; the store feeds /metrics,
+        // and its in-flight count feeds the graceful-drain gate.
         var metricsProxy: MetricsProxy?
         var tokenMetrics: TokenMetricsStore?
         if config.metricsProxyEnabled {
@@ -62,10 +48,31 @@ struct SupervisorAssembly {
             tokenMetrics = metricsProxy == nil ? nil : store
         }
 
+        var inFlight: (@Sendable () -> Int)?
+        if let proxy = metricsProxy {
+            inFlight = { [weak proxy] in proxy?.inFlightConnections() ?? 0 }
+        }
+        let engine = SupervisorEngine(
+            clock: SystemClock(),
+            processes: processController,
+            http: URLSessionHTTPClient(),
+            runner: runner,
+            power: IOKitPowerManager(),
+            notifier: notifier,
+            policy: config.policy(),
+            managed: config.isManaged,
+            deepProbe: config.deepProbe(),
+            warmModels: config.warmModelsAfterRestart,
+            memoryLimitBytes: Int64(max(0, config.runnerMemoryLimitMB)) * 1_048_576,
+            drainSeconds: max(0, config.drainSeconds),
+            inFlight: inFlight
+        )
+        let coordinator = SupervisionCoordinator(engine: engine)
+
         var controlServer: ControlServer?
         if config.controlEnabled, let token = config.controlToken, !token.isEmpty {
             controlServer = ControlServer(
-                host: config.controlHost,
+                host: ControlHostResolver.resolve(config.controlHost),
                 port: config.controlPort,
                 token: token,
                 coordinator: coordinator,

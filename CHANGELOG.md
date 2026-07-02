@@ -7,6 +7,20 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## [0.9.0] - 2026-07-02
+
+The beginner and operator release, shaped by four independent audits in two
+days: a beginner-lens usability pass, two adversarially verified bug audits
+covering the whole program, and a four-angle feature audit (internal roadmap,
+community demand, competitive landscape, personas). The headline is that
+recovery became something you cannot feel: models are warmed back up after a
+restart, a busy server is never mistaken for a wedged one (and a fake-busy
+wedge is still caught), routine restarts can drain in-flight work first, and
+the whole story now reads in plain language for someone who installed Ollama
+last week. Under the hood, more than twenty confirmed defects from the audits
+were fixed, including a GPU-memory leak on the shutdown path and engine races
+around user restarts.
+
 ### Added
 - Model warm-up after restart (`warmModelsAfterRestart`): the models that were
   resident before a restart are loaded again once the runner is healthy, so

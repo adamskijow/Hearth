@@ -66,13 +66,25 @@ final class MetricsProxy: @unchecked Sendable {
         listener.cancel()
     }
 
-    /// Balances the accept-side increment exactly once per connection pair,
-    /// however many relay paths report the close.
-    private final class CloseOnce: @unchecked Sendable {
+    /// Tracks one proxied connection pair: balances the accept-side increment
+    /// exactly once however many paths report the close, and knows when BOTH
+    /// relay directions have finished so a half-close (a client that shuts its
+    /// write side after the request) does not tear down the response stream.
+    private final class RelayPair: @unchecked Sendable {
         private let lock = NSLock()
         private var closed = false
+        private var finishedDirections = 0
         private let onClose: () -> Void
         init(onClose: @escaping () -> Void) { self.onClose = onClose }
+
+        /// One direction saw a clean end-of-stream. True once both have.
+        func directionFinished() -> Bool {
+            lock.withLock {
+                finishedDirections += 1
+                return finishedDirections >= 2
+            }
+        }
+
         func close() {
             let first = lock.withLock { () -> Bool in
                 if closed { return false }
@@ -90,48 +102,81 @@ final class MetricsProxy: @unchecked Sendable {
             using: .tcp
         )
         activeLock.withLock { active += 1 }
-        let closer = CloseOnce { [weak self] in
-            self?.activeLock.withLock { self!.active -= 1 }
+        let pair = RelayPair { [weak self] in
+            guard let self else { return }
+            self.activeLock.withLock { self.active -= 1 }
         }
         let down = ConnectionBox(downstream)
         let up = ConnectionBox(upstream)
+        // A connection that fails or is torn down outside the relay loops (an
+        // unreachable runner, a mid-stream reset) must still release the pair,
+        // or a dead upstream would count as in-flight forever and block the
+        // drain gate. Waiting is failure here: the runner is local, so "trying
+        // to reach it" means it is down.
+        let teardown: @Sendable (NWConnection.State) -> Void = { state in
+            switch state {
+            case .failed, .cancelled, .waiting:
+                down.connection.cancel()
+                up.connection.cancel()
+                pair.close()
+            default:
+                break
+            }
+        }
+        downstream.stateUpdateHandler = teardown
+        upstream.stateUpdateHandler = teardown
         downstream.start(queue: queue)
         upstream.start(queue: queue)
         // Request side: client -> runner, untouched and unscanned.
-        relay(from: down, to: up, scanner: nil, closer: closer)
+        relay(from: down, to: up, scanner: nil, pair: pair)
         // Response side: runner -> client, scanned for throughput numbers.
-        relay(from: up, to: down, scanner: TokenStreamScanner(), closer: closer)
+        relay(from: up, to: down, scanner: TokenStreamScanner(), pair: pair)
     }
 
-    /// Pump bytes one way until either side ends, closing both when done. The
-    /// optional scanner taps the stream for samples as it passes.
+    /// Pump bytes one way. A clean end-of-stream forwards the FIN to the sink
+    /// and lets the OTHER direction keep flowing (an HTTP client may half-close
+    /// after its request while the response is still streaming back); only an
+    /// error, or both directions finishing, tears the pair down. The optional
+    /// scanner taps the stream for samples as it passes.
     private func relay(from source: ConnectionBox, to sink: ConnectionBox,
-                       scanner: TokenStreamScanner?, closer: CloseOnce) {
+                       scanner: TokenStreamScanner?, pair: RelayPair) {
         var scanner = scanner
         let store = self.store
         source.connection.receive(minimumIncompleteLength: 1, maximumLength: 262_144) { [weak self] data, _, isComplete, error in
-            if let data, !data.isEmpty {
-                if scanner != nil {
-                    for sample in scanner!.ingest(data) { store.record(sample) }
-                }
-                sink.connection.send(content: data, completion: .contentProcessed { sendError in
-                    if sendError != nil || isComplete || error != nil {
-                        source.connection.cancel()
-                        sink.connection.cancel()
-                        closer.close()
-                        return
-                    }
-                    self?.relay(from: source, to: sink, scanner: scanner, closer: closer)
-                })
-                return
-            }
-            if isComplete || error != nil {
+            if error != nil {
                 source.connection.cancel()
                 sink.connection.cancel()
-                closer.close()
-            } else {
-                self?.relay(from: source, to: sink, scanner: scanner, closer: closer)
+                pair.close()
+                return
             }
+            if let data, !data.isEmpty, scanner != nil {
+                for sample in scanner!.ingest(data) { store.record(sample) }
+            }
+            // Forward the bytes, and the FIN when this direction ended, in one
+            // send so ordering is preserved.
+            sink.connection.send(
+                content: (data?.isEmpty ?? true) ? nil : data,
+                contentContext: isComplete ? .finalMessage : .defaultMessage,
+                isComplete: isComplete,
+                completion: .contentProcessed { sendError in
+                    if sendError != nil {
+                        source.connection.cancel()
+                        sink.connection.cancel()
+                        pair.close()
+                        return
+                    }
+                    if isComplete {
+                        // This direction is done; the pair closes when both are.
+                        if pair.directionFinished() {
+                            source.connection.cancel()
+                            sink.connection.cancel()
+                            pair.close()
+                        }
+                        return
+                    }
+                    self?.relay(from: source, to: sink, scanner: scanner, pair: pair)
+                }
+            )
         }
     }
 }

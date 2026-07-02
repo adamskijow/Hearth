@@ -37,6 +37,10 @@ guard allowedUID != 0 else {
     exit(2)
 }
 
+// A client that vanishes between its request and our reply must not kill the
+// helper with SIGPIPE; the write just fails instead.
+signal(SIGPIPE, SIG_IGN)
+
 // Reboots at most this often, whatever the client asks. Mirrors the floor of
 // Hearth's own rebootMinIntervalSeconds.
 let minimumInterval: TimeInterval = 300
@@ -94,10 +98,22 @@ while true {
         continue
     }
 
-    var buffer = [UInt8](repeating: 0, count: 64)
-    let count = read(client, &buffer, buffer.count)
-    guard count > 0 else { continue }
-    let command = String(decoding: buffer[0..<count], as: UTF8.self)
+    // A slow or stuck client must not hold the (single-threaded) accept loop.
+    var readTimeout = timeval(tv_sec: 5, tv_usec: 0)
+    _ = setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &readTimeout, socklen_t(MemoryLayout<timeval>.size))
+
+    // Accumulate until a newline, end-of-stream, or the small cap: a unix
+    // socket usually delivers the 7-byte command in one read, but nothing
+    // guarantees it.
+    var buffer = [UInt8]()
+    var chunk = [UInt8](repeating: 0, count: 64)
+    while buffer.count < 64, !buffer.contains(UInt8(ascii: "\n")) {
+        let count = read(client, &chunk, chunk.count)
+        guard count > 0 else { break }
+        buffer.append(contentsOf: chunk[0..<count])
+    }
+    guard !buffer.isEmpty else { continue }
+    let command = String(decoding: buffer, as: UTF8.self)
         .trimmingCharacters(in: .whitespacesAndNewlines)
     guard command == "reboot" else {
         respond(client, "denied\n")

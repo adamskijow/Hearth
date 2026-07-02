@@ -46,6 +46,14 @@ struct HelperSystemController: SystemControlling {
             return
         }
         defer { close(fd) }
+        // A hung helper must not freeze the escalator (this is called from the
+        // recovery path), and its disappearance mid-write must not SIGPIPE the
+        // supervisor. Bounded I/O, signal-free failure.
+        var one: Int32 = 1
+        _ = setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout<Int32>.size))
+        var ioTimeout = timeval(tv_sec: 5, tv_usec: 0)
+        _ = setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &ioTimeout, socklen_t(MemoryLayout<timeval>.size))
+        _ = setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &ioTimeout, socklen_t(MemoryLayout<timeval>.size))
 
         var address = sockaddr_un()
         address.sun_family = sa_family_t(AF_UNIX)

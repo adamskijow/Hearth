@@ -68,7 +68,6 @@ enum ProxySetupCLI {
         # and the runner itself stays on 127.0.0.1. See docs/reverse-proxy.md.
 
         \(bindAddress):\(proxyPort) {
-        \tbind \(bindAddress)
         \t@authorized header Authorization "Bearer \(token)"
 
         \thandle @authorized {

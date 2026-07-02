@@ -154,6 +154,49 @@ struct EngineTests {
         #expect(await h.engine.snapshot().busy == false)
     }
 
+    @Test func aPermanent503IsEventuallyTreatedAsAWedge() async {
+        // Busy is believed, but not forever: a 503 that never ends is a wedge
+        // wearing a busy suit, and must still be restarted.
+        let h = makeHarness()   // busyTimeout defaults to 600
+        makeServing(h)
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+        #expect(await h.engine.snapshot().phase == .healthy)
+
+        h.http.set(h.runner.readinessEndpoint, .http(status: 503, body: Data()))
+        _ = await h.engine.stepOnce()
+        #expect(await h.engine.snapshot().busy)
+        #expect(h.processes.spawnCount == 1)
+
+        // Ten minutes of uninterrupted 503: the streak crosses the timeout and
+        // the next observation is escalated to wedged, killing and respawning.
+        h.clock.advance(by: 601)
+        _ = await h.engine.stepOnce()
+        let state = await h.engine.snapshot()
+        #expect(state.phase != .healthy || h.processes.spawnCount == 2)
+        #expect(h.processes.spawnCount >= 1)
+        let wedgeSeen = await h.notifier.received.contains { $0.event == .down(.wedged) }
+        #expect(wedgeSeen)
+
+        // A brief 503 burst that clears resets the streak: no restart.
+        makeServing(h)
+        var wait = await h.engine.stepOnce()
+        while await h.engine.snapshot().phase != .healthy {
+            h.clock.advance(by: wait + 0.01)
+            wait = await h.engine.stepOnce()
+        }
+        let spawnsAfterRecovery = h.processes.spawnCount
+        h.http.set(h.runner.readinessEndpoint, .http(status: 503, body: Data()))
+        _ = await h.engine.stepOnce()
+        h.clock.advance(by: 300)   // half the timeout
+        makeServing(h)
+        _ = await h.engine.stepOnce()
+        h.clock.advance(by: 400)   // streak was reset; no escalation
+        h.http.set(h.runner.readinessEndpoint, .http(status: 503, body: Data()))
+        _ = await h.engine.stepOnce()
+        #expect(h.processes.spawnCount == spawnsAfterRecovery)
+    }
+
     /// Poll for work a detached warm-up task does off the loop.
     private func eventually(_ condition: () async -> Bool) async -> Bool {
         for _ in 0..<400 {

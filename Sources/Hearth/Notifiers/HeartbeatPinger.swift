@@ -13,6 +13,7 @@ final class HeartbeatPinger: @unchecked Sendable {
     private let isHealthy: @Sendable () async -> Bool
     private let session: URLSession
     private var timer: DispatchSourceTimer?
+    private let warnLock = NSLock()
     private var warnedFailure = false
 
     /// Nil when the URL is missing or not an http(s) URL (doctor warns about
@@ -53,12 +54,17 @@ final class HeartbeatPinger: @unchecked Sendable {
             guard await isHealthy() else { return }
             do {
                 _ = try await session.data(from: url)
-                self?.warnedFailure = false
+                self?.warnLock.withLock { self?.warnedFailure = false }
             } catch {
                 // One line per failure streak: a broken heartbeat means the
                 // user's monitor will alert "down" while the runner is fine.
-                guard let self, !self.warnedFailure else { return }
-                self.warnedFailure = true
+                guard let self else { return }
+                let firstOfStreak: Bool = self.warnLock.withLock {
+                    if self.warnedFailure { return false }
+                    self.warnedFailure = true
+                    return true
+                }
+                guard firstOfStreak else { return }
                 FileHandle.standardError.write(Data(
                     "Hearth: heartbeat to \(url.host ?? "monitor") failed: \(error.localizedDescription)\n".utf8))
             }

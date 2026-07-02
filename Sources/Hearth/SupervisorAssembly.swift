@@ -66,7 +66,8 @@ struct SupervisorAssembly {
             memoryLimitBytes: Int64(max(0, config.runnerMemoryLimitMB)) * 1_048_576,
             drainSeconds: max(0, config.drainSeconds),
             inFlight: inFlight,
-            includeLogTail: config.alertsIncludeLogTail
+            includeLogTail: config.alertsIncludeLogTail,
+            busyTimeout: max(30, config.busyTimeoutSeconds)
         )
         let coordinator = SupervisionCoordinator(engine: engine)
 

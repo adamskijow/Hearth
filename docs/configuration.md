@@ -78,6 +78,7 @@ See [ollama.md](ollama.md) for the full Ollama setup guide, including deep probe
 |-----|------|---------|---------|
 | `probeTimeoutSeconds` | number | `2` | How long a readiness probe waits before it counts as a failure. |
 | `probeIntervalSeconds` | number | `5` | How often to probe while healthy. |
+| `busyTimeoutSeconds` | number | `600` | How long an uninterrupted busy (503) streak is believed before it is treated as a wedge and restarted. A genuinely busy server works through its queue; a 503 that never ends is a hang. Floored at 30. |
 | `startupGraceSeconds` | number | `30` | How long to allow for the runner to come up before treating it as failed. |
 | `startupProbeIntervalSeconds` | number | `1` | Probe cadence during startup and restart. |
 | `initialBackoffSeconds` | number | `1` | Wait before the first restart attempt (floored at 0.1s, so a zero cannot respawn a failing runner in a no-delay loop). |

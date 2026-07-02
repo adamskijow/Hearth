@@ -74,6 +74,13 @@ public actor SupervisorEngine {
     private var sleepGeneration = 0
     /// Whether the last probe answered busy (a full queue), for the status line.
     private var runnerBusy = false
+    /// When the current uninterrupted busy streak began. A genuinely busy
+    /// server works through its queue; a 503 that never ends is a wedge
+    /// wearing a busy suit, and past `busyTimeout` it is treated as one.
+    private var busySince: Date?
+    /// How long uninterrupted busy is believed before it is escalated to
+    /// wedged. Without this, a permanently-503 runner would never restart.
+    private let busyTimeout: TimeInterval
     /// When the deep probe last failed, surfaced in status and metrics.
     private var lastDeepProbeFailedAt: Date?
     /// The models resident before the most recent teardown, captured at the kill
@@ -103,7 +110,8 @@ public actor SupervisorEngine {
                 memoryLimitBytes: Int64 = 0,
                 drainSeconds: TimeInterval = 0,
                 inFlight: (@Sendable () -> Int)? = nil,
-                includeLogTail: Bool = false) {
+                includeLogTail: Bool = false,
+                busyTimeout: TimeInterval = 600) {
         self.clock = clock
         self.processes = processes
         self.http = http
@@ -118,6 +126,7 @@ public actor SupervisorEngine {
         self.drainSeconds = drainSeconds
         self.inFlight = inFlight
         self.includeLogTail = includeLogTail
+        self.busyTimeout = busyTimeout
         self.machine = SupervisorMachine(config: policy)
 
         let (stateStream, stateCont) = AsyncStream.makeStream(of: SupervisorState.self)
@@ -148,6 +157,8 @@ public actor SupervisorEngine {
     /// Stop supervising: kill the child and release power immediately.
     public func stop() async {
         controlGeneration &+= 1
+        busySince = nil
+        drainDeadline = nil
         let output = machine.stop(now: clock.now)
         await apply(output, models: nil)
         nudgeLoop()
@@ -156,6 +167,8 @@ public actor SupervisorEngine {
     /// Restart now by request. Does not count as a crash.
     public func restart() async {
         controlGeneration &+= 1
+        busySince = nil
+        drainDeadline = nil
         let output = machine.userRestart(now: clock.now)
         await apply(output, models: nil)
         nudgeLoop()
@@ -219,13 +232,25 @@ public actor SupervisorEngine {
             return 0
         case .starting, .restarting, .healthy:
             let generation = controlGeneration
-            let report = await probe(now: now)
+            var report = await probe(now: now)
             // stop() or restart() may have interleaved during the probe await; a
             // stale observation must not resurrect a stopped machine, and the
             // old child's "serving" must not mark the fresh child healthy before
             // it has been probed (skipping startup grace and firing a spurious
             // recovery). Re-step immediately instead.
             if machine.phase == .stopped || generation != controlGeneration { return 0 }
+            // Busy is believed, but not forever: a 503 streak past the timeout
+            // is escalated to wedged, or a permanently-busy wedge would never
+            // restart. Any non-busy answer resets the streak.
+            if report.readiness == .busy {
+                if busySince == nil { busySince = now }
+                if let since = busySince, now.timeIntervalSince(since) >= busyTimeout {
+                    report.readiness = .timedOut
+                    busySince = nil
+                }
+            } else {
+                busySince = nil
+            }
             runnerBusy = report.readiness == .busy
             if !report.recentStderr.isEmpty {
                 lastStderrTail = report.recentStderr

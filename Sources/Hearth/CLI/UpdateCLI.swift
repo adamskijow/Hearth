@@ -32,7 +32,13 @@ enum UpdateCLI {
             exit(status == 0 ? 1 : status)
         }
 
-        guard fingerprint(binary) != before else {
+        let after = fingerprint(binary)
+        guard after != nil else {
+            FileHandle.standardError.write(Data(
+                "Hearth: the runner binary is missing at \(binary) after the upgrade; check brew's output before restarting anything.\n".utf8))
+            exit(1)
+        }
+        guard after != before else {
             print("Ollama is already up to date; nothing for Hearth to adopt.")
             exit(0)
         }

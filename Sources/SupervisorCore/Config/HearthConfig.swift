@@ -28,6 +28,10 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     // Health and restart policy
     public var probeTimeoutSeconds: Double
     public var probeIntervalSeconds: Double
+    /// How long an uninterrupted busy (503) streak is believed before it is
+    /// treated as a wedge and restarted. A genuinely busy server works through
+    /// its queue; a 503 that never ends is a hang. Floored at 30.
+    public var busyTimeoutSeconds: Double
     public var startupGraceSeconds: Double
     public var startupProbeIntervalSeconds: Double
     public var initialBackoffSeconds: Double
@@ -156,6 +160,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 runnerEnv: [String: String] = [:],
                 probeTimeoutSeconds: Double = 2,
                 probeIntervalSeconds: Double = 5,
+                busyTimeoutSeconds: Double = 600,
                 startupGraceSeconds: Double = 30,
                 startupProbeIntervalSeconds: Double = 1,
                 initialBackoffSeconds: Double = 1,
@@ -210,6 +215,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.runnerEnv = runnerEnv
         self.probeTimeoutSeconds = probeTimeoutSeconds
         self.probeIntervalSeconds = probeIntervalSeconds
+        self.busyTimeoutSeconds = busyTimeoutSeconds
         self.startupGraceSeconds = startupGraceSeconds
         self.startupProbeIntervalSeconds = startupProbeIntervalSeconds
         self.initialBackoffSeconds = initialBackoffSeconds
@@ -289,6 +295,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         runnerEnv = try value(.runnerEnv, defaults.runnerEnv)
         probeTimeoutSeconds = try value(.probeTimeoutSeconds, defaults.probeTimeoutSeconds)
         probeIntervalSeconds = try value(.probeIntervalSeconds, defaults.probeIntervalSeconds)
+        busyTimeoutSeconds = try value(.busyTimeoutSeconds, defaults.busyTimeoutSeconds)
         startupGraceSeconds = try value(.startupGraceSeconds, defaults.startupGraceSeconds)
         startupProbeIntervalSeconds = try value(.startupProbeIntervalSeconds, defaults.startupProbeIntervalSeconds)
         initialBackoffSeconds = try value(.initialBackoffSeconds, defaults.initialBackoffSeconds)

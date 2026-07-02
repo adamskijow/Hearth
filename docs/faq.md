@@ -5,6 +5,11 @@ Plain answers to the questions people have before and just after installing.
 The [README](../README.md) has the tour; [Troubleshooting](troubleshooting.md)
 has the fixes.
 
+## Is Hearth affiliated with Ollama?
+
+No. Hearth is an independent, third-party project. It is not affiliated with,
+endorsed by, or supported by Ollama.
+
 ## Is Hearth for me?
 
 If you run models locally with Ollama (or LM Studio or mlx_lm) and you want them

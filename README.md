@@ -11,8 +11,8 @@
   <img src="https://img.shields.io/badge/macOS-14%2B-black?logo=apple&logoColor=white" alt="macOS 14+">
 </p>
 
-Hearth is an independent, third-party project. It is not affiliated with,
-endorsed by, or supported by Ollama.
+Hearth is an independent third-party supervisor for Ollama and other local model
+runners.
 
 Hearth keeps Ollama running on a Mac so it is always ready when your apps need it.
 If Ollama crashes, Hearth restarts it. If Ollama is still running but has quietly
@@ -38,7 +38,7 @@ leave running overnight.
 
 The README is the tour; the operational detail lives in `docs/`:
 
-- **[FAQ](docs/faq.md):** is Hearth for me, which mode do I want, how do I know it is working, how do I uninstall.
+- **[FAQ](docs/faq.md):** affiliation, is Hearth for me, which mode do I want, how do I know it is working, how do I uninstall.
 - **[Configuration reference](docs/configuration.md):** every config key, its type, and its default.
 - **[Ollama setup guide](docs/ollama.md):** Homebrew Ollama, Ollama.app, deep probes, and integration wording.
 - **[Remote control and local status](docs/remote-control.md):** the HTTP control endpoint, the `hearth` CLI, and monitoring.

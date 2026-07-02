@@ -20,12 +20,17 @@ does not reimplement the operating system.
   since been validated in managed mode against a live `mlx_lm.server`, and LM
   Studio in attached mode against a live server (the report has the details).
 - Out of memory classification is a heuristic and is UNVERIFIED against a real
-  out of memory kill, which could not be induced on high unified-memory hardware.
-  The signatures are confirmed absent from a healthy Ollama's output (so they do
-  not false-positive), but not confirmed to fire on a real Metal OOM. The
-  signatures are also only consulted for an abnormal exit (a signal or a
-  non-zero code): a runner that logged an allocation complaint and then exited
-  cleanly is reported as a clean exit, not an OOM.
+  out of memory kill, which could not be induced on the 128 GiB unified-memory
+  development hardware: no downloaded model is large enough to exhaust it, and
+  manufacturing memory pressure risks the whole machine. The signatures are
+  confirmed absent from a healthy Ollama's output (so they do not
+  false-positive), but not confirmed to fire on a real Metal OOM. If you have a
+  memory-constrained Apple Silicon Mac and a model too large for it,
+  `scripts/capture-oom.sh <model>` captures the real stderr signature and checks
+  it against the shipped list, so the fixture can be contributed and this note
+  retired. The signatures are also only consulted for an abnormal exit (a signal
+  or a non-zero code): a runner that logged an allocation complaint and then
+  exited cleanly is reported as a clean exit, not an OOM.
 - If Hearth itself is killed without the chance to run its teardown (a hard
   SIGKILL of the agent), the runner process group it spawned keeps running until
   Hearth next launches. On launch Hearth recognizes the leaked group by its

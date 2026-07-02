@@ -101,6 +101,11 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     public var controlHost: String
     public var controlPort: Int
     public var controlToken: String?
+    /// Additional named control tokens (name to secret), so a shared endpoint
+    /// can tell whose request a start/stop/restart was: each action is logged
+    /// with the token's name. The unnamed `controlToken` still works and audits
+    /// as "default". Any of these also authorizes.
+    public var controlTokens: [String: String]
 
     // Opt-in tokens-per-second tap: a transparent relay in front of the runner.
     // Clients point at metricsProxyPort instead of the runner port; bytes pass
@@ -191,6 +196,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 controlHost: String = "127.0.0.1",
                 controlPort: Int = 11435,
                 controlToken: String? = nil,
+                controlTokens: [String: String] = [:],
                 metricsProxyEnabled: Bool = false,
                 metricsProxyPort: Int = 11436,
                 drainSeconds: Double = 0,
@@ -246,6 +252,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.controlHost = controlHost
         self.controlPort = controlPort
         self.controlToken = controlToken
+        self.controlTokens = controlTokens
         self.metricsProxyEnabled = metricsProxyEnabled
         self.metricsProxyPort = metricsProxyPort
         self.drainSeconds = drainSeconds
@@ -326,6 +333,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         controlHost = try value(.controlHost, defaults.controlHost)
         controlPort = try value(.controlPort, defaults.controlPort)
         controlToken = try c.decodeIfPresent(String.self, forKey: .controlToken)
+        controlTokens = try value(.controlTokens, defaults.controlTokens)
         metricsProxyEnabled = try value(.metricsProxyEnabled, defaults.metricsProxyEnabled)
         metricsProxyPort = try value(.metricsProxyPort, defaults.metricsProxyPort)
         drainSeconds = try value(.drainSeconds, defaults.drainSeconds)
@@ -415,6 +423,14 @@ public struct HearthConfig: Codable, Sendable, Equatable {
             maxPerDay: max(1, rebootMaxPerDay),
             requireProcessFailure: rebootOnlyOnProcessFailure
         )
+    }
+
+    /// The named control tokens as a stable, sorted list (JSON object order is
+    /// not guaranteed), for the endpoint's auth and audit trail.
+    public var namedControlTokens: [ControlToken] {
+        controlTokens
+            .sorted { $0.key < $1.key }
+            .map { ControlToken(name: $0.key, secret: $0.value) }
     }
 
     /// The runner kind these settings select, resolving the `runner` aliases once.

@@ -19,6 +19,7 @@ enum StatusCLI {
           Hearth status [--json]    Print the current supervision status (--json for agents).
           Hearth logs [-n N] [-f]   Show the runner log (last N lines; -f to follow).
           Hearth events [-n N] [-f] Show Hearth's own event history (down, restart, recovered).
+          Hearth events --stats     Summarize the event history: down count, recovery times, causes.
           Hearth metrics            Show memory and thermal history over the retained window.
           Hearth doctor             Check the config and environment for problems.
           Hearth doctor-daemon      Check the root daemon config at /etc/hearth/config.json.
@@ -441,7 +442,46 @@ enum StatusCLI {
     }
 
     static func tailEvents(_ args: [String]) -> Never {
+        if args.contains("--stats") {
+            printEventStats()
+        }
         tailFile(EventLogStore.url.path, missing: "No events recorded yet", args)
+    }
+
+    /// `hearth events --stats`: analytics over the retained event log, so the
+    /// operator can ask "how often did it wedge, and how fast did it come back"
+    /// without eyeballing the tail.
+    private static func printEventStats() -> Never {
+        let content = (try? String(contentsOf: EventLogStore.url, encoding: .utf8)) ?? ""
+        let lines = content.split(whereSeparator: \.isNewline).map(String.init)
+        let summary = EventStats.summarize(lines)
+
+        print("Hearth event stats")
+        if let window = summary.window {
+            let span = StatusText.duration(window.last.timeIntervalSince(window.first))
+            print(row("window", "\(span) of retained history"))
+        } else {
+            print("  no events recorded yet")
+            exit(0)
+        }
+        print(row("down", String(summary.downCount)))
+        print(row("recovered", String(summary.recoveredCount)))
+        print(row("crash loops", String(summary.crashLoopCount)))
+        print(row("maintenance restarts", String(summary.maintenanceRestarts)))
+        if let mean = summary.meanRecovery {
+            print(row("mean recovery", StatusText.duration(mean)))
+        }
+        if let longest = summary.longestRecovery {
+            print(row("longest recovery", StatusText.duration(longest)))
+        }
+        if !summary.byReason.isEmpty {
+            print("\nDown reasons:")
+            for entry in summary.byReason {
+                print("  \(entry.count)x  \(entry.reason)")
+            }
+        }
+        print("\n(The event log is line-capped, so this covers the retained window, not all time.)")
+        exit(0)
     }
 
     private static func tailFile(_ file: String, missing: String, _ args: [String]) -> Never {

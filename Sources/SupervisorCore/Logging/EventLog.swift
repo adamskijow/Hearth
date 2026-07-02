@@ -12,6 +12,12 @@ public enum EventLog {
         "\(timestamp)  \(message)"
     }
 
+    /// The audit message for a control-endpoint command, naming the token that
+    /// made the request, so a shared endpoint has a "who restarted it" trail.
+    public static func auditMessage(command: String, actor: String) -> String {
+        "Control: \(command) requested by token \"\(actor)\""
+    }
+
     /// The last `count` non-empty lines of the log's text, oldest first.
     public static func lastLines(_ content: String, count: Int) -> [String] {
         guard count > 0 else { return [] }

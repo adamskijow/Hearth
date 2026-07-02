@@ -105,6 +105,17 @@ runner log. Unlike the in-memory recent-activity list, this survives a restart, 
 all answer "why did it restart last night." The runner log (`hearth logs`) is the
 runner's own stdout and stderr; the event log is Hearth's view of it.
 
+`hearth events --stats` summarizes that log instead of printing it: how many
+times the runner went down, how often it hit a crash loop, the mean and longest
+recovery time (down to recovered), and a histogram of causes. It covers the
+retained window, since the log is line-capped.
+
+When the control endpoint is shared, give each caller its own named token
+(`controlTokens` in the config) instead of one secret. A start/stop/restart is
+then logged with the token's name, for example `Control: restart requested by
+token "phone-kitchen"`, so the event history shows who acted, not just what
+happened. The unnamed `controlToken` still works and is recorded as `default`.
+
 `hearth doctor` is a preflight check. It validates the config (port ranges, an
 unknown runner or mode, a control endpoint with no token, a control port that
 collides with the runner port, backoff timings that cannot grow) and the environment

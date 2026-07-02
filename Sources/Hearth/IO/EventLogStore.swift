@@ -27,8 +27,18 @@ enum EventLogStore {
     }()
 
     static func append(_ event: SupervisorEvent, at date: Date = Date()) {
+        appendMessage(StatusText.describe(event), at: date)
+    }
+
+    /// Append a control-endpoint audit line (who ran start/stop/restart), so the
+    /// action's actor lands in the same history as the engine's own events.
+    static func appendAudit(command: ControlCommand, actor: String, at date: Date = Date()) {
+        appendMessage(EventLog.auditMessage(command: command.rawValue, actor: actor), at: date)
+    }
+
+    private static func appendMessage(_ message: String, at date: Date) {
         lock.withLock {
-            let line = EventLog.line(timestamp: stamp.string(from: date), message: StatusText.describe(event))
+            let line = EventLog.line(timestamp: stamp.string(from: date), message: message)
             let existing = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
             let updated = EventLog.appended(existing, line: line, maxLines: maxLines)
             SecureFile.write(Data(updated.utf8), to: url)

@@ -79,8 +79,12 @@ struct SupervisorAssembly {
                 port: config.controlPort,
                 token: token,
                 coordinator: coordinator,
+                namedTokens: config.namedControlTokens,
                 metrics: metricsProvider,
-                tokenMetrics: tokenMetrics
+                tokenMetrics: tokenMetrics,
+                onControlAction: { command, actor in
+                    EventLogStore.appendAudit(command: command, actor: actor)
+                }
             )
         }
 

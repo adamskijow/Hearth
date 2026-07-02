@@ -68,6 +68,17 @@ around user restarts.
 - `controlHost: "tailscale"`: a sentinel that resolves to this Mac's tailnet
   IPv4 at bind time (loopback when none is found), so the control endpoint
   follows the tailnet instead of a hand-copied address going stale.
+- Named control tokens (`controlTokens`) with an audit trail: a shared control
+  endpoint can give each caller its own token, and every start/stop/restart is
+  logged with the token's name (`Control: restart requested by token
+  "phone-kitchen"`). The unnamed `controlToken` still works, recorded as
+  `default`. All tokens are checked constant-time, no early out.
+- `hearth events --stats`: analytics over the retained event log (down count,
+  crash loops, mean and longest recovery time, and a cause histogram).
+- Every status surface now shows the data the feature tiers produce: the phone
+  page and `hearth status` show busy, the last failure category, and tokens per
+  second; `/status` carries `tokensPerSecond` and `generationTokensTotal`; the
+  menu shows a throughput line when the metrics proxy is on.
 - Opt-in `alertsIncludeLogTail`: down and failing alerts can carry the
   runner's last log lines (bounded, sanitized) so the alert itself says why.
   Off by default because log lines are runner content and alerts leave the

@@ -74,6 +74,28 @@ struct ControlRoutingTests {
         #expect(plainObject["busy"] as? Bool == false)
     }
 
+    @Test func namedTokensAuthorizeAndIdentifyTheActor() {
+        let named = [ControlToken(name: "phone-kitchen", secret: "kitchen-secret-long-enough"),
+                     ControlToken(name: "laptop", secret: "laptop-secret-long-enough")]
+        // The primary token authorizes as "default".
+        #expect(ControlRouting.authenticate(bearer(token), token: token, namedTokens: named) == "default")
+        // A named token authorizes as its name.
+        #expect(ControlRouting.authenticate(bearer("laptop-secret-long-enough"), token: token, namedTokens: named) == "laptop")
+        #expect(ControlRouting.authenticate(bearer("phone-kitchen"), token: token, namedTokens: named) == nil)  // the NAME is not the secret
+        // A wrong secret authorizes as nothing.
+        #expect(ControlRouting.authenticate(bearer("nope"), token: token, namedTokens: named) == nil)
+        #expect(ControlRouting.authenticate(nil, token: token, namedTokens: named) == nil)
+        // isAuthorized agrees, and a named token opens the perform routes.
+        #expect(ControlRouting.isAuthorized(bearer("laptop-secret-long-enough"), token: token, namedTokens: named))
+        #expect(ControlRouting.earlyOutcome(method: "POST", path: "/restart",
+            authorization: bearer("laptop-secret-long-enough"), token: token, namedTokens: named) == .perform(.restart))
+    }
+
+    @Test func auditMessageNamesCommandAndActor() {
+        #expect(EventLog.auditMessage(command: "restart", actor: "phone-kitchen")
+                == "Control: restart requested by token \"phone-kitchen\"")
+    }
+
     @Test func statusPageRendersBusyAndThroughput() {
         let page = String(decoding: Data(ControlStatusPage.html.utf8), as: UTF8.self)
         #expect(page.contains("(busy)"))

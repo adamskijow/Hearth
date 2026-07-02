@@ -23,9 +23,13 @@ final class ControlServer: @unchecked Sendable {
 
     private let listener: NWListener
     private let token: String
+    private let namedTokens: [ControlToken]
     private let coordinator: SupervisionCoordinator
     private let metrics: MetricsProviding?
     private let tokenMetrics: TokenMetricsStore?
+    /// Called when an authenticated start/stop/restart is performed, with the
+    /// command and the name of the token that authorized it, for the audit log.
+    private let onControlAction: (@Sendable (ControlCommand, String) -> Void)?
     private let queue = DispatchQueue(label: "com.hearth.control")
     /// Set once the server is torn down (a config reload replaces it). A request
     /// accepted before the teardown must not drive the now-replaced coordinator.
@@ -34,7 +38,9 @@ final class ControlServer: @unchecked Sendable {
     private var isStopped: Bool { stoppedLock.withLock { stoppedFlag } }
 
     init?(host: String, port: Int, token: String, coordinator: SupervisionCoordinator,
-          metrics: MetricsProviding? = nil, tokenMetrics: TokenMetricsStore? = nil) {
+          namedTokens: [ControlToken] = [],
+          metrics: MetricsProviding? = nil, tokenMetrics: TokenMetricsStore? = nil,
+          onControlAction: (@Sendable (ControlCommand, String) -> Void)? = nil) {
         guard !token.isEmpty,
               port > 0, port <= 65_535,
               let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else { return nil }
@@ -56,9 +62,11 @@ final class ControlServer: @unchecked Sendable {
             return nil
         }
         self.token = token
+        self.namedTokens = namedTokens
         self.coordinator = coordinator
         self.metrics = metrics
         self.tokenMetrics = tokenMetrics
+        self.onControlAction = onControlAction
     }
 
     func start() {
@@ -105,6 +113,7 @@ final class ControlServer: @unchecked Sendable {
 
     private func respond(_ box: ConnectionBox, _ request: HTTPRequestHead) {
         let token = self.token
+        let namedTokens = self.namedTokens
         let coordinator = self.coordinator
         let metrics = self.metrics
         Task { [weak self] in
@@ -115,7 +124,7 @@ final class ControlServer: @unchecked Sendable {
             let outcome: ControlOutcome
             if let early = ControlRouting.earlyOutcome(
                 method: request.method, path: request.path,
-                authorization: authorization, token: token) {
+                authorization: authorization, token: token, namedTokens: namedTokens) {
                 outcome = early
             } else {
                 let state = await coordinator.status()
@@ -124,6 +133,7 @@ final class ControlServer: @unchecked Sendable {
                     path: request.path,
                     authorization: authorization,
                     token: token,
+                    namedTokens: namedTokens,
                     state: state,
                     now: Date(),
                     metrics: metrics?.sample(),
@@ -159,6 +169,12 @@ final class ControlServer: @unchecked Sendable {
                     status = 503
                     body = Self.errorJSON("server reloading")
                 } else {
+                    // Record who asked before performing it, so the audit trail
+                    // is written even if the command's own event is delayed.
+                    if let actor = ControlRouting.authenticate(
+                        authorization, token: token, namedTokens: namedTokens) {
+                        self?.onControlAction?(command, actor)
+                    }
                     await coordinator.perform(command)
                     status = 202
                     body = Data(#"{"ok":true,"command":"\#(command.rawValue)"}"#.utf8)

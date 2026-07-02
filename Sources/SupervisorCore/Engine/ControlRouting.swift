@@ -10,6 +10,17 @@ public enum ControlCommand: String, Sendable, Equatable {
     case restart
 }
 
+/// A named control token, so a shared endpoint can tell whose request a
+/// start/stop/restart was (the audit trail) instead of one anonymous secret.
+public struct ControlToken: Sendable, Equatable {
+    public let name: String
+    public let secret: String
+    public init(name: String, secret: String) {
+        self.name = name
+        self.secret = secret
+    }
+}
+
 /// What the transport should do with a control request. The routing and auth
 /// decision is pure and lives here so it is unit testable; the actual sockets and
 /// the engine calls live in the app.
@@ -36,11 +47,13 @@ public enum ControlRouting {
                               path: String,
                               authorization: String?,
                               token: String,
+                              namedTokens: [ControlToken] = [],
                               state: SupervisorState,
                               now: Date,
                               metrics: SystemMetrics? = nil,
                               tokens: TokenMetricsStore.Snapshot? = nil) -> ControlOutcome {
-        if let early = earlyOutcome(method: method, path: path, authorization: authorization, token: token) {
+        if let early = earlyOutcome(method: method, path: path, authorization: authorization,
+                                    token: token, namedTokens: namedTokens) {
             return early
         }
         // Only authenticated reads that need live state and a metrics sample reach
@@ -59,7 +72,8 @@ public enum ControlRouting {
     public static func earlyOutcome(method: String,
                                     path: String,
                                     authorization: String?,
-                                    token: String) -> ControlOutcome? {
+                                    token: String,
+                                    namedTokens: [ControlToken] = []) -> ControlOutcome? {
         // Unauthenticated liveness: confirms Hearth itself is up, for an uptime
         // monitor or reverse proxy. It reveals nothing about the runner's state,
         // so it does not require the token.
@@ -72,7 +86,9 @@ public enum ControlRouting {
         if method.uppercased() == "GET", trimmedPath(path) == "/" {
             return .html(Data(ControlStatusPage.html.utf8))
         }
-        guard isAuthorized(authorization, token: token) else { return .unauthorized }
+        guard authenticate(authorization, token: token, namedTokens: namedTokens) != nil else {
+            return .unauthorized
+        }
         // Prometheus metrics: authenticated and needs live state, so defer to
         // handle() rather than answering here.
         if method.uppercased() == "GET", trimmedPath(path) == "/metrics" { return nil }
@@ -114,9 +130,28 @@ public enum ControlRouting {
 
     /// True only when the Authorization header is exactly "Bearer <token>" for a
     /// non empty configured token, compared without an early out on mismatch.
-    public static func isAuthorized(_ authorization: String?, token: String) -> Bool {
-        guard !token.isEmpty, let authorization else { return false }
-        return constantTimeEquals(authorization, "Bearer \(token)")
+    public static func isAuthorized(_ authorization: String?, token: String,
+                                    namedTokens: [ControlToken] = []) -> Bool {
+        authenticate(authorization, token: token, namedTokens: namedTokens) != nil
+    }
+
+    /// The name of the token that authorizes this request, or nil for none. The
+    /// primary (unnamed) token authorizes as "default". Every candidate is
+    /// checked with no early out, so response timing does not reveal which
+    /// token, or how many, matched. This name is the audit-trail actor.
+    public static func authenticate(_ authorization: String?, token: String,
+                                    namedTokens: [ControlToken] = []) -> String? {
+        guard let authorization else { return nil }
+        var matched: String?
+        if !token.isEmpty, constantTimeEquals(authorization, "Bearer \(token)") {
+            matched = "default"
+        }
+        for named in namedTokens where !named.secret.isEmpty {
+            if constantTimeEquals(authorization, "Bearer \(named.secret)") {
+                matched = named.name
+            }
+        }
+        return matched
     }
 
     /// A compact status document for the phone.

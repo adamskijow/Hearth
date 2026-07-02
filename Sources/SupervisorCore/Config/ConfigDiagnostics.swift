@@ -99,6 +99,14 @@ public enum ConfigDiagnostics {
             } else if token.localizedCaseInsensitiveContains("CHANGE-ME") || token.count < 16 {
                 issues.append(.init(.warning, "Control token is the placeholder or shorter than 16 characters; the start/stop/restart surface is only as strong as this token. Use a long, unguessable secret (Preferences has a Generate button)."))
             }
+            for (name, secret) in config.controlTokens {
+                if name.lowercased() == "default" {
+                    issues.append(.init(.warning, "controlTokens has an entry named \"default\", which collides with the audit name of the primary controlToken; rename it so the audit trail stays unambiguous."))
+                }
+                if secret.localizedCaseInsensitiveContains("CHANGE-ME") || secret.count < 16 {
+                    issues.append(.init(.warning, "Named control token \"\(name)\" is the placeholder or shorter than 16 characters; every token is a full start/stop/restart key, so use a long, unguessable secret."))
+                }
+            }
             if !isValidPort(config.controlPort) {
                 issues.append(.init(.error, "Control port \(config.controlPort) is out of range (1-65535)."))
             }

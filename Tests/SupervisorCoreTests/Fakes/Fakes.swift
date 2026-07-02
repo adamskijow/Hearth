@@ -126,7 +126,16 @@ final class FakeHTTPClient: HTTPClient, @unchecked Sendable {
     }
 
     func post(_ url: URL, body: Data, timeout: TimeInterval) async -> HTTPOutcome {
-        lock.withLock { outcomes[url.absoluteString] ?? _default }
+        lock.withLock {
+            _postedURLs.append(url.absoluteString)
+            return outcomes[url.absoluteString] ?? _default
+        }
+    }
+
+    private var _postedURLs: [String] = []
+    /// How many POSTs have been sent to `url`, for asserting on warm-up traffic.
+    func postCount(to url: URL) -> Int {
+        lock.withLock { _postedURLs.filter { $0 == url.absoluteString }.count }
     }
 }
 

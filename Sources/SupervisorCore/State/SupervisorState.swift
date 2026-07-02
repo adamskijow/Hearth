@@ -53,6 +53,16 @@ public struct SupervisorState: Sendable, Equatable {
     public var nextRetryAt: Date?
     /// When the phase last changed.
     public var lastTransition: Date
+    /// Whether the last probe answered busy (a full queue): healthy and working,
+    /// but a new request would wait.
+    public var busy: Bool
+    /// Bounded category of the most recent failure (wedged, crash, oom, signal),
+    /// for metrics labels. Nil until something has failed this session.
+    public var lastDownCategory: String?
+    /// Whether the optional deep readiness probe is configured.
+    public var deepProbeConfigured: Bool
+    /// When the deep probe last failed, if it ever has this session.
+    public var deepProbeLastFailedAt: Date?
 
     public init(phase: SupervisorPhase = .stopped,
                 residentModels: [ResidentModel] = [],
@@ -63,7 +73,11 @@ public struct SupervisorState: Sendable, Equatable {
                 failingSince: Date? = nil,
                 nextRetryAt: Date? = nil,
                 lastTransition: Date = Date(timeIntervalSince1970: 0),
-                failingStreakHadProcessExit: Bool = false) {
+                failingStreakHadProcessExit: Bool = false,
+                busy: Bool = false,
+                lastDownCategory: String? = nil,
+                deepProbeConfigured: Bool = false,
+                deepProbeLastFailedAt: Date? = nil) {
         self.phase = phase
         self.residentModels = residentModels
         self.healthySince = healthySince
@@ -74,6 +88,10 @@ public struct SupervisorState: Sendable, Equatable {
         self.nextRetryAt = nextRetryAt
         self.lastTransition = lastTransition
         self.failingStreakHadProcessExit = failingStreakHadProcessExit
+        self.busy = busy
+        self.lastDownCategory = lastDownCategory
+        self.deepProbeConfigured = deepProbeConfigured
+        self.deepProbeLastFailedAt = deepProbeLastFailedAt
     }
 
     /// Uptime of the current healthy streak as of `reference`. Nil if not

@@ -8,6 +8,26 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## Unreleased
 
 ### Added
+- Model warm-up after restart (`warmModelsAfterRestart`): the models that were
+  resident before a restart are loaded again once the runner is healthy, so
+  recovery does not hand the next request a multi-gigabyte cold start. A model
+  that fails to load triggers a "Models not restored" alert.
+- Busy is a first-class state: a runner answering 503 (a full queue) is
+  serving, not wedged. It is never restarted for being busy, the menu and
+  `hearth status` show "Healthy (busy)", and `/status` carries a `busy` field.
+- A dead-man's-switch heartbeat (`heartbeatURL`): while the runner is healthy,
+  Hearth GETs an Uptime Kuma push monitor or healthchecks.io URL on an
+  interval, so the dashboard you already run does the alerting when the pulse
+  stops.
+- A daily maintenance window (`maintenanceWindow: "HH:MM-HH:MM"`): scheduled
+  maintenance restarts wait for the window instead of landing mid-afternoon.
+- Pause Notifications (menu, or `notificationsPaused`): vacation mode that
+  silences every channel without touching its settings.
+- Metrics grew bounded labels: the active phase, the last failure category
+  (`wedged`, `crash`, `oom`, `signal`), busy, and deep-probe status are now in
+  `/metrics` and `/status` for Grafana and friends.
+- The FAQ documents running two runners with two Hearth instances (the
+  single-instance lock is keyed to the config file).
 - A beginner-oriented FAQ (`docs/faq.md`): is Hearth for me, which mode do I
   want, how do I know it is working, does my data leave the machine, and how to
   uninstall. Troubleshooting gained entries for the crash loop, spawn failures,

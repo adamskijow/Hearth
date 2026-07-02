@@ -23,6 +23,10 @@ public actor SupervisorEngine {
     /// The optional deep readiness probe (a periodic real inference), or nil when
     /// only the shallow `/api/version` probe is used.
     private let deepProbe: DeepProbeConfig?
+    /// When true, the models that were resident before a restart are loaded
+    /// again (a one-token generation each) once the runner is healthy, so
+    /// recovery does not hand the next client a multi-gigabyte cold start.
+    private let warmModels: Bool
 
     private var machine: SupervisorMachine
     private var currentHandle: ProcessHandleID?
@@ -48,6 +52,15 @@ public actor SupervisorEngine {
     /// Ties each timeout task to its own wait, so a timer that outlives a nudge
     /// cannot resume the loop's NEXT wait early.
     private var sleepGeneration = 0
+    /// Whether the last probe answered busy (a full queue), for the status line.
+    private var runnerBusy = false
+    /// When the deep probe last failed, surfaced in status and metrics.
+    private var lastDeepProbeFailedAt: Date?
+    /// The models resident before the most recent teardown, captured at the kill
+    /// or down transition so a warm-up after recovery can restore them.
+    private var modelsToRestore: [String] = []
+    /// A cold model load is legitimately slow; give each warm-up request minutes.
+    static let warmupTimeout: TimeInterval = 180
 
     /// Continuous published state. One consumer; the app reads `snapshot()` for
     /// the current value before subscribing.
@@ -65,7 +78,8 @@ public actor SupervisorEngine {
                 notifier: Notifier,
                 policy: RestartPolicyConfig,
                 managed: Bool = true,
-                deepProbe: DeepProbeConfig? = nil) {
+                deepProbe: DeepProbeConfig? = nil,
+                warmModels: Bool = false) {
         self.clock = clock
         self.processes = processes
         self.http = http
@@ -75,6 +89,7 @@ public actor SupervisorEngine {
         self.policy = policy
         self.managed = managed
         self.deepProbe = deepProbe
+        self.warmModels = warmModels
         self.machine = SupervisorMachine(config: policy)
 
         let (stateStream, stateCont) = AsyncStream.makeStream(of: SupervisorState.self)
@@ -94,6 +109,9 @@ public actor SupervisorEngine {
     public func start() async {
         guard machine.phase == .stopped else { return }
         controlGeneration &+= 1
+        // A fresh session warms nothing: whatever was resident before an
+        // explicit stop is stale intent, not a recovery to hide.
+        modelsToRestore = []
         let output = machine.start(now: clock.now)
         await apply(output, models: nil)
         nudgeLoop()
@@ -178,14 +196,18 @@ public actor SupervisorEngine {
             // it has been probed (skipping startup grace and firing a spurious
             // recovery). Re-step immediately instead.
             if machine.phase == .stopped || generation != controlGeneration { return 0 }
+            runnerBusy = report.readiness == .busy
             let output = machine.observe(report, now: now)
-            await apply(output, models: report.models)
+            // A busy probe carries no model list (the fetch would queue behind
+            // the very work making it busy); keep the current one.
+            await apply(output, models: runnerBusy ? nil : report.models)
             // Proactive maintenance restart, both off unless configured: cycle a
             // long-healthy managed runner to clear the memory creep and VRAM
             // fragmentation that degrade a 24/7 runner, or adopt a runner binary
             // that was upgraded on disk rather than serving the old one forever.
             if managed, machine.phase == .healthy,
-               policy.maintenanceRestartDue(healthySince: machine.healthySince, now: now) || binaryWasUpgraded() {
+               policy.maintenanceRestartDue(healthySince: machine.healthySince, now: now,
+                                            minuteOfDay: Self.minuteOfDay(of: now)) || binaryWasUpgraded() {
                 let maintenance = machine.maintenanceRestart(now: now)
                 await apply(maintenance, models: nil)
                 return maintenance.nextWait
@@ -215,12 +237,13 @@ public actor SupervisorEngine {
                 readiness = .timedOut   // the HTTP server answers, but inference is wedged
             }
             guard readiness == .ready else {
+                // Busy (a full queue) is serving: the runner is doing its job.
                 // A hang (or failed deep probe) means something is still there
                 // and stuck: report it alive so the down reason reads as wedged
                 // rather than an invented exit. Kill and spawn are skipped in
                 // attached mode either way. Anything else (refused, error) means
                 // the runner is gone as far as a watcher can tell.
-                if readiness == .timedOut {
+                if readiness == .busy || readiness == .timedOut {
                     return HealthReport(isAlive: true, readiness: readiness, exitReason: .running)
                 }
                 return HealthReport(isAlive: false, readiness: readiness, exitReason: .unknown)
@@ -281,7 +304,15 @@ public actor SupervisorEngine {
             return true
         }
         lastDeepProbeAt = nil
+        lastDeepProbeFailedAt = now
         return false
+    }
+
+    /// Minutes since local midnight, for the maintenance window check. Uses the
+    /// system calendar because the window is a human wall-clock intent.
+    private static func minuteOfDay(of date: Date) -> Int {
+        let components = Calendar.current.dateComponents([.hour, .minute], from: date)
+        return (components.hour ?? 0) * 60 + (components.minute ?? 0)
     }
 
     // MARK: - Effect interpretation
@@ -293,6 +324,11 @@ public actor SupervisorEngine {
                 // Attached mode never spawns; it monitors a runner it does not own.
                 if managed { spawnChild() }
             case .kill:
+                // The teardown is where the resident set is last trustworthy;
+                // capture it so the post-recovery warm-up can restore it.
+                if !currentModels.isEmpty {
+                    modelsToRestore = currentModels.map(\.name)
+                }
                 if managed { killChild() }
             case .holdPower:
                 power.hold()
@@ -349,10 +385,48 @@ public actor SupervisorEngine {
     }
 
     private func handleEvent(_ event: SupervisorEvent) async {
+        switch event {
+        case .down:
+            // A crash can land without a kill effect; snapshot here too so the
+            // warm-up knows what was resident before the failure.
+            if !currentModels.isEmpty {
+                modelsToRestore = currentModels.map(\.name)
+            }
+        case .recovered, .becameHealthy:
+            startWarmupIfNeeded()
+        default:
+            break
+        }
         eventContinuation.yield(event)
         if event.isNotable, let notification = Self.notification(for: event) {
             await notifier.notify(notification)
         }
+    }
+
+    /// Load the models that were resident before the restart, off the loop (a
+    /// cold load takes minutes and supervision must keep probing). Each model
+    /// gets a one-token generation, the same request the deep probe uses; the
+    /// runner's own keep-alive policy then owns residency, as always.
+    private func startWarmupIfNeeded() {
+        guard warmModels, !modelsToRestore.isEmpty else { return }
+        let requests: [(String, DeepProbeRequest)] = modelsToRestore.compactMap { model in
+            runner.deepReadinessRequest(model: model).map { (model, $0) }
+        }
+        modelsToRestore = []
+        guard !requests.isEmpty else { return }
+        let http = self.http
+        Task.detached { [weak self] in
+            var missing: [String] = []
+            for (model, request) in requests {
+                let outcome = await http.post(request.url, body: request.body, timeout: Self.warmupTimeout)
+                if case .ok = outcome {} else { missing.append(model) }
+            }
+            await self?.warmupFinished(missing: missing)
+        }
+    }
+
+    private func warmupFinished(missing: [String]) async {
+        await handleEvent(.warmupFinished(missing: missing))
     }
 
     private func publishState() {
@@ -378,7 +452,11 @@ public actor SupervisorEngine {
             failingSince: machine.failingSince,
             nextRetryAt: pendingRetry,
             lastTransition: machine.lastTransition,
-            failingStreakHadProcessExit: machine.failingStreakHadProcessExit
+            failingStreakHadProcessExit: machine.failingStreakHadProcessExit,
+            busy: runnerBusy && machine.phase == .healthy,
+            lastDownCategory: machine.lastDownCategory,
+            deepProbeConfigured: deepProbe != nil,
+            deepProbeLastFailedAt: lastDeepProbeFailedAt
         )
         current = state
         stateContinuation.yield(state)
@@ -408,6 +486,13 @@ public actor SupervisorEngine {
                 level: .critical,
                 title: "Runner failing",
                 body: "The runner keeps failing: \(count) times in \(Int(window))s. Hearth is still retrying, more slowly. The runner log shows why (Open Logs in the Hearth menu, or `hearth logs`); `hearth doctor` checks the setup.",
+                event: event
+            )
+        case .warmupFinished(let missing) where !missing.isEmpty:
+            return HearthNotification(
+                level: .warning,
+                title: "Models not restored",
+                body: "After the restart, \(missing.joined(separator: ", ")) could not be loaded again; the next request will pay the cold start. The runner log shows why (`hearth logs`).",
                 event: event
             )
         default:

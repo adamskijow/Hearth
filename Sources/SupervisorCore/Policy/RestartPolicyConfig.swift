@@ -2,6 +2,47 @@
 
 import Foundation
 
+/// A daily wall-clock window ("HH:MM-HH:MM") during which scheduled maintenance
+/// restarts may fire, so a routine cycle never lands mid-afternoon while people
+/// are using the runner. Spans midnight when the end is before the start
+/// (23:00-06:00). Pure and testable; the engine supplies the current minute.
+public struct MaintenanceWindow: Sendable, Equatable {
+    public let startMinute: Int
+    public let endMinute: Int
+
+    public init(startMinute: Int, endMinute: Int) {
+        self.startMinute = startMinute
+        self.endMinute = endMinute
+    }
+
+    /// Parse "HH:MM-HH:MM" (24-hour). Nil for anything else, including a window
+    /// whose start equals its end, which would never fire.
+    public static func parse(_ raw: String) -> MaintenanceWindow? {
+        let parts = raw.trimmingCharacters(in: .whitespaces).split(separator: "-")
+        guard parts.count == 2,
+              let start = minuteOfDay(String(parts[0])),
+              let end = minuteOfDay(String(parts[1])),
+              start != end else { return nil }
+        return MaintenanceWindow(startMinute: start, endMinute: end)
+    }
+
+    private static func minuteOfDay(_ raw: String) -> Int? {
+        let pieces = raw.trimmingCharacters(in: .whitespaces).split(separator: ":")
+        guard pieces.count == 2,
+              let hour = Int(pieces[0]), (0...23).contains(hour),
+              let minute = Int(pieces[1]), (0...59).contains(minute) else { return nil }
+        return hour * 60 + minute
+    }
+
+    public func contains(minuteOfDay minute: Int) -> Bool {
+        if startMinute < endMinute {
+            return minute >= startMinute && minute < endMinute
+        }
+        // Spans midnight: inside when after the start or before the end.
+        return minute >= startMinute || minute < endMinute
+    }
+}
+
 /// Every timing knob the decision logic needs, in one data driven place. No
 /// magic numbers live in the machine or the engine; they all come from here, and
 /// here is populated from the on disk config.
@@ -36,6 +77,9 @@ public struct RestartPolicyConfig: Sendable, Equatable {
     /// supervised runner adopts the new version instead of serving the old one
     /// forever. Off by default.
     public var restartOnBinaryChange: Bool
+    /// When set, scheduled maintenance restarts fire only inside this daily
+    /// wall-clock window; a due restart waits for the window to open.
+    public var maintenanceWindow: MaintenanceWindow?
 
     public init(probeInterval: TimeInterval = 5,
                 probeTimeout: TimeInterval = 2,
@@ -48,7 +92,8 @@ public struct RestartPolicyConfig: Sendable, Equatable {
                 crashLoopWindow: TimeInterval = 60,
                 failingProbeInterval: TimeInterval = 30,
                 maintenanceRestartInterval: TimeInterval = 0,
-                restartOnBinaryChange: Bool = false) {
+                restartOnBinaryChange: Bool = false,
+                maintenanceWindow: MaintenanceWindow? = nil) {
         self.probeInterval = probeInterval
         self.probeTimeout = probeTimeout
         self.startupGrace = startupGrace
@@ -61,13 +106,20 @@ public struct RestartPolicyConfig: Sendable, Equatable {
         self.failingProbeInterval = failingProbeInterval
         self.maintenanceRestartInterval = maintenanceRestartInterval
         self.restartOnBinaryChange = restartOnBinaryChange
+        self.maintenanceWindow = maintenanceWindow
     }
 
     /// Whether a periodic maintenance restart is due for a runner healthy since
     /// `healthySince`, as of `now`. Disabled when the interval is not positive.
-    public func maintenanceRestartDue(healthySince: Date?, now: Date) -> Bool {
+    /// With a maintenance window configured, a due restart waits until the
+    /// current wall-clock minute (supplied by the caller) is inside the window.
+    public func maintenanceRestartDue(healthySince: Date?, now: Date, minuteOfDay: Int? = nil) -> Bool {
         guard maintenanceRestartInterval > 0, let healthySince else { return false }
-        return now.timeIntervalSince(healthySince) >= maintenanceRestartInterval
+        guard now.timeIntervalSince(healthySince) >= maintenanceRestartInterval else { return false }
+        if let window = maintenanceWindow, let minuteOfDay {
+            return window.contains(minuteOfDay: minuteOfDay)
+        }
+        return true
     }
 
     /// The backoff for the nth consecutive failure (n starting at 1), capped.

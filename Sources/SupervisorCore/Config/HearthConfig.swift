@@ -38,6 +38,14 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     /// Cycle a long-healthy runner this often (in hours) to clear memory creep.
     /// Zero disables it; a common value for a 24/7 server is 24.
     public var maintenanceRestartHours: Double
+    /// Optional daily window ("HH:MM-HH:MM", 24-hour local time) during which
+    /// scheduled maintenance restarts may fire; a due restart waits for it.
+    /// Spans midnight when the end is before the start. Nil means any time.
+    public var maintenanceWindow: String?
+    /// After a restart, load the models that were resident before it (a
+    /// one-token generation each), so recovery does not hand the next request a
+    /// multi-gigabyte cold start. Off by default: it does GPU work unprompted.
+    public var warmModelsAfterRestart: Bool
     /// Restart the runner when its binary changes on disk (an upgrade), so a
     /// managed runner adopts the new version instead of serving the old one. Off
     /// by default.
@@ -62,6 +70,15 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     public var memoryAlertPercent: Int
     /// Alert when the Mac's thermal state is serious or critical.
     public var thermalAlerts: Bool
+    /// Silence every notification channel (local, ntfy, webhook) without
+    /// touching their configuration: vacation mode. Events are still logged.
+    public var notificationsPaused: Bool
+    /// Optional dead-man's-switch heartbeat: while the runner is healthy, GET
+    /// this URL on an interval (an Uptime Kuma push monitor or a
+    /// healthchecks.io check). Silence then means down, and the monitor you
+    /// already run does the alerting. Nil disables it.
+    public var heartbeatURL: String?
+    public var heartbeatIntervalSeconds: Double
 
     // Control endpoint (phone side remote control)
     public var controlEnabled: Bool
@@ -117,6 +134,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 crashLoopWindowSeconds: Double = 60,
                 failingProbeIntervalSeconds: Double = 30,
                 maintenanceRestartHours: Double = 0,
+                maintenanceWindow: String? = nil,
+                warmModelsAfterRestart: Bool = false,
                 restartOnBinaryChange: Bool = false,
                 probeModel: String? = nil,
                 deepProbeIntervalSeconds: Double = 60,
@@ -127,6 +146,9 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 localNotifications: Bool = true,
                 memoryAlertPercent: Int = 90,
                 thermalAlerts: Bool = true,
+                notificationsPaused: Bool = false,
+                heartbeatURL: String? = nil,
+                heartbeatIntervalSeconds: Double = 60,
                 controlEnabled: Bool = false,
                 controlHost: String = "127.0.0.1",
                 controlPort: Int = 11435,
@@ -158,6 +180,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.crashLoopWindowSeconds = crashLoopWindowSeconds
         self.failingProbeIntervalSeconds = failingProbeIntervalSeconds
         self.maintenanceRestartHours = maintenanceRestartHours
+        self.maintenanceWindow = maintenanceWindow
+        self.warmModelsAfterRestart = warmModelsAfterRestart
         self.restartOnBinaryChange = restartOnBinaryChange
         self.probeModel = probeModel
         self.deepProbeIntervalSeconds = deepProbeIntervalSeconds
@@ -168,6 +192,9 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.localNotifications = localNotifications
         self.memoryAlertPercent = memoryAlertPercent
         self.thermalAlerts = thermalAlerts
+        self.notificationsPaused = notificationsPaused
+        self.heartbeatURL = heartbeatURL
+        self.heartbeatIntervalSeconds = heartbeatIntervalSeconds
         self.controlEnabled = controlEnabled
         self.controlHost = controlHost
         self.controlPort = controlPort
@@ -220,6 +247,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         crashLoopWindowSeconds = try value(.crashLoopWindowSeconds, defaults.crashLoopWindowSeconds)
         failingProbeIntervalSeconds = try value(.failingProbeIntervalSeconds, defaults.failingProbeIntervalSeconds)
         maintenanceRestartHours = try value(.maintenanceRestartHours, defaults.maintenanceRestartHours)
+        maintenanceWindow = try c.decodeIfPresent(String.self, forKey: .maintenanceWindow)
+        warmModelsAfterRestart = try value(.warmModelsAfterRestart, defaults.warmModelsAfterRestart)
         restartOnBinaryChange = try value(.restartOnBinaryChange, defaults.restartOnBinaryChange)
         probeModel = try c.decodeIfPresent(String.self, forKey: .probeModel)
         deepProbeIntervalSeconds = try value(.deepProbeIntervalSeconds, defaults.deepProbeIntervalSeconds)
@@ -230,6 +259,9 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         localNotifications = try value(.localNotifications, defaults.localNotifications)
         memoryAlertPercent = try value(.memoryAlertPercent, defaults.memoryAlertPercent)
         thermalAlerts = try value(.thermalAlerts, defaults.thermalAlerts)
+        notificationsPaused = try value(.notificationsPaused, defaults.notificationsPaused)
+        heartbeatURL = try c.decodeIfPresent(String.self, forKey: .heartbeatURL)
+        heartbeatIntervalSeconds = try value(.heartbeatIntervalSeconds, defaults.heartbeatIntervalSeconds)
         controlEnabled = try value(.controlEnabled, defaults.controlEnabled)
         controlHost = try value(.controlHost, defaults.controlHost)
         controlPort = try value(.controlPort, defaults.controlPort)
@@ -283,7 +315,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
             // Enabled values are floored at one hour so a tiny setting cannot make
             // Hearth restart the runner in a tight loop.
             maintenanceRestartInterval: maintenanceRestartHours <= 0 ? 0 : max(3600, maintenanceRestartHours * 3600),
-            restartOnBinaryChange: restartOnBinaryChange
+            restartOnBinaryChange: restartOnBinaryChange,
+            maintenanceWindow: maintenanceWindow.flatMap(MaintenanceWindow.parse)
         )
     }
 

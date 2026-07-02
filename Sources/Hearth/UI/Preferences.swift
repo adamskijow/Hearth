@@ -187,6 +187,11 @@ struct PreferencesView: View {
             TextField("Webhook URL", text: optional(\.webhookURL),
                       prompt: Text("https://your-server/hook (optional)"))
                 .help("Hearth POSTs a small JSON status body here on each event, to wire into your own automation. Leave blank to skip.")
+            TextField("Heartbeat URL", text: optional(\.heartbeatURL),
+                      prompt: Text("Uptime Kuma push or healthchecks.io URL (optional)"))
+                .help("While the runner is healthy, Hearth pings this URL on an interval; silence then means down, and the monitor you already run does the alerting.")
+            Toggle("Pause all notifications", isOn: $model.config.notificationsPaused)
+                .help("Vacation mode: silence local, ntfy, and webhook alerts without clearing their settings. Events are still logged.")
             Button("Send test notification") { sendTest() }
         }
     }
@@ -258,6 +263,11 @@ struct PreferencesView: View {
                     .help("Optional: periodically generate one token with this model (pick a small one you have pulled) to catch a runner whose API answers while the model itself is stuck.")
                 number("Maintenance restart hours", $model.config.maintenanceRestartHours,
                        help: "Optional: restart a long-healthy Hearth-started runner this often. 0 disables it.")
+                TextField("Maintenance window", text: optional(\.maintenanceWindow),
+                          prompt: Text("optional, e.g. 03:00-06:00"))
+                    .help("When set, scheduled maintenance restarts wait for this daily window (24-hour local time), so a routine cycle never lands while people are using the runner.")
+                Toggle("Warm models after restart", isOn: $model.config.warmModelsAfterRestart)
+                    .help("After a restart, load the models that were resident before it, so the next request does not pay a multi-gigabyte cold start. Does GPU work right after recovery.")
                 Toggle("Restart on binary change", isOn: $model.config.restartOnBinaryChange)
                     .help("Restart a Hearth-started runner after its program file changes on disk, for example after a Homebrew upgrade.")
                 TextField("Runner user (root daemon)", text: optional(\.runnerUser),

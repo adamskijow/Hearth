@@ -14,6 +14,7 @@ struct SupervisorAssembly {
     let runner: any Runner
     let notifier: Notifier
     let pressureMonitor: PressureMonitor
+    let heartbeat: HeartbeatPinger?
 
     /// `includeLocalNotifications` is false in headless mode, where there is no
     /// GUI session for the local Notification Center to reach.
@@ -38,7 +39,8 @@ struct SupervisorAssembly {
             notifier: notifier,
             policy: config.policy(),
             managed: config.isManaged,
-            deepProbe: config.deepProbe()
+            deepProbe: config.deepProbe(),
+            warmModels: config.warmModelsAfterRestart
         )
         let coordinator = SupervisionCoordinator(engine: engine)
 
@@ -63,6 +65,13 @@ struct SupervisorAssembly {
             onSample: { sample in metricsHistory.record(sample) }
         )
 
+        // The dead-man's-switch pulse: only while the runner is actually healthy.
+        let heartbeat = HeartbeatPinger(
+            urlString: config.heartbeatURL,
+            intervalSeconds: config.heartbeatIntervalSeconds,
+            isHealthy: { [weak engine] in await engine?.snapshot().phase == .healthy }
+        )
+
         return SupervisorAssembly(
             engine: engine,
             coordinator: coordinator,
@@ -71,11 +80,15 @@ struct SupervisorAssembly {
             processController: processController,
             runner: runner,
             notifier: notifier,
-            pressureMonitor: pressureMonitor
+            pressureMonitor: pressureMonitor,
+            heartbeat: heartbeat
         )
     }
 
     private static func makeNotifier(config: HearthConfig, includeLocal: Bool) -> Notifier {
+        // Vacation mode: every channel quiet, configuration untouched, events
+        // still logged. The pause is one flag, not three cleared settings.
+        guard !config.notificationsPaused else { return CompositeNotifier([]) }
         var notifiers: [Notifier] = []
         if includeLocal, config.localNotifications {
             notifiers.append(LocalNotifier())

@@ -98,6 +98,16 @@ struct StatusTextTests {
         #expect(StatusText.describe(.recovered) == "Recovered")
         #expect(StatusText.describe(.enteredFailing(restartsInWindow: 3, window: 60)) == "Failing: 3 failures within 60s")
         #expect(StatusText.describe(.modelsUpdated([ResidentModel(name: "qwen2.5:0.5b")])) == "Models: qwen2.5:0.5b")
+        #expect(StatusText.describe(.warmupFinished(missing: [])) == "Warmed the models back up after the restart")
+        #expect(StatusText.describe(.warmupFinished(missing: ["llama3:8b"]))
+                == "Models not restored after the restart: llama3:8b")
         #expect(StatusText.describe(.stopped) == "Stopped")
+    }
+
+    @Test func busyShowsInTheHealthyHeadline() {
+        let busy = SupervisorState(phase: .healthy, busy: true)
+        #expect(StatusText.headline(busy, now: t0) == "Healthy (busy)")
+        let calm = SupervisorState(phase: .healthy)
+        #expect(StatusText.headline(calm, now: t0) == "Healthy")
     }
 }

@@ -16,6 +16,22 @@ public enum DownReason: Sendable, Equatable {
         case .crashed(let reason): return reason.label
         }
     }
+
+    /// A bounded, low-cardinality category for metrics labels. Never model
+    /// names, paths, or stderr content; only these fixed values.
+    public var category: String {
+        switch self {
+        case .wedged: return "wedged"
+        case .crashed(let reason):
+            switch reason {
+            case .outOfMemory: return "oom"
+            case .signal: return "signal"
+            case .crash: return "crash"
+            case .cleanExit: return "clean-exit"
+            case .running, .unknown: return "unknown"
+            }
+        }
+    }
 }
 
 /// Discrete things that happen, as opposed to the continuous `SupervisorState`.
@@ -40,15 +56,20 @@ public enum SupervisorEvent: Sendable, Equatable {
     case enteredFailing(restartsInWindow: Int, window: TimeInterval)
     /// Resident models changed.
     case modelsUpdated([ResidentModel])
+    /// The post-restart model warm-up finished. `missing` lists models that were
+    /// resident before the restart but could not be loaded again.
+    case warmupFinished(missing: [String])
     /// Supervision stopped by request.
     case stopped
 
     /// Whether this transition is worth a push notification. Notifications fire on
-    /// down, recovered, and failing, per the design.
+    /// down, recovered, failing, and a warm-up that could not restore a model.
     public var isNotable: Bool {
         switch self {
         case .down, .recovered, .enteredFailing:
             return true
+        case .warmupFinished(let missing):
+            return !missing.isEmpty
         default:
             return false
         }

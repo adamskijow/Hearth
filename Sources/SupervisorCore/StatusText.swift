@@ -16,7 +16,7 @@ public enum StatusText {
         case .starting:
             return "Starting\u{2026}"
         case .healthy:
-            return "Healthy"
+            return state.busy ? "Healthy (busy)" : "Healthy"
         case .down:
             return "Down\(retrySuffix(state, now: now))"
         case .restarting:
@@ -102,6 +102,10 @@ public enum StatusText {
             return "Failing: \(count) failures within \(Int(window))s"
         case .modelsUpdated(let models):
             return "Models: \(models.map(\.name).joined(separator: ", "))"
+        case .warmupFinished(let missing):
+            return missing.isEmpty
+                ? "Warmed the models back up after the restart"
+                : "Models not restored after the restart: \(missing.joined(separator: ", "))"
         case .stopped: return "Stopped"
         }
     }

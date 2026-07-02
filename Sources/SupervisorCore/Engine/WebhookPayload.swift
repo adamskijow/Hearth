@@ -39,6 +39,7 @@ public enum WebhookPayload {
         case .recovered: return "recovered"
         case .enteredFailing: return "failing"
         case .modelsUpdated: return "models_updated"
+        case .warmupFinished: return "warmup_finished"
         case .stopped: return "stopped"
         }
     }

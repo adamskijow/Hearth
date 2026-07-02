@@ -84,6 +84,26 @@ control endpoint is a small password-protected status page you can open from a
 phone; ntfy pushes alerts to a phone; Tailscale is one safe way to reach either
 from outside your home network. A single Mac you sit at needs none of them.
 
+## Can Hearth supervise two runners at once (Ollama and mlx, say)?
+
+Yes, with two Hearth instances: one per runner, each with its own config. The
+single-instance lock is keyed to the config file, so two configs coexist:
+
+```
+HEARTH_CONFIG=~/.config/hearth-mlx.json hearth --headless
+```
+
+Give the second config its own `runner`, `port`, and (if enabled)
+`controlPort`. Each instance supervises, alerts, and serves status for its own
+runner; there is no cross-runner orchestration, by design.
+
+## I am going on vacation. Can I quiet the alerts without losing my setup?
+
+Yes: Pause Notifications in the menu (or `"notificationsPaused": true` in the
+config) silences local, ntfy, and webhook alerts without touching their
+settings. Hearth keeps supervising and logging events; unpause when you are
+back.
+
 ## My Mac runs with nobody logged in. Does Hearth still work?
 
 Yes, that is its favorite habitat. `hearth setup` installs a login agent so

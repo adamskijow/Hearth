@@ -70,6 +70,20 @@ struct MachineHealthTests {
         #expect(out.emittedEvents.contains(.recovered))
     }
 
+    @Test func aBusyReportIsServingNotAFailure() {
+        // 503 means the queue is full and the runner is working; treating it as
+        // a failure would restart a healthy server under load.
+        var machine = SupervisorMachine(config: RestartPolicyConfig(startupGrace: 30))
+        _ = machine.start(now: t0)
+        _ = machine.observe(ready(), now: t0.addingTimeInterval(2))
+        #expect(machine.phase == .healthy)
+
+        let out = machine.observe(HealthReport(isAlive: true, readiness: .busy), now: t0.addingTimeInterval(40))
+        #expect(machine.phase == .healthy)
+        #expect(machine.consecutiveFailures == 0)
+        #expect(!out.effects.contains(.kill))
+    }
+
     @Test func readinessCatchesHungButAliveRunner() {
         var machine = SupervisorMachine(config: RestartPolicyConfig(startupGrace: 30))
         _ = machine.start(now: t0)

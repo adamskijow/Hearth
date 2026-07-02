@@ -9,6 +9,10 @@ import Foundation
 public enum Readiness: Sendable, Equatable {
     /// The readiness endpoint answered with success inside the timeout.
     case ready
+    /// The endpoint answered 503: the runner is alive and working through a
+    /// full queue (Ollama's "server busy"). Busy is not wedged; restarting a
+    /// busy runner would kill the very work it is doing.
+    case busy
     /// The endpoint answered, but not with success (or the connection was
     /// refused). The listener is up enough to talk but not serving.
     case notReady
@@ -22,8 +26,8 @@ public enum Readiness: Sendable, Equatable {
         switch outcome {
         case .ok:
             return .ready
-        case .http:
-            return .notReady
+        case .http(let status, _):
+            return status == 503 ? .busy : .notReady
         case .timedOut:
             return .timedOut
         case .refused:
@@ -56,8 +60,10 @@ public struct HealthReport: Sendable, Equatable {
         self.recentStderr = recentStderr
     }
 
-    /// The runner is serving: alive and ready.
+    /// The runner is serving: alive and answering. Busy counts as serving; a
+    /// full queue means the runner is doing its job, and treating 503 as a
+    /// failure would restart a healthy server under load.
     public var isServing: Bool {
-        isAlive && readiness == .ready
+        isAlive && (readiness == .ready || readiness == .busy)
     }
 }

@@ -16,9 +16,12 @@ curl -X POST -H "Authorization: Bearer $TOKEN" http://HOST:11435/start
 ```
 
 `/status` returns a compact JSON document. The exact keys, for anything that
-parses it: `phase` (string), `models` (array of strings), `uptimeSeconds`
+parses it: `phase` (string), `busy` (bool: the runner answered 503, a full
+queue, on the last probe), `models` (array of strings), `uptimeSeconds`
 (number or absent), `restartCount` (number), `consecutiveFailures` (number),
-`lastRestartReason` (string or absent), `thermal` (string or absent),
+`lastRestartReason` (string or absent), `lastDownCategory` (string or absent;
+one of `wedged`, `crash`, `oom`, `signal`, `clean-exit`, `unknown`),
+`deepProbeConfigured` (bool), `thermal` (string or absent),
 `memoryUsedPercent` (number or absent), and `runnerResidentBytes` (number or
 absent). `/metrics` returns the same data as a
 Prometheus text exposition (also behind the token), so you can scrape Hearth into
@@ -39,6 +42,13 @@ When Hearth detects a Tailscale address on the machine (an interface in the
 100.64.0.0/10 range), the menubar shows a "Phone access" line with the full control
 URL to use from your phone. Hearth only reads the interface list; it does not
 configure Tailscale.
+
+For a dashboard you already run, Hearth can also push instead of being polled:
+set `heartbeatURL` to an Uptime Kuma push monitor or a healthchecks.io check
+URL and Hearth GETs it on an interval while the runner is healthy. The pulse
+stopping is the signal, so Hearth being dead, the Mac being off, and the
+runner being wedged all read as down in the monitor, with no inbound access to
+the Mac needed.
 
 `controlHost` can be an IPv6 address (`::1`, or a Tailscale `fd7a:...` address):
 set the bare address in the config and Hearth brackets it wherever a URL is

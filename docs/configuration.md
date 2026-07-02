@@ -86,6 +86,8 @@ See [ollama.md](ollama.md) for the full Ollama setup guide, including deep probe
 | `crashLoopWindowSeconds` | number | `60` | Sliding window for counting failures toward the brake. |
 | `failingProbeIntervalSeconds` | number | `30` | Slow, steady retry cadence once in the crash-loop (failing) state. |
 | `maintenanceRestartHours` | number | `0` | Proactively cycle a healthy runner this often (in hours) to clear the memory creep that degrades a 24/7 runner. `0` disables it; an enabled value is floored at 1 hour. A common value is `24`. |
+| `maintenanceWindow` | string or null | `null` | Optional daily window (`"HH:MM-HH:MM"`, 24-hour local time) during which scheduled maintenance restarts may fire; a due restart waits for the window to open. Spans midnight when the end is before the start (`"23:00-06:00"`). Null means any time. |
+| `warmModelsAfterRestart` | bool | `false` | After a restart, load the models that were resident before it (a one-token generation each, the same request the deep probe uses), so recovery does not hand the next request a multi-gigabyte cold start. A model that fails to load triggers a "Models not restored" alert. Off by default because it does GPU work right after recovery. |
 | `restartOnBinaryChange` | bool | `false` | Restart a managed runner when its binary changes on disk (an upgrade), so it adopts the new version instead of serving the old one. Catches a Homebrew Cellar relink. |
 | `probeModel` | string or null | `null` | Optional deep readiness probe. The default `/api/version` probe only proves the HTTP server answers; it misses a wedged model runner that still responds there (a GPU or model-load hang). Set a model name and Hearth periodically runs a one-token generation against it, so an inference-level wedge is caught and restarted. Off by default; it names a model and does GPU work. It sends no `keep_alive`, so the model's residency follows the runner's own policy (your `OLLAMA_KEEP_ALIVE`), not one the probe imposes. |
 | `deepProbeIntervalSeconds` | number | `60` | How often to run the deep probe, separate from and slower than the shallow probe. Floored at 5. |
@@ -101,6 +103,9 @@ See [ollama.md](ollama.md) for the full Ollama setup guide, including deep probe
 | `webhookURL` | string or null | `null` | POST a small JSON status body (`level`, `title`, `body`, `event`, `timestamp`) to this URL on each notification, to wire Hearth into your own automation. Null disables it. Only Hearth's own status is sent, never runner content. Delivery failures are logged to stderr. |
 | `memoryAlertPercent` | int | `90` | Alert when system memory used reaches this percent (the precursor to the runner being killed under pressure). `0` disables the memory alert. |
 | `thermalAlerts` | bool | `true` | Alert when the Mac's thermal state goes serious or critical. |
+| `notificationsPaused` | bool | `false` | Vacation mode: silence every channel (local, ntfy, webhook) without touching their settings. Events are still logged. Also togglable from the menu (Pause Notifications). |
+| `heartbeatURL` | string or null | `null` | Dead-man's-switch heartbeat: while the runner is healthy, GET this URL on an interval. Point it at an Uptime Kuma push monitor or a healthchecks.io check; silence then means down, and the monitor you already run does the alerting. Null disables it. |
+| `heartbeatIntervalSeconds` | number | `60` | How often to send the heartbeat while healthy. Floored at 10. |
 
 ## Control endpoint (phone-side remote control)
 

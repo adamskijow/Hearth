@@ -19,7 +19,8 @@ struct EngineTests {
     }
 
     private func makeHarness(policy: RestartPolicyConfig = RestartPolicyConfig(startupGrace: 30),
-                             deepProbe: DeepProbeConfig? = nil) -> Harness {
+                             deepProbe: DeepProbeConfig? = nil,
+                             warmModels: Bool = false) -> Harness {
         let clock = ManualClock(now: Date(timeIntervalSince1970: 0))
         let processes = FakeProcessController()
         let http = FakeHTTPClient()
@@ -34,7 +35,8 @@ struct EngineTests {
             power: power,
             notifier: notifier,
             policy: policy,
-            deepProbe: deepProbe
+            deepProbe: deepProbe,
+            warmModels: warmModels
         )
         return Harness(engine: engine, clock: clock, processes: processes, http: http,
                        power: power, notifier: notifier, runner: runner)
@@ -120,6 +122,100 @@ struct EngineTests {
         #expect(await h.engine.snapshot().phase == .healthy)
         let recoveredCount = await h.notifier.received.filter { $0.event == .recovered }.count
         #expect(recoveredCount == 1)
+    }
+
+    @Test func aBusyRunnerStaysHealthyAndIsNotRestarted() async {
+        let h = makeHarness()
+        makeServing(h)
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+        #expect(await h.engine.snapshot().phase == .healthy)
+
+        // The queue fills: readiness answers 503. That is a server doing its
+        // job, not a wedge; restarting it would kill the in-flight work.
+        h.http.set(h.runner.readinessEndpoint, .http(status: 503, body: Data()))
+        _ = await h.engine.stepOnce()
+
+        let state = await h.engine.snapshot()
+        #expect(state.phase == .healthy)
+        #expect(state.busy)
+        #expect(state.consecutiveFailures == 0)
+        #expect(h.processes.spawnCount == 1)
+
+        // The queue drains; busy clears.
+        makeServing(h)
+        _ = await h.engine.stepOnce()
+        #expect(await h.engine.snapshot().busy == false)
+    }
+
+    /// Poll for work a detached warm-up task does off the loop.
+    private func eventually(_ condition: () async -> Bool) async -> Bool {
+        for _ in 0..<400 {
+            if await condition() { return true }
+            await Task.yield()
+        }
+        return await condition()
+    }
+
+    @Test func warmupReloadsTheResidentModelAfterRecovery() async throws {
+        let h = makeHarness(warmModels: true)
+        makeServing(h)
+        let warmURL = try #require(h.runner.deepReadinessRequest(model: "llama3:8b")).url
+        h.http.set(warmURL, .ok(Data("{}".utf8)))
+
+        await h.engine.start()
+        _ = await h.engine.stepOnce()   // healthy, llama3:8b resident
+
+        let handle = try #require(h.processes.lastHandle)
+        h.processes.simulateExit(handle, exit: ProcessExit(code: 1))
+        let wait = await h.engine.stepOnce()          // down; snapshot captured
+        h.clock.advance(by: wait + 0.01)
+        _ = await h.engine.stepOnce()                 // respawn
+        _ = await h.engine.stepOnce()                 // healthy -> warm-up fires
+
+        let warmed = await eventually { h.http.postCount(to: warmURL) >= 1 }
+        #expect(warmed)
+    }
+
+    @Test func warmupFailureNotifiesWhichModelWasNotRestored() async throws {
+        let h = makeHarness(warmModels: true)
+        makeServing(h)
+        let warmURL = try #require(h.runner.deepReadinessRequest(model: "llama3:8b")).url
+        h.http.set(warmURL, .timedOut)
+
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+
+        let handle = try #require(h.processes.lastHandle)
+        h.processes.simulateExit(handle, exit: ProcessExit(code: 1))
+        let wait = await h.engine.stepOnce()
+        h.clock.advance(by: wait + 0.01)
+        _ = await h.engine.stepOnce()
+        _ = await h.engine.stepOnce()
+
+        let alerted = await eventually {
+            await h.notifier.received.contains { $0.title == "Models not restored" }
+        }
+        #expect(alerted)
+    }
+
+    @Test func warmupIsOffByDefault() async throws {
+        let h = makeHarness()   // warmModels defaults to false
+        makeServing(h)
+        let warmURL = try #require(h.runner.deepReadinessRequest(model: "llama3:8b")).url
+
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+        let handle = try #require(h.processes.lastHandle)
+        h.processes.simulateExit(handle, exit: ProcessExit(code: 1))
+        let wait = await h.engine.stepOnce()
+        h.clock.advance(by: wait + 0.01)
+        _ = await h.engine.stepOnce()
+        _ = await h.engine.stepOnce()
+        #expect(await h.engine.snapshot().phase == .healthy)
+
+        for _ in 0..<50 { await Task.yield() }
+        #expect(h.http.postCount(to: warmURL) == 0)
     }
 
     @Test func wedgedRunnerIsCaughtByReadinessWhilePidIsAlive() async throws {

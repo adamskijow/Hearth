@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var runner: (any Runner)!
     private var controlServer: ControlServer?
     private var pressureMonitor: PressureMonitor?
+    private var heartbeat: HeartbeatPinger?
     private var processController: FoundationProcessController!
     private var metricsProvider: SystemMetricsProvider!
     private var config = HearthConfig()
@@ -64,6 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         controlServer?.stop()
         pressureMonitor?.stop()
+        heartbeat?.stop()
         guard let coordinator else { return }
         let semaphore = DispatchSemaphore(value: 0)
         Task.detached {
@@ -111,6 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         controlServer?.stop()
         pressureMonitor?.stop()
+        heartbeat?.stop()
         stateTask?.cancel()
         eventTask?.cancel()
         if let coordinator { await coordinator.end() }
@@ -147,6 +150,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controlServer?.start()
         pressureMonitor = assembly.pressureMonitor
         pressureMonitor?.start()
+        heartbeat = assembly.heartbeat
+        heartbeat?.start()
 
         // Auto-enable Start at Login exactly once, on the genuine first run.
         // applyConfig runs on every reload (Preferences Save, SIGHUP, the menu's
@@ -416,6 +421,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             login.toolTip = "Available in the installed, signed app, not when run unbundled."
         }
         menu.addItem(login)
+        // Vacation mode: silence every channel without touching their settings.
+        let pause = NSMenuItem(title: "Pause Notifications", action: #selector(togglePauseNotificationsTapped), keyEquivalent: "")
+        pause.target = self
+        pause.state = config.notificationsPaused ? .on : .off
+        pause.toolTip = "Silence local, ntfy, and webhook alerts until unpaused. Events are still logged."
+        menu.addItem(pause)
 
         menu.addItem(.separator())
         addAction("Quit Hearth", #selector(quitTapped), enabled: true, keyEquivalent: "q")
@@ -645,6 +656,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func toggleLoginItemTapped() {
         if LoginItem.isRegistered { LoginItem.unregister() } else { LoginItem.register() }
+    }
+
+    @objc private func togglePauseNotificationsTapped() {
+        var updated = config
+        updated.notificationsPaused.toggle()
+        ConfigStore.save(updated)
+        Task { await reloadFromDisk(firstRun: false) }
     }
 
     @objc private func quitTapped() { NSApp.terminate(nil) }

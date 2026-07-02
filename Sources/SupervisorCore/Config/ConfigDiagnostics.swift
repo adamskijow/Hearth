@@ -127,6 +127,21 @@ public enum ConfigDiagnostics {
         if config.initialBackoffSeconds <= 0 {
             issues.append(.init(.warning, "Initial backoff should be greater than 0; failed restarts would respawn with no delay."))
         }
+        if let window = config.maintenanceWindow?.trimmingCharacters(in: .whitespaces), !window.isEmpty,
+           MaintenanceWindow.parse(window) == nil {
+            issues.append(.init(.warning, "maintenanceWindow \"\(window)\" is not HH:MM-HH:MM (24-hour); scheduled maintenance restarts will ignore it and fire at any time."))
+        }
+        if let heartbeat = config.heartbeatURL?.trimmingCharacters(in: .whitespaces), !heartbeat.isEmpty {
+            if let url = URL(string: heartbeat), let scheme = url.scheme?.lowercased(),
+               scheme == "http" || scheme == "https", url.host != nil {
+                // Shape is fine.
+            } else {
+                issues.append(.init(.warning, "heartbeatURL \"\(heartbeat)\" is not an http(s) URL; heartbeats will not be sent."))
+            }
+        }
+        if config.heartbeatIntervalSeconds < 10 {
+            issues.append(.init(.warning, "heartbeatIntervalSeconds below 10 is clamped to 10; a monitor rarely needs a faster pulse."))
+        }
         if config.maxBackoffSeconds < config.initialBackoffSeconds {
             issues.append(.init(.warning, "Max backoff is less than the initial backoff, so backoff cannot grow."))
         }

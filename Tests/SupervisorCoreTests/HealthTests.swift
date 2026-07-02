@@ -7,7 +7,10 @@ import Foundation
 struct HealthTests {
     @Test func readinessMapsEveryHTTPOutcome() {
         #expect(Readiness.from(.ok(Data())) == .ready)
-        #expect(Readiness.from(.http(status: 503, body: Data())) == .notReady)
+        // 503 is a full queue: alive and working, not wedged.
+        #expect(Readiness.from(.http(status: 503, body: Data())) == .busy)
+        #expect(Readiness.from(.http(status: 500, body: Data())) == .notReady)
+        #expect(Readiness.from(.http(status: 404, body: Data())) == .notReady)
         #expect(Readiness.from(.timedOut) == .timedOut)        // alive but wedged
         #expect(Readiness.from(.refused) == .notReady)
         #expect(Readiness.from(.failure("boom")) == .notReady)
@@ -15,6 +18,8 @@ struct HealthTests {
 
     @Test func servingRequiresAliveAndReady() {
         #expect(HealthReport(isAlive: true, readiness: .ready).isServing)
+        // Busy is serving: the runner is doing its job with a full queue.
+        #expect(HealthReport(isAlive: true, readiness: .busy).isServing)
         // Alive but wedged or not answering is not serving: the case a plain PID
         // check would wrongly call healthy.
         #expect(!HealthReport(isAlive: true, readiness: .timedOut).isServing)

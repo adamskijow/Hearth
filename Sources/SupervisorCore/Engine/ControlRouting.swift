@@ -122,11 +122,14 @@ public enum ControlRouting {
     public static func statusJSON(_ state: SupervisorState, now: Date, metrics: SystemMetrics? = nil) -> Data {
         let payload = StatusPayload(
             phase: state.phase.rawValue,
+            busy: state.busy,
             models: state.residentModels.map(\.name),
             uptimeSeconds: state.uptime(asOf: now).map { Int($0.rounded()) },
             restartCount: state.restartCount,
             consecutiveFailures: state.consecutiveFailures,
             lastRestartReason: state.lastRestartReason,
+            lastDownCategory: state.lastDownCategory,
+            deepProbeConfigured: state.deepProbeConfigured,
             thermal: metrics.flatMap { $0.thermal == .unknown ? nil : $0.thermal.rawValue },
             memoryUsedPercent: metrics?.memoryUsedFraction.map { Int(($0 * 100).rounded()) },
             runnerResidentBytes: metrics?.runnerResidentBytes
@@ -147,7 +150,15 @@ public enum ControlRouting {
         }
         metric("hearth_up", "Whether Hearth is up and answering.", "gauge", "1")
         metric("hearth_healthy", "Whether the runner is healthy (1) or not (0).", "gauge", state.phase == .healthy ? "1" : "0")
+        metric("hearth_busy", "Whether the last probe answered busy (queue full).", "gauge", state.busy ? "1" : "0")
         metric("hearth_phase", "Current supervisor phase, 1 for the active one.", "gauge", "1", labels: "{phase=\"\(state.phase.rawValue)\"}")
+        if let category = state.lastDownCategory {
+            metric("hearth_last_down", "Most recent failure category this session, 1 for the active one.", "gauge", "1", labels: "{reason=\"\(category)\"}")
+        }
+        metric("hearth_deep_probe_configured", "Whether the deep readiness probe is configured.", "gauge", state.deepProbeConfigured ? "1" : "0")
+        if let failedAt = state.deepProbeLastFailedAt {
+            metric("hearth_deep_probe_last_failure_timestamp_seconds", "When the deep probe last failed, unix seconds.", "gauge", String(Int(failedAt.timeIntervalSince1970)))
+        }
         metric("hearth_restarts_total", "Restarts this session.", "counter", String(state.restartCount))
         metric("hearth_consecutive_failures", "Consecutive failed probes.", "gauge", String(state.consecutiveFailures))
         if let uptime = state.uptime(asOf: now) {
@@ -182,11 +193,14 @@ public enum ControlRouting {
 
 private struct StatusPayload: Encodable {
     var phase: String
+    var busy: Bool
     var models: [String]
     var uptimeSeconds: Int?
     var restartCount: Int
     var consecutiveFailures: Int
     var lastRestartReason: String?
+    var lastDownCategory: String?
+    var deepProbeConfigured: Bool
     var thermal: String?
     var memoryUsedPercent: Int?
     var runnerResidentBytes: Int64?

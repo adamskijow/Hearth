@@ -62,6 +62,8 @@ struct SupervisorMachine {
     private(set) var healthySince: Date? = nil
     /// A short description of the most recent restart cause.
     private(set) var lastRestartReason: String? = nil
+    /// Bounded category of the most recent failure, for metrics labels.
+    private(set) var lastDownCategory: String? = nil
     /// When the phase last changed.
     private(set) var lastTransition: Date = Date(timeIntervalSince1970: 0)
     /// Whether the most recent respawn was a routine maintenance restart, so the
@@ -233,6 +235,7 @@ struct SupervisorMachine {
     private mutating func handleFailure(_ reason: DownReason, killNeeded: Bool, now: Date) -> MachineOutput {
         consecutiveFailures += 1
         lastRestartReason = reason.label
+        lastDownCategory = reason.category
         if case .crashed = reason { failingStreakHadProcessExit = true }
         healthySince = nil
 
@@ -287,6 +290,7 @@ struct SupervisorMachine {
         healthySince = nil
         scheduledRespawnAt = .distantFuture
         lastRestartReason = nil
+        lastDownCategory = nil
         lastRestartWasMaintenance = false
         lastRestartWasManualFromHealthy = false
     }

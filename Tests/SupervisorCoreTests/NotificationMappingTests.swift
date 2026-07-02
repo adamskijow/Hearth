@@ -44,4 +44,14 @@ struct NotificationMappingTests {
         #expect(SupervisorEvent.enteredFailing(restartsInWindow: 1, window: 1).isNotable)
         #expect(!SupervisorEvent.becameHealthy.isNotable)
     }
+
+    @Test func aFailedWarmupWarnsAndACleanOneIsQuiet() throws {
+        let failed = try #require(SupervisorEngine.notification(for: .warmupFinished(missing: ["llama3:8b"])))
+        #expect(failed.level == .warning)
+        #expect(failed.body.contains("llama3:8b"))
+        #expect(SupervisorEvent.warmupFinished(missing: ["llama3:8b"]).isNotable)
+        // A warm-up that restored everything is routine: logged, never pushed.
+        #expect(SupervisorEngine.notification(for: .warmupFinished(missing: [])) == nil)
+        #expect(!SupervisorEvent.warmupFinished(missing: []).isNotable)
+    }
 }

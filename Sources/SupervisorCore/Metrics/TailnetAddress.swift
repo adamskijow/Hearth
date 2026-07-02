@@ -34,6 +34,8 @@ public enum PhoneAccess {
         } else {
             host = controlHost
         }
-        return "http://\(host):\(controlPort)"
+        // Bracket an IPv6 literal so the advertised URL (menu, QR code, Copy
+        // phone URL) is actually openable on the phone.
+        return "http://\(urlAuthorityHost(for: host)):\(controlPort)"
     }
 }

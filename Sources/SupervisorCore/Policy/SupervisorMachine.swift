@@ -67,6 +67,10 @@ struct SupervisorMachine {
     /// Whether the most recent respawn was a routine maintenance restart, so the
     /// return to healthy is quiet (becameHealthy) rather than a pushed recovery.
     private(set) var lastRestartWasMaintenance: Bool = false
+    /// Whether the most recent respawn was a user restart of an already-healthy
+    /// runner. Nothing failed, so the return to healthy is quiet too; a user
+    /// restart of a down or failing runner still announces the recovery.
+    private(set) var lastRestartWasManualFromHealthy: Bool = false
 
     init(config: RestartPolicyConfig) {
         self.config = config
@@ -102,6 +106,7 @@ struct SupervisorMachine {
     /// A user restart is not a crash, so it does not count toward backoff or the
     /// crash loop window.
     mutating func userRestart(now: Date) -> MachineOutput {
+        lastRestartWasManualFromHealthy = phase == .healthy
         consecutiveFailures = 0
         failureTimestamps.removeAll()
         failingSince = nil
@@ -132,6 +137,7 @@ struct SupervisorMachine {
         spawnTime = now
         lastRestartReason = "scheduled maintenance restart"
         lastRestartWasMaintenance = true
+        lastRestartWasManualFromHealthy = false
         lastTransition = now
         return MachineOutput(
             effects: [.kill, .spawn, .emit(.maintenanceRestart)],
@@ -160,6 +166,7 @@ struct SupervisorMachine {
         phase = .restarting
         scheduledRespawnAt = .distantFuture
         lastRestartWasMaintenance = false
+        lastRestartWasManualFromHealthy = false
         lastTransition = now
         return MachineOutput(
             effects: [.spawn, .emit(.restarted(attempt: restartCount))],
@@ -197,13 +204,17 @@ struct SupervisorMachine {
         var effects: [MachineEffect] = []
 
         if phase != .healthy {
-            // Transition into healthy. Coming back after any restart this session
-            // is a recovery (the user got a down or failing alert and wants the
-            // all clear); a clean first start is just becoming healthy.
-            // A routine maintenance restart comes back quietly; a real recovery
-            // after a crash or wedge is a pushed all-clear.
-            let recovering = restartCount > 0 && !lastRestartWasMaintenance
+            // Transition into healthy. Coming back after a failure restart this
+            // session is a recovery (the user got a down or failing alert and
+            // wants the all clear); a clean first start is just becoming healthy.
+            // A routine maintenance restart and a user restart of an already
+            // healthy runner come back quietly; only a return from an actual
+            // failure is a pushed all-clear.
+            let recovering = restartCount > 0
+                && !lastRestartWasMaintenance
+                && !lastRestartWasManualFromHealthy
             lastRestartWasMaintenance = false
+            lastRestartWasManualFromHealthy = false
             healthySince = now
             consecutiveFailures = 0
             failureTimestamps.removeAll()
@@ -277,5 +288,6 @@ struct SupervisorMachine {
         scheduledRespawnAt = .distantFuture
         lastRestartReason = nil
         lastRestartWasMaintenance = false
+        lastRestartWasManualFromHealthy = false
     }
 }

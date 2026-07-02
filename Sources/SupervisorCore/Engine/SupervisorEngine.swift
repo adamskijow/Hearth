@@ -37,6 +37,17 @@ public actor SupervisorEngine {
     /// once it is shallow-ready.
     private var lastDeepProbeAt: Date?
     private var looping = false
+    /// Bumped by every external control action (start, stop, restart), so a
+    /// probe that was in flight across the actor's await can tell its report
+    /// belongs to the previous child and must not be applied to the fresh one.
+    private var controlGeneration = 0
+    /// The continuation parked by the loop's interruptible wait, resumed early
+    /// by a control action so a user restart is probed immediately instead of
+    /// silently sleeping out the remaining backoff.
+    private var loopWake: CheckedContinuation<Void, Never>?
+    /// Ties each timeout task to its own wait, so a timer that outlives a nudge
+    /// cannot resume the loop's NEXT wait early.
+    private var sleepGeneration = 0
 
     /// Continuous published state. One consumer; the app reads `snapshot()` for
     /// the current value before subscribing.
@@ -82,20 +93,26 @@ public actor SupervisorEngine {
     /// Begin supervising. No effect if already supervising.
     public func start() async {
         guard machine.phase == .stopped else { return }
+        controlGeneration &+= 1
         let output = machine.start(now: clock.now)
         await apply(output, models: nil)
+        nudgeLoop()
     }
 
     /// Stop supervising: kill the child and release power immediately.
     public func stop() async {
+        controlGeneration &+= 1
         let output = machine.stop(now: clock.now)
         await apply(output, models: nil)
+        nudgeLoop()
     }
 
     /// Restart now by request. Does not count as a crash.
     public func restart() async {
+        controlGeneration &+= 1
         let output = machine.userRestart(now: clock.now)
         await apply(output, models: nil)
+        nudgeLoop()
     }
 
     /// Run the supervision loop until stopped. Safe to call once per session;
@@ -108,9 +125,40 @@ public actor SupervisorEngine {
             let wait = await stepOnce()
             if machine.phase == .stopped { break }
             if wait > 0 {
-                try? await clock.sleep(seconds: wait)
+                await interruptibleSleep(seconds: wait)
             }
         }
+    }
+
+    /// Sleep that a control action can cut short. A plain clock.sleep here made
+    /// a user restart during backoff invisible: the fresh child was spawned but
+    /// the loop kept sleeping out the remaining wait (up to maxBackoff, or the
+    /// failing retry interval), so it went unprobed and no recovery was
+    /// announced for minutes.
+    private func interruptibleSleep(seconds: TimeInterval) async {
+        sleepGeneration &+= 1
+        let generation = sleepGeneration
+        await withCheckedContinuation { continuation in
+            loopWake = continuation
+            Task {
+                try? await self.clock.sleep(seconds: seconds)
+                await self.expireSleep(generation)
+            }
+        }
+    }
+
+    private func expireSleep(_ generation: Int) {
+        // A stale timer (its wait was already nudged awake) must not resume the
+        // loop's next wait early.
+        guard generation == sleepGeneration, let continuation = loopWake else { return }
+        loopWake = nil
+        continuation.resume()
+    }
+
+    private func nudgeLoop() {
+        guard let continuation = loopWake else { return }
+        loopWake = nil
+        continuation.resume()
     }
 
     /// Perform exactly one iteration of the loop and return how long to wait
@@ -122,10 +170,14 @@ public actor SupervisorEngine {
         case .stopped:
             return 0
         case .starting, .restarting, .healthy:
+            let generation = controlGeneration
             let report = await probe(now: now)
-            // stop() may have interleaved during the probe await; do not let a
-            // stale observation resurrect a stopped machine.
-            if machine.phase == .stopped { return 0 }
+            // stop() or restart() may have interleaved during the probe await; a
+            // stale observation must not resurrect a stopped machine, and the
+            // old child's "serving" must not mark the fresh child healthy before
+            // it has been probed (skipping startup grace and firing a spurious
+            // recovery). Re-step immediately instead.
+            if machine.phase == .stopped || generation != controlGeneration { return 0 }
             let output = machine.observe(report, now: now)
             await apply(output, models: report.models)
             // Proactive maintenance restart, both off unless configured: cycle a

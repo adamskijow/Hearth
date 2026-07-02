@@ -42,6 +42,34 @@ struct MachineHealthTests {
         #expect(!machine.failingStreakHadProcessExit)
     }
 
+    @Test func manualRestartOfAHealthyRunnerComesBackQuiet() {
+        // Restarting a healthy runner (a routine model or config change) is not
+        // a recovery: nothing failed, so no all-clear push.
+        var machine = SupervisorMachine(config: RestartPolicyConfig(startupGrace: 30))
+        _ = machine.start(now: t0)
+        _ = machine.observe(ready(), now: t0.addingTimeInterval(2))
+        #expect(machine.phase == .healthy)
+
+        _ = machine.userRestart(now: t0.addingTimeInterval(10))
+        let out = machine.observe(ready(), now: t0.addingTimeInterval(12))
+        #expect(out.emittedEvents.contains(.becameHealthy))
+        #expect(!out.emittedEvents.contains(.recovered))
+    }
+
+    @Test func manualRestartOfADownRunnerStillAnnouncesRecovery() {
+        // The user got a down alert and restarted by hand; coming back healthy
+        // is the all-clear they are waiting for.
+        var machine = SupervisorMachine(config: RestartPolicyConfig(startupGrace: 30))
+        _ = machine.start(now: t0)
+        _ = machine.observe(ready(), now: t0.addingTimeInterval(2))
+        _ = machine.observe(dead(), now: t0.addingTimeInterval(4))
+        #expect(machine.phase == .down)
+
+        _ = machine.userRestart(now: t0.addingTimeInterval(6))
+        let out = machine.observe(ready(), now: t0.addingTimeInterval(8))
+        #expect(out.emittedEvents.contains(.recovered))
+    }
+
     @Test func readinessCatchesHungButAliveRunner() {
         var machine = SupervisorMachine(config: RestartPolicyConfig(startupGrace: 30))
         _ = machine.start(now: t0)

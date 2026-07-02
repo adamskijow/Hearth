@@ -154,11 +154,22 @@ enum RunnerStateStore {
     /// Synchronously ensure every recorded runner group is dead, for the shutdown
     /// path. The engine's teardown sends SIGTERM but schedules its SIGKILL backup
     /// on a queue that dies when the process exits, so a wedged child that ignores
-    /// SIGTERM could be outrun by exit(). This SIGKILLs whatever is left, after the
-    /// same start-time guard so it never kills a PID-recycled bystander.
-    static func killRecordedGroupNow() {
-        for recorded in loadRecorded() {
-            guard RunnerSweep.shouldSweep(recorded: recorded, live: liveIdentity(pid: recorded.pid)) else {
+    /// SIGTERM could be outrun by exit(). This SIGKILLs whatever is left.
+    ///
+    /// The gate is `deferredKillAllowed`, NOT `shouldSweep`: at shutdown the
+    /// common leak shape is a leader that already exited on SIGTERM (an unreaped
+    /// zombie, which reports no probeable info) while a wedged group member
+    /// ignores SIGTERM and survives holding GPU memory. `shouldSweep` refuses on
+    /// an unprobeable leader and would skip exactly that case; an unreaped zombie
+    /// keeps its pid (and so the pgid) reserved, so the group SIGKILL is safe. A
+    /// record is only removed after its reap is confirmed, so a present record
+    /// means unreaped, and the start-time check still refuses when the pid was
+    /// somehow recycled by a probeable newcomer.
+    static func killRecordedGroupNow(at url: URL = RunnerStateStore.url) {
+        for recorded in loadRecorded(at: url) {
+            guard RunnerSweep.deferredKillAllowed(leaderReaped: false,
+                                                  spawn: recorded,
+                                                  live: liveIdentity(pid: recorded.pid)) else {
                 continue
             }
             if killpg(recorded.pgid, 0) == 0 {

@@ -43,8 +43,12 @@ enum StatusCLI {
         let json = args.contains("--json")
         let config = ConfigStore.load().config
 
-        if config.controlEnabled, let token = config.controlToken, !token.isEmpty {
-            let url = URL(string: "http://\(config.controlHost):\(config.controlPort)/status")!
+        // Bracket an IPv6 control host (::1, a Tailscale fd7a:... address) the
+        // same way every other URL builder does; a bare literal makes URL(string:)
+        // nil and this is a user-facing command, so fall back to the reduced
+        // status rather than trapping.
+        if config.controlEnabled, let token = config.controlToken, !token.isEmpty,
+           let url = URL(string: "http://\(urlAuthorityHost(for: config.controlHost)):\(config.controlPort)/status") {
             let (data, response, _) = syncGET(url, bearer: token, timeout: 3)
             if let data, (response as? HTTPURLResponse)?.statusCode == 200,
                let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {

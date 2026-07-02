@@ -271,9 +271,12 @@ public struct HearthConfig: Codable, Sendable, Equatable {
             probeTimeout: probeTimeoutSeconds,
             startupGrace: startupGraceSeconds,
             startupProbeInterval: max(0.1, startupProbeIntervalSeconds),
-            initialBackoff: initialBackoffSeconds,
+            // A non-positive initial backoff would respawn a failing runner in a
+            // tight, no-delay loop until the crash-loop brake; a max below the
+            // initial would keep backoff from ever growing.
+            initialBackoff: max(0.1, initialBackoffSeconds),
             backoffMultiplier: max(1, backoffMultiplier),
-            maxBackoff: maxBackoffSeconds,
+            maxBackoff: max(max(0.1, initialBackoffSeconds), maxBackoffSeconds),
             crashLoopThreshold: max(1, crashLoopThreshold),
             crashLoopWindow: crashLoopWindowSeconds,
             failingProbeInterval: max(0.1, failingProbeIntervalSeconds),

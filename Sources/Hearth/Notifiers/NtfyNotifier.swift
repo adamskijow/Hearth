@@ -52,9 +52,25 @@ final class NtfyNotifier: Notifier, @unchecked Sendable {
         // Fire and forget. The engine awaits notify() on its actor, which also
         // serves status, control commands, and state publishing; blocking it on a
         // slow or hung ntfy server (up to the request timeout) would stall the
-        // whole supervision loop. Delivery happens in the background instead.
+        // whole supervision loop. Delivery happens in the background instead,
+        // but a failure is still one stderr line: on a headless Mac ntfy is
+        // often the only channel to a human, and a wrong server or 401 silently
+        // eating critical alerts is worse than a noisy log. The topic (a bearer
+        // secret) is never printed.
         let session = self.session
-        Task.detached { _ = try? await session.data(for: request) }
+        let server = self.server
+        Task.detached {
+            do {
+                let (_, response) = try await session.data(for: request)
+                if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                    FileHandle.standardError.write(Data(
+                        "Hearth: ntfy alert to \(server) failed: HTTP \(http.statusCode)\n".utf8))
+                }
+            } catch {
+                FileHandle.standardError.write(Data(
+                    "Hearth: ntfy alert to \(server) failed: \(error.localizedDescription)\n".utf8))
+            }
+        }
     }
 
     private static func priority(for level: NotificationLevel) -> String {

@@ -37,6 +37,17 @@ case "--help", "-h", "help":
     StatusCLI.printUsage()
     exit(0)
 default:
+    // A present first argument that is not a known subcommand and not flag-style
+    // is a typo'd command (`hearth statuss`), not a request to launch the app;
+    // silently launching the menubar agent from a CLI typo hides the mistake.
+    // Flag-style arguments stay exempt: Finder and Xcode launches pass things
+    // like -psn_0_... and -NSDocumentRevisionsDebugMode.
+    if let first = arguments.first, !first.hasPrefix("-") {
+        FileHandle.standardError.write(Data(
+            "Hearth: unknown command \"\(first)\". Run `hearth help` for usage.\n".utf8))
+        exit(2)
+    }
+
     let headless = arguments.contains("--headless")
         || ProcessInfo.processInfo.environment["HEARTH_HEADLESS"] == "1"
 

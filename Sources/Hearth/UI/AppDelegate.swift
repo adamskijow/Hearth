@@ -24,6 +24,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var preferences: PreferencesController?
     private var welcome: WelcomeController?
 
+    /// Set once the one-time Start at Login auto-registration has happened, so a
+    /// later config reload never re-enables what the user explicitly turned off.
+    static let loginItemOfferedKey = "hearthLoginItemOffered"
+
     private var latestState = SupervisorState()
     private var configNote: String?
     private var configProblem = false
@@ -144,8 +148,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pressureMonitor = assembly.pressureMonitor
         pressureMonitor?.start()
 
-        if LoginItem.isAvailable && !LoginItem.isRegistered {
+        // Auto-enable Start at Login exactly once, on the genuine first run.
+        // applyConfig runs on every reload (Preferences Save, SIGHUP, the menu's
+        // mode switches), and an unconditional re-register here would silently
+        // revert a user who turned the login item off.
+        if LoginItem.isAvailable && !LoginItem.isRegistered
+            && !UserDefaults.standard.bool(forKey: Self.loginItemOfferedKey) {
             LoginItem.register()
+        }
+        if LoginItem.isAvailable {
+            UserDefaults.standard.set(true, forKey: Self.loginItemOfferedKey)
         }
 
         subscribeToState()

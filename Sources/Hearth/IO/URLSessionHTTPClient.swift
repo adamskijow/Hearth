@@ -71,12 +71,28 @@ final class URLSessionHTTPClient: HTTPClient, @unchecked Sendable {
             guard let http = response as? HTTPURLResponse else {
                 return .failure("non HTTP response")
             }
+            // Accumulate through a fixed local buffer rather than Data.append per
+            // byte: a model list is tens of kilobytes every probe interval, and
+            // per-byte appends (with their copy-on-write checks) are measurable
+            // heat for a supposedly idle daemon. The buffer keeps the mid-flight
+            // size cap, checked at each flush, so an oversized hostile reply is
+            // still abandoned early rather than buffered whole.
             var data = Data()
+            var chunk = [UInt8]()
+            chunk.reserveCapacity(8192)
             for try await byte in bytes {
-                data.append(byte)
-                if data.count > Self.maxResponseBytes {
-                    return .failure("runner response exceeded \(Self.maxResponseBytes) bytes")
+                chunk.append(byte)
+                if chunk.count == 8192 {
+                    data.append(contentsOf: chunk)
+                    chunk.removeAll(keepingCapacity: true)
+                    if data.count > Self.maxResponseBytes {
+                        return .failure("runner response exceeded \(Self.maxResponseBytes) bytes")
+                    }
                 }
+            }
+            data.append(contentsOf: chunk)
+            if data.count > Self.maxResponseBytes {
+                return .failure("runner response exceeded \(Self.maxResponseBytes) bytes")
             }
             if (200..<300).contains(http.statusCode) {
                 return .ok(data)

@@ -35,8 +35,11 @@ pass() { echo "  PASS: $1"; }
 fail() { echo "  FAIL: $1"; exit 1; }
 
 # Reads the whole pmset stream (no `grep -q`, which would close the pipe early
-# and trip pipefail via SIGPIPE). Returns 0 if Hearth holds an assertion.
-assertion_held() { pmset -g assertions | grep -i hearth >/dev/null 2>&1; }
+# and trip pipefail via SIGPIPE). Returns 0 if the given PID holds an assertion.
+# Scoped to the test agent's pid, not a name match: a real Hearth instance (the
+# login agent, say) legitimately holds its own assertion and must not make
+# step 2 pass or step 5 fail on its behalf.
+assertion_held_by() { pmset -g assertions | grep "pid $1(" >/dev/null 2>&1; }
 
 echo "Building..."
 swift build >/dev/null
@@ -70,7 +73,7 @@ curl -fs --max-time 2 "http://127.0.0.1:$PORT/api/version" >/dev/null || fail "r
 pass "child $CHILD serving on $PORT"
 
 echo "2. Holds the power assertion"
-assertion_held || fail "power assertion not held"
+assertion_held_by "$HEARTH_PID" || fail "power assertion not held"
 pass "PreventUserIdleSystemSleep held"
 
 echo "3. Restarts the child when killed externally"
@@ -106,10 +109,11 @@ done
 pass "status 200, 401 without token, remote restart cycled the child"
 
 echo "5. Clean shutdown releases the assertion and kills the child"
+TERMED_PID="$HEARTH_PID"
 kill -TERM "$HEARTH_PID"; HEARTH_PID=""
 sleep 2
 if pgrep -f 'fake-runner.py' >/dev/null; then fail "child was orphaned"; fi
-if assertion_held; then fail "assertion still held"; fi
+if assertion_held_by "$TERMED_PID"; then fail "assertion still held"; fi
 pass "child stopped and assertion released"
 
 echo "6. A hard SIGKILL of Hearth orphans the child; the next launch sweeps it"

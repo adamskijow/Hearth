@@ -35,11 +35,11 @@ enum SingleInstance {
             return !wait
         }
 
-        if flock(fd, LOCK_EX | LOCK_NB) != 0 {
+        if flockRetryingEINTR(fd, LOCK_EX | LOCK_NB) != 0 {
             // Contended: another instance holds the lock.
             guard wait else { close(fd); return false }
             onWait?()
-            guard flock(fd, LOCK_EX) == 0 else { close(fd); return false }
+            guard flockRetryingEINTR(fd, LOCK_EX) == 0 else { close(fd); return false }
         }
 
         // Record our pid for anyone inspecting the file, and keep the descriptor
@@ -49,6 +49,18 @@ enum SingleInstance {
         _ = pid.withCString { write(fd, $0, strlen($0)) }
         heldFD = fd
         return true
+    }
+
+    /// flock interrupted by a signal is not "could not acquire": the standby
+    /// wait can sit in LOCK_EX for hours, and treating an EINTR as contention
+    /// would make the daemon log a false lock failure and give up its standby
+    /// position for a non-error. Retry until a real verdict.
+    private static func flockRetryingEINTR(_ fd: Int32, _ operation: Int32) -> Int32 {
+        var rc: Int32
+        repeat {
+            rc = flock(fd, operation)
+        } while rc == -1 && errno == EINTR
+        return rc
     }
 
     /// Keeps the lock file descriptor open for the life of the process. Assigned

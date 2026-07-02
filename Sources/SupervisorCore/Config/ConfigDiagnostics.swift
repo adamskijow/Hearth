@@ -124,6 +124,9 @@ public enum ConfigDiagnostics {
         if config.backoffMultiplier < 1 {
             issues.append(.init(.warning, "Backoff multiplier below 1 shrinks the wait between restarts."))
         }
+        if config.initialBackoffSeconds <= 0 {
+            issues.append(.init(.warning, "Initial backoff should be greater than 0; failed restarts would respawn with no delay."))
+        }
         if config.maxBackoffSeconds < config.initialBackoffSeconds {
             issues.append(.init(.warning, "Max backoff is less than the initial backoff, so backoff cannot grow."))
         }

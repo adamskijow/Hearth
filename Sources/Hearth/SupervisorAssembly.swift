@@ -16,6 +16,7 @@ struct SupervisorAssembly {
     let pressureMonitor: PressureMonitor
     let heartbeat: HeartbeatPinger?
     let metricsProxy: MetricsProxy?
+    let tokenMetrics: TokenMetricsStore?
 
     /// `includeLocalNotifications` is false in headless mode, where there is no
     /// GUI session for the local Notification Center to reach.
@@ -110,7 +111,8 @@ struct SupervisorAssembly {
             notifier: notifier,
             pressureMonitor: pressureMonitor,
             heartbeat: heartbeat,
-            metricsProxy: metricsProxy
+            metricsProxy: metricsProxy,
+            tokenMetrics: tokenMetrics
         )
     }
 

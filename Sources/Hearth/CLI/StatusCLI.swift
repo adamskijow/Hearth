@@ -124,15 +124,20 @@ enum StatusCLI {
 
     private static func printControlStatus(_ s: [String: Any]) {
         print("Hearth status (via control endpoint)")
-        if let phase = s["phase"] as? String { print(row("phase", phase)) }
+        if let phase = s["phase"] as? String {
+            let busy = (s["busy"] as? Bool) == true
+            print(row("phase", busy ? "\(phase) (busy)" : phase))
+        }
         if let up = s["uptimeSeconds"] as? Int { print(row("uptime", StatusText.duration(Double(up)))) }
         if let rc = s["restartCount"] as? Int { print(row("restarts", String(rc))) }
         if let cf = s["consecutiveFailures"] as? Int { print(row("failures", String(cf))) }
+        if let category = s["lastDownCategory"] as? String { print(row("last failure", category)) }
         if let models = s["models"] as? [String], !models.isEmpty {
             print(row("models", models.joined(separator: ", ")))
         } else {
             print(row("models", "none resident"))
         }
+        if let rate = s["tokensPerSecond"] as? Double { print(row("throughput", "\(rate) tok/s")) }
         if let pct = s["memoryUsedPercent"] as? Int { print(row("memory used", "\(pct)%")) }
         if let thermal = s["thermal"] as? String { print(row("thermal", thermal)) }
         if let rss = s["runnerResidentBytes"] as? Int { print(row("runner RSS", StatusText.byteString(Int64(rss)))) }

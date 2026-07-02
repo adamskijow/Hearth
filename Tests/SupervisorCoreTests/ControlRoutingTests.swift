@@ -52,6 +52,35 @@ struct ControlRoutingTests {
         #expect(status == .unauthorized)
     }
 
+    @Test func statusJSONCarriesTheNewSurfacedFields() throws {
+        let busy = SupervisorState(phase: .healthy, restartCount: 2,
+                                   busy: true, lastDownCategory: "oom", deepProbeConfigured: true)
+        let tokens = TokenMetricsStore.Snapshot(
+            generationRequests: 4, generationTokensTotal: 512, lastTokensPerSecond: 42.57)
+        let data = ControlRouting.statusJSON(busy, now: now, metrics: nil, tokens: tokens)
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(object["busy"] as? Bool == true)
+        #expect(object["lastDownCategory"] as? String == "oom")
+        #expect(object["deepProbeConfigured"] as? Bool == true)
+        #expect(object["generationTokensTotal"] as? Int == 512)
+        // Throughput is rounded to one decimal for display.
+        let rate = try #require(object["tokensPerSecond"] as? Double)
+        #expect(rate == 42.6)
+
+        // With no proxy, the throughput fields are simply absent.
+        let plain = ControlRouting.statusJSON(SupervisorState(phase: .healthy), now: now)
+        let plainObject = try #require(try JSONSerialization.jsonObject(with: plain) as? [String: Any])
+        #expect(plainObject["tokensPerSecond"] == nil)
+        #expect(plainObject["busy"] as? Bool == false)
+    }
+
+    @Test func statusPageRendersBusyAndThroughput() {
+        let page = String(decoding: Data(ControlStatusPage.html.utf8), as: UTF8.self)
+        #expect(page.contains("(busy)"))
+        #expect(page.contains("tok/s"))
+        #expect(page.contains("last failure"))
+    }
+
     @Test func earlyOutcomeResolvesEverythingButAuthenticatedStatus() {
         // Routes that need no supervisor state are resolved without it, so the
         // server can answer them without sampling metrics.

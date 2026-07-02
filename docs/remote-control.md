@@ -22,8 +22,9 @@ queue, on the last probe), `models` (array of strings), `uptimeSeconds`
 `lastRestartReason` (string or absent), `lastDownCategory` (string or absent;
 one of `wedged`, `crash`, `oom`, `signal`, `clean-exit`, `unknown`),
 `deepProbeConfigured` (bool), `thermal` (string or absent),
-`memoryUsedPercent` (number or absent), and `runnerResidentBytes` (number or
-absent). `/metrics` returns the same data as a
+`memoryUsedPercent` (number or absent), `runnerResidentBytes` (number or
+absent), and, when the metrics proxy is enabled, `tokensPerSecond` and
+`generationTokensTotal`. `/metrics` returns the same data as a
 Prometheus text exposition (also behind the token), so you can scrape Hearth into
 Grafana or Uptime Kuma; and the unauthenticated `/healthz` returns `200` when Hearth
 is up, for an uptime monitor. Ready-made Prometheus, Grafana, and Uptime Kuma recipes

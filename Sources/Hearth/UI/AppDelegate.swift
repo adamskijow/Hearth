@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var pressureMonitor: PressureMonitor?
     private var heartbeat: HeartbeatPinger?
     private var metricsProxy: MetricsProxy?
+    private var tokenMetrics: TokenMetricsStore?
     private var processController: FoundationProcessController!
     private var metricsProvider: SystemMetricsProvider!
     private var config = HearthConfig()
@@ -157,6 +158,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         heartbeat?.start()
         metricsProxy = assembly.metricsProxy
         metricsProxy?.start()
+        tokenMetrics = assembly.tokenMetrics
 
         // Auto-enable Start at Login exactly once, on the genuine first run.
         // applyConfig runs on every reload (Preferences Save, SIGHUP, the menu's
@@ -375,6 +377,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 line += " \u{00B7} Runner \(StatusText.byteString(resident))"
             }
             menu.addItem(infoRow(detailAttr(line)))
+        }
+        // Throughput, when the metrics proxy is routing generation traffic.
+        if let rate = tokenMetrics?.snapshot().lastTokensPerSecond {
+            menu.addItem(infoRow(detailAttr(String(format: "Throughput: %.1f tok/s (last generation)", rate))))
         }
         if !latestState.residentModels.isEmpty {
             let loaded = latestState.residentModels.map(StatusText.model).joined(separator: ", ")

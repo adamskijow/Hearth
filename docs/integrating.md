@@ -78,3 +78,13 @@ Ollama. Its integration is exactly the model above: install Hearth, run
 `hearth install-agent` so Ollama stays up, and Hob talks to Ollama on localhost.
 If Ollama wedges, Hearth restarts it; Hob degrades gracefully during the gap and
 its requests resume on their own.
+
+## Recipes: Home Assistant and n8n
+
+The webhook body is small JSON (`level`, `title`, `body`, `event`,
+`timestamp`; `event` is a stable snake_case kind such as `down`, `recovered`,
+`failing`, `memory_limit_exceeded`, `warmup_finished`), which drops straight
+into automation tools:
+
+**Home Assistant.** Add a [webhook
+trigger](https://www.home-assistant.io/docs/automation/trigger/#

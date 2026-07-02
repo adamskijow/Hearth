@@ -29,6 +29,12 @@ a closet, a home-lab server, or the desktop you leave running overnight.
 
 <p align="center"><em>Catching a runner that is still running but stuck (not answering), and recovering it on its own (<code>make demo</code>).</em></p>
 
+<p align="center">
+  <img src="assets/warmup-recovery.gif" alt="After the restart, Hearth loads the models that were resident back into memory, so the next request pays no cold start" width="820">
+</p>
+
+<p align="center"><em>Recovery you cannot feel: with <code>warmModelsAfterRestart</code>, the models that were resident come back with the runner (<code>scripts/demo-warmup.sh</code>).</em></p>
+
 **Contents** &nbsp; [Quickstart](#quickstart) · [Why this exists](#why-this-exists) · [Requirements](#requirements) · [Install](#install-and-build) · [Configure](#configure) · [How it works](#how-it-works) · [Security](#security-and-exposing-the-runner) · [Architecture](#architecture)
 
 ## Documentation

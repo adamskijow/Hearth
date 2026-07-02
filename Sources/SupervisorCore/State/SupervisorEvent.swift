@@ -17,6 +17,13 @@ public enum DownReason: Sendable, Equatable {
         }
     }
 
+    /// A real process exit (as opposed to an alive-but-wedged hang), so a
+    /// warm-up-load that killed the runner can be told from a wedge.
+    public var isCrash: Bool {
+        if case .crashed = self { return true }
+        return false
+    }
+
     /// A bounded, low-cardinality category for metrics labels. Never model
     /// names, paths, or stderr content; only these fixed values.
     public var category: String {
@@ -59,6 +66,10 @@ public enum SupervisorEvent: Sendable, Equatable {
     /// The post-restart model warm-up finished. `missing` lists models that were
     /// resident before the restart but could not be loaded again.
     case warmupFinished(missing: [String])
+    /// Warm-up was deliberately skipped because the runner had just crashed
+    /// loading these models (an out-of-memory kill, or a crash right after a
+    /// warm-up): reloading them would most likely crash the GPU again.
+    case warmupSkippedAfterCrash(models: [String])
     /// The opt-in memory watchdog restarted the runner: its resident size
     /// crossed the configured ceiling.
     case memoryLimitExceeded(residentBytes: Int64, limitBytes: Int64)
@@ -73,6 +84,8 @@ public enum SupervisorEvent: Sendable, Equatable {
             return true
         case .warmupFinished(let missing):
             return !missing.isEmpty
+        case .warmupSkippedAfterCrash:
+            return true
         case .memoryLimitExceeded:
             return true
         default:

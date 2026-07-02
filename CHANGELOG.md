@@ -25,7 +25,11 @@ around user restarts.
 - Model warm-up after restart (`warmModelsAfterRestart`): the models that were
   resident before a restart are loaded again once the runner is healthy, so
   recovery does not hand the next request a multi-gigabyte cold start. A model
-  that fails to load triggers a "Models not restored" alert.
+  that fails to load triggers a "Models not restored" alert. Warm-up is skipped
+  when the runner had just crashed loading those models (an out-of-memory kill,
+  or a crash right after a warm-up), so a model too big for the Mac cannot drive
+  a GPU crash loop; Hearth leaves the runner idle-but-alive and alerts you to
+  load a smaller model instead.
 - Busy is a first-class state: a runner answering 503 (a full queue) is
   serving, not wedged. It is never restarted for being busy, the menu and
   `hearth status` show "Healthy (busy)", and `/status` carries a `busy` field.

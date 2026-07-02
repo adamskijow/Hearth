@@ -70,6 +70,17 @@ also shows a "config issues" line when it finds any.
   runner when this happens; if it happens often, the
   [Ollama setup guide](ollama.md) covers deep probes, and a recurring hang after
   heavy load is usually the runner or GPU, not Hearth.
+- **A big model keeps crashing the runner (or the GPU) on load.** A model too
+  large for the Mac's unified memory dies as it loads, often as an
+  out-of-memory kill. Hearth restarts it, but if `warmModelsAfterRestart` is on
+  it will NOT reload a model whose load just crashed the runner (that would
+  crash the GPU again); it leaves the runner idle-but-alive and alerts "Models
+  not reloaded" so you can switch to a smaller model or lower the context size.
+  To have Hearth cycle the runner pre-emptively as memory creeps, before a hard
+  crash, set `runnerMemoryLimitMB` to a ceiling above what your good models
+  need. Note that Ollama runs language and vision (image-reading) models only;
+  it does not do image generation, so a text-to-image model is not something to
+  point Hearth at.
 - **Phone alerts (ntfy) or webhooks stopped arriving.** Delivery failures are
   logged, one line per alert, to Hearth's stderr: `Hearth: ntfy alert to
   <server> failed: ...` (or `webhook alert to <host> failed`). For the menubar

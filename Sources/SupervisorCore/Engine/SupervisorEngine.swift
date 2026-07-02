@@ -86,6 +86,14 @@ public actor SupervisorEngine {
     /// The models resident before the most recent teardown, captured at the kill
     /// or down transition so a warm-up after recovery can restore them.
     private var modelsToRestore: [String] = []
+    /// Set when the last failure was one reloading the same models would likely
+    /// reproduce: an out-of-memory kill, or a crash that landed right after a
+    /// warm-up we started. Warm-up is skipped for that recovery, so Hearth does
+    /// not re-crash the GPU with a model too big for it.
+    private var suppressWarmupAfterCrash = false
+    /// When the last warm-up began, to blame a crash that lands soon after on
+    /// the warm-up load itself (the OOM classifier is a heuristic and can miss).
+    private var lastWarmupStartedAt: Date?
     /// A cold model load is legitimately slow; give each warm-up request minutes.
     static let warmupTimeout: TimeInterval = 180
 
@@ -149,6 +157,8 @@ public actor SupervisorEngine {
         // A fresh session warms nothing: whatever was resident before an
         // explicit stop is stale intent, not a recovery to hide.
         modelsToRestore = []
+        suppressWarmupAfterCrash = false
+        lastWarmupStartedAt = nil
         let output = machine.start(now: clock.now)
         await apply(output, models: nil)
         nudgeLoop()
@@ -482,11 +492,21 @@ public actor SupervisorEngine {
 
     private func handleEvent(_ event: SupervisorEvent) async {
         switch event {
-        case .down:
+        case .down(let reason):
             // A crash can land without a kill effect; snapshot here too so the
             // warm-up knows what was resident before the failure.
             if !currentModels.isEmpty {
                 modelsToRestore = currentModels.map(\.name)
+            }
+            // Would reloading these models just reproduce the crash? Two signals:
+            // the exit was classified out-of-memory, or a crash landed within the
+            // warm-up window of a warm-up we started (the heuristic OOM classifier
+            // can miss, so the timing is a second, classifier-independent guard).
+            let oom = reason == .crashed(.outOfMemory)
+            let crashedSoonAfterWarmup = reason.isCrash
+                && (lastWarmupStartedAt.map { clock.now.timeIntervalSince($0) < Self.warmupTimeout } ?? false)
+            if oom || crashedSoonAfterWarmup {
+                suppressWarmupAfterCrash = true
             }
         case .recovered, .becameHealthy:
             startWarmupIfNeeded()
@@ -519,11 +539,23 @@ public actor SupervisorEngine {
     /// runner's own keep-alive policy then owns residency, as always.
     private func startWarmupIfNeeded() {
         guard warmModels, !modelsToRestore.isEmpty else { return }
+        // The runner just crashed loading these very models; reloading them would
+        // most likely crash it again. Leave the runner idle-but-alive (the user
+        // can switch to a smaller model) and say why, instead of driving a GPU
+        // crash loop.
+        if suppressWarmupAfterCrash {
+            let skipped = modelsToRestore
+            modelsToRestore = []
+            suppressWarmupAfterCrash = false
+            Task { [weak self] in await self?.handleEvent(.warmupSkippedAfterCrash(models: skipped)) }
+            return
+        }
         let requests: [(String, DeepProbeRequest)] = modelsToRestore.compactMap { model in
             runner.deepReadinessRequest(model: model).map { (model, $0) }
         }
         modelsToRestore = []
         guard !requests.isEmpty else { return }
+        lastWarmupStartedAt = clock.now
         let http = self.http
         Task.detached { [weak self] in
             var missing: [String] = []
@@ -612,6 +644,13 @@ public actor SupervisorEngine {
                 level: .warning,
                 title: "Memory limit restart",
                 body: "The runner reached \(StatusText.byteString(resident)) resident, over the \(StatusText.byteString(limit)) limit, and was restarted before it could wedge. If this repeats quickly, the limit may be too small for the loaded models.",
+                event: event
+            )
+        case .warmupSkippedAfterCrash(let models):
+            return HearthNotification(
+                level: .warning,
+                title: "Models not reloaded",
+                body: "The runner crashed loading \(models.joined(separator: ", ")), so Hearth did not reload it after the restart: doing so would likely crash the GPU again. Load a smaller model, or lower the context size, for this machine's memory.",
                 event: event
             )
         default:

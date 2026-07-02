@@ -101,6 +101,8 @@ struct StatusTextTests {
         #expect(StatusText.describe(.warmupFinished(missing: [])) == "Warmed the models back up after the restart")
         #expect(StatusText.describe(.warmupFinished(missing: ["llama3:8b"]))
                 == "Models not restored after the restart: llama3:8b")
+        #expect(StatusText.describe(.warmupSkippedAfterCrash(models: ["llama3:70b"]))
+                == "Skipped reloading llama3:70b: the runner had just crashed loading them")
         #expect(StatusText.describe(.stopped) == "Stopped")
     }
 

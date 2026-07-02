@@ -248,6 +248,67 @@ struct EngineTests {
         #expect(alerted)
     }
 
+    @Test func warmupIsSkippedAfterAnOutOfMemoryCrash() async throws {
+        // The scenario a big model creates: it OOMs the GPU, Hearth restarts,
+        // and reloading the same model would just crash it again. Warm-up must
+        // not drive that loop.
+        let h = makeHarness(warmModels: true)
+        makeServing(h)
+        let warmURL = try #require(h.runner.deepReadinessRequest(model: "llama3:8b")).url
+        h.http.set(warmURL, .ok(Data("{}".utf8)))
+
+        await h.engine.start()
+        _ = await h.engine.stepOnce()   // healthy, llama3:8b resident
+
+        // The runner is OOM-killed (a signal plus an out-of-memory stderr).
+        let handle = try #require(h.processes.lastHandle)
+        h.processes.simulateExit(handle, exit: ProcessExit(code: 0, wasSignaled: true, signal: 9),
+                                 stderr: ["ggml_metal: failed to allocate buffer"])
+        let wait = await h.engine.stepOnce()   // down, classified out-of-memory
+        h.clock.advance(by: wait + 0.01)
+        _ = await h.engine.stepOnce()          // respawn
+        _ = await h.engine.stepOnce()          // healthy -> warm-up decision
+
+        // No reload was attempted, and the user is told why.
+        let warmed = await eventually { h.http.postCount(to: warmURL) >= 1 }
+        #expect(!warmed)
+        let told = await eventually {
+            await h.notifier.received.contains { $0.title == "Models not reloaded" }
+        }
+        #expect(told)
+    }
+
+    @Test func warmupResumesAfterACleanRestartFollowingAnOOM() async throws {
+        // The suppression is per-recovery: once the runner comes back and later
+        // restarts for an unrelated reason, warm-up works again.
+        let h = makeHarness(warmModels: true)
+        makeServing(h)
+        let warmURL = try #require(h.runner.deepReadinessRequest(model: "llama3:8b")).url
+        h.http.set(warmURL, .ok(Data("{}".utf8)))
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+
+        // OOM crash -> warm-up suppressed this recovery.
+        var handle = try #require(h.processes.lastHandle)
+        h.processes.simulateExit(handle, exit: ProcessExit(code: 0, wasSignaled: true, signal: 9),
+                                 stderr: ["out of memory"])
+        var wait = await h.engine.stepOnce()
+        h.clock.advance(by: wait + 0.01)
+        _ = await h.engine.stepOnce()
+        _ = await h.engine.stepOnce()
+        #expect(h.http.postCount(to: warmURL) == 0)
+
+        // A later, ordinary crash (no OOM signature): warm-up should run.
+        handle = try #require(h.processes.lastHandle)
+        h.processes.simulateExit(handle, exit: ProcessExit(code: 1))
+        wait = await h.engine.stepOnce()
+        h.clock.advance(by: wait + 0.01)
+        _ = await h.engine.stepOnce()
+        _ = await h.engine.stepOnce()
+        let warmed = await eventually { h.http.postCount(to: warmURL) >= 1 }
+        #expect(warmed)
+    }
+
     @Test func warmupIsOffByDefault() async throws {
         let h = makeHarness()   // warmModels defaults to false
         makeServing(h)

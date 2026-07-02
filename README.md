@@ -11,6 +11,9 @@
   <img src="https://img.shields.io/badge/macOS-14%2B-black?logo=apple&logoColor=white" alt="macOS 14+">
 </p>
 
+Hearth is an independent, third-party project. It is not affiliated with,
+endorsed by, or supported by Ollama.
+
 Hearth keeps Ollama running on a Mac so it is always ready when your apps need it.
 If Ollama crashes, Hearth restarts it. If Ollama is still running but has quietly
 stopped answering (a hang the built-in macOS restart tools cannot see), Hearth

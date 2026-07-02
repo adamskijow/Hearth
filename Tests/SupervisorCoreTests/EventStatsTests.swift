@@ -73,4 +73,28 @@ struct EventStatsTests {
         #expect(s.window == nil)
         #expect(s.meanRecovery == nil)
     }
+
+    @Test func realEventsRenderedThroughStatusTextStillParse() {
+        // The stability contract freezes the phrases --stats parses. This
+        // renders real events through the same describe() + line() pipeline the
+        // log writer uses and re-parses them, so a casual rewording of
+        // "Down: ", "Recovered", "Failing:", or "Maintenance restart" is a CI
+        // failure here, not a silent stats break in the field.
+        let events: [(String, SupervisorEvent)] = [
+            ("2026-07-01 10:00:00", .down(.wedged)),
+            ("2026-07-01 10:01:00", .recovered),
+            ("2026-07-01 11:00:00", .down(.crashed(.outOfMemory))),
+            ("2026-07-01 11:00:30", .recovered),
+            ("2026-07-01 12:00:00", .enteredFailing(restartsInWindow: 5, window: 60)),
+            ("2026-07-02 03:00:00", .maintenanceRestart),
+        ]
+        let lines = events.map { EventLog.line(timestamp: $0.0, message: StatusText.describe($0.1)) }
+        let s = EventStats.summarize(lines)
+        #expect(s.downCount == 2)
+        #expect(s.recoveredCount == 2)
+        #expect(s.crashLoopCount == 1)
+        #expect(s.maintenanceRestarts == 1)
+        #expect(s.recoveryTimes == [60, 30])
+        #expect(s.byReason.map(\.reason).contains("ran out of memory"))
+    }
 }

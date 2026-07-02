@@ -52,6 +52,28 @@ struct ControlRoutingTests {
         #expect(status == .unauthorized)
     }
 
+    @Test func statusKeySetIsTheStabilityContract() throws {
+        // docs/stability.md declares /status fields stable and additive-only.
+        // This pins the exact key set with every optional source populated, so
+        // a rename or removal is a deliberate act that edits this test (and the
+        // contract), never an accident.
+        let full = SupervisorState(phase: .healthy, residentModels: [ResidentModel(name: "m")],
+                                   healthySince: now.addingTimeInterval(-60), lastRestartReason: "crash",
+                                   restartCount: 1, busy: true, lastDownCategory: "crash",
+                                   deepProbeConfigured: true)
+        let metrics = SystemMetrics(thermal: .nominal, memoryUsedFraction: 0.5, runnerResidentBytes: 1024)
+        let tokens = TokenMetricsStore.Snapshot(
+            generationRequests: 1, generationTokensTotal: 10, lastTokensPerSecond: 5)
+        let data = ControlRouting.statusJSON(full, now: now, metrics: metrics, tokens: tokens)
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(Set(object.keys) == [
+            "phase", "busy", "models", "uptimeSeconds", "restartCount",
+            "consecutiveFailures", "lastRestartReason", "lastDownCategory",
+            "deepProbeConfigured", "thermal", "memoryUsedPercent",
+            "runnerResidentBytes", "tokensPerSecond", "generationTokensTotal",
+        ])
+    }
+
     @Test func statusJSONCarriesTheNewSurfacedFields() throws {
         let busy = SupervisorState(phase: .healthy, restartCount: 2,
                                    busy: true, lastDownCategory: "oom", deepProbeConfigured: true)

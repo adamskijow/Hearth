@@ -43,6 +43,7 @@ The README is the tour; the operational detail lives in `docs/`:
 - **[Troubleshooting](docs/troubleshooting.md):** the common failure modes and their fixes.
 - **[Integrating with Hearth](docs/integrating.md):** for an app that depends on a local runner being up.
 - **[Reverse proxy and TLS](docs/reverse-proxy.md):** reaching the runner or the control endpoint securely from off this machine.
+- **[Stability contract](docs/stability.md):** which surfaces are stable across 1.x (config keys, CLI, control API, metrics, event log) and what is experimental.
 - **[Observability roadmap](docs/observability-roadmap.md):** follow-up metrics work such as throughput and OOM fixtures.
 - **[Known limitations and design choices](docs/limitations.md):** what Hearth does not do, and why.
 - **[Development](docs/development.md):** the test suite, signing, and cutting a release.

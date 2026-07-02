@@ -7,6 +7,37 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+The road-to-1.0 hardening pass: closing the gaps a new user hits in week one,
+and writing down what 1.0 will promise.
+
+### Added
+
+- Unknown config keys warn instead of being silently ignored, with a
+  did-you-mean suggestion for near misses (`probemodel` suggests `probeModel`).
+  Surfaced by `hearth doctor` and the menu's config-issues line; always
+  warnings, never errors, so a config from a newer Hearth still loads.
+- `hearth doctor` names every supervision layer installed (root daemon, login
+  agent, menubar login item), reports which pid holds the single-instance lock,
+  and warns with exact removal commands when layers have stacked up.
+- `hearth update` also upgrades Hearth itself when it was installed with the
+  Homebrew cask, and says how to relaunch the running instance onto the new
+  build. A source install is told how to update instead of skipped silently.
+- Preferences now covers the metrics proxy (toggle and port), named control
+  tokens (a sheet editor with per-row Generate), the busy timeout, the memory
+  limit watchdog, thermal alerts, the memory alert percent, and the heartbeat
+  interval. The reboot escalation family stays config-file-only on purpose.
+- docs/stability.md: the stability contract for 1.x, declaring the config
+  schema, CLI subcommands and exit codes, control API fields and routes,
+  Prometheus metric names, and the event-log phrases `events --stats` parses
+  as stable, and naming what is experimental. Tests pin the /status key set
+  and round-trip the frozen event phrases so an accidental break fails CI.
+
+### Changed
+
+- `hearth update` with a non-Ollama runner now points at that runner's own
+  updater and continues to the Hearth self-update phase, instead of exiting
+  with an error before doing anything.
+
 ## [0.9.0] - 2026-07-02
 
 The beginner and operator release, shaped by four independent audits in two

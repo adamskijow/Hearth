@@ -103,6 +103,11 @@ struct StatusTextTests {
                 == "Models not restored after the restart: llama3:8b")
         #expect(StatusText.describe(.warmupSkippedAfterCrash(models: ["llama3:70b"]))
                 == "Skipped reloading llama3:70b: the runner had just crashed loading them")
+        // "Maintenance restart" is frozen by the stability contract: events
+        // --stats parses it verbatim (docs/stability.md).
+        #expect(StatusText.describe(.maintenanceRestart) == "Maintenance restart")
+        #expect(StatusText.describe(.memoryLimitExceeded(residentBytes: 2_000_000_000, limitBytes: 1_500_000_000))
+                .hasPrefix("Memory limit restart ("))
         #expect(StatusText.describe(.stopped) == "Stopped")
     }
 

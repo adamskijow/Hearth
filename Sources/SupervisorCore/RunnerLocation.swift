@@ -11,14 +11,14 @@ public enum RunnerLocation {
     /// Candidate locations for a runner kind, most preferred first. `path` is the
     /// PATH environment value (colon separated entries), or nil.
     public static func candidates(for runner: String, home: String, path: String?) -> [String] {
-        switch runner.lowercased() {
-        case "lmstudio", "lm-studio", "lm_studio":
+        switch RunnerKind(fromConfigString: runner) {
+        case .lmStudio:
             return ["\(home)/.lmstudio/bin/lms", "/usr/local/bin/lms", "/opt/homebrew/bin/lms"]
                 + pathCandidates(for: "lms", path: path)
-        case "mlx", "mlx_lm", "mlx-lm":
+        case .mlx:
             return ["/opt/homebrew/bin/mlx_lm.server", "/usr/local/bin/mlx_lm.server"]
                 + pathCandidates(for: "mlx_lm.server", path: path)
-        default:
+        case .ollama:
             return [
                 "/opt/homebrew/bin/ollama",
                 "/usr/local/bin/ollama",

@@ -69,11 +69,7 @@ struct WelcomeView: View {
     @State private var notificationsEnabled = false
 
     private var runnerLabel: String {
-        switch runner.lowercased() {
-        case "lmstudio", "lm-studio", "lm_studio": return "LM Studio"
-        case "mlx", "mlx_lm", "mlx-lm": return "mlx_lm"
-        default: return "Ollama"
-        }
+        RunnerKind(fromConfigString: runner).displayName
     }
 
     var body: some View {

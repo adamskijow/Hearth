@@ -316,14 +316,17 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         )
     }
 
+    /// The runner kind these settings select, resolving the `runner` aliases once.
+    public var runnerKind: RunnerKind { RunnerKind(fromConfigString: runner) }
+
     /// The runner these settings select.
     public func makeRunner() -> any Runner {
-        switch runner.lowercased() {
-        case "lmstudio", "lm-studio", "lm_studio":
+        switch runnerKind {
+        case .lmStudio:
             return LMStudioRunner(binaryPath: lmStudioBinaryPath, host: host, port: port, extraEnvironment: runnerEnv)
-        case "mlx", "mlx_lm", "mlx-lm":
+        case .mlx:
             return MLXRunner(binaryPath: mlxBinaryPath, host: host, port: port, extraEnvironment: runnerEnv)
-        default:
+        case .ollama:
             return makeOllamaRunner()
         }
     }
@@ -337,26 +340,20 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     /// The path to the binary the selected runner launches, for the menubar
     /// "binary not found" check.
     public var selectedBinaryPath: String {
-        switch runner.lowercased() {
-        case "lmstudio", "lm-studio", "lm_studio":
-            return lmStudioBinaryPath
-        case "mlx", "mlx_lm", "mlx-lm":
-            return mlxBinaryPath
-        default:
-            return ollamaBinaryPath
+        switch runnerKind {
+        case .lmStudio: return lmStudioBinaryPath
+        case .mlx: return mlxBinaryPath
+        case .ollama: return ollamaBinaryPath
         }
     }
 
     /// Set the binary path for the currently selected runner. One place so the
     /// first-run template and `hearth setup` cannot drift on which field to write.
     public mutating func setSelectedBinaryPath(_ path: String) {
-        switch runner.lowercased() {
-        case "lmstudio", "lm-studio", "lm_studio":
-            lmStudioBinaryPath = path
-        case "mlx", "mlx_lm", "mlx-lm":
-            mlxBinaryPath = path
-        default:
-            ollamaBinaryPath = path
+        switch runnerKind {
+        case .lmStudio: lmStudioBinaryPath = path
+        case .mlx: mlxBinaryPath = path
+        case .ollama: ollamaBinaryPath = path
         }
     }
 }

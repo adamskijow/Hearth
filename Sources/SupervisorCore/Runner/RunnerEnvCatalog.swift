@@ -23,10 +23,10 @@ public struct RunnerEnvVar: Sendable, Equatable {
 /// is deliberately absent: Hearth derives it from host and port.
 public enum RunnerEnvCatalog {
     public static func variables(for runner: String) -> [RunnerEnvVar] {
-        switch runner.lowercased() {
-        case "lmstudio", "lm-studio", "lm_studio": return []   // LM Studio is configured in its app, not by env
-        case "mlx", "mlx_lm", "mlx-lm": return mlx
-        default: return ollama
+        switch RunnerKind(fromConfigString: runner) {
+        case .lmStudio: return []   // LM Studio is configured in its app, not by env
+        case .mlx: return mlx
+        case .ollama: return ollama
         }
     }
 

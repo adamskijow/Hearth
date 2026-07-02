@@ -172,11 +172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private static func installHint(for runner: String) -> String {
-        switch runner.lowercased() {
-        case "lmstudio", "lm-studio", "lm_studio": return "brew install --cask lm-studio"
-        case "mlx", "mlx_lm", "mlx-lm": return "pip install mlx-lm"
-        default: return "brew install ollama"
-        }
+        RunnerKind(fromConfigString: runner).installHint
     }
 
     // MARK: - Wiring

@@ -260,20 +260,8 @@ struct PreferencesView: View {
     /// The binary path for the currently selected runner.
     private var binaryPath: Binding<String> {
         Binding(
-            get: {
-                switch model.config.runner.lowercased() {
-                case "lmstudio", "lm-studio", "lm_studio": return model.config.lmStudioBinaryPath
-                case "mlx", "mlx_lm", "mlx-lm": return model.config.mlxBinaryPath
-                default: return model.config.ollamaBinaryPath
-                }
-            },
-            set: { value in
-                switch model.config.runner.lowercased() {
-                case "lmstudio", "lm-studio", "lm_studio": model.config.lmStudioBinaryPath = value
-                case "mlx", "mlx_lm", "mlx-lm": model.config.mlxBinaryPath = value
-                default: model.config.ollamaBinaryPath = value
-                }
-            }
+            get: { model.config.selectedBinaryPath },
+            set: { value in model.config.setSelectedBinaryPath(value) }
         )
     }
 

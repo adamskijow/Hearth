@@ -24,7 +24,6 @@ public struct Diagnostic: Sendable, Equatable {
 /// command and could back an in-app check; keeping them here makes every rule
 /// testable without a filesystem or a running app.
 public enum ConfigDiagnostics {
-    private static let knownRunners = ["ollama", "lmstudio", "lm-studio", "lm_studio", "mlx", "mlx_lm", "mlx-lm"]
 
     public static func check(_ config: HearthConfig, runningAsRoot: Bool = false) -> [Diagnostic] {
         var issues: [Diagnostic] = []
@@ -45,33 +44,28 @@ public enum ConfigDiagnostics {
         if !isValidPort(config.port) {
             issues.append(.init(.error, "Runner port \(config.port) is out of range (1-65535)."))
         }
-        if !knownRunners.contains(config.runner.lowercased()) {
+        if !RunnerKind.knownConfigStrings.contains(config.runner.lowercased()) {
             issues.append(.init(.error, "Unknown runner \"\(config.runner)\"; expected ollama, lmstudio, or mlx."))
         }
         let mode = config.mode.lowercased()
         if mode != "managed" && mode != "attached" {
             issues.append(.init(.error, "Unknown mode \"\(config.mode)\"; expected managed or attached."))
         }
-        let normalizedRunner = config.runner.lowercased()
         // LM Studio's `lms server start` exits immediately (the server runs in LM
         // Studio's own background process), so a managed runner thrashes. Use
         // attached mode and start the LM Studio server yourself.
-        if ["lmstudio", "lm-studio", "lm_studio"].contains(normalizedRunner), mode == "managed" {
+        if config.runnerKind == .lmStudio, mode == "managed" {
             issues.append(.init(.warning, "LM Studio works only in attached mode; `lms server start` exits at once, so managed mode thrashes. Set mode to attached and start LM Studio's server yourself."))
         }
-        if ["lmstudio", "lm-studio", "lm_studio"].contains(normalizedRunner), config.port == 11434 {
+        if config.runnerKind == .lmStudio, config.port == 11434 {
             issues.append(.init(.warning, "LM Studio usually serves on port 1234; this config still uses Ollama's default 11434. Set port to 1234 unless you changed LM Studio."))
         }
-        if ["mlx", "mlx_lm", "mlx-lm"].contains(normalizedRunner), config.port == 11434 {
+        if config.runnerKind == .mlx, config.port == 11434 {
             issues.append(.init(.warning, "mlx_lm.server usually serves on port 8080; this config still uses Ollama's default 11434. Set port to 8080 unless you changed mlx_lm."))
         }
         // Hearth derives OLLAMA_HOST from host and port, so a runnerEnv value for it
         // is overwritten at spawn; flag it rather than letting it silently lose.
-        // Anything that is not LM Studio or mlx runs as Ollama (the default path).
-        let isLMStudio = ["lmstudio", "lm-studio", "lm_studio"].contains(normalizedRunner)
-        let isMLX = ["mlx", "mlx_lm", "mlx-lm"].contains(normalizedRunner)
-        let isOllama = !isLMStudio && !isMLX
-        if isOllama, config.runnerEnv.keys.contains("OLLAMA_HOST") {
+        if config.runnerKind == .ollama, config.runnerEnv.keys.contains("OLLAMA_HOST") {
             issues.append(.init(.warning, "runnerEnv sets OLLAMA_HOST, but Hearth derives it from host and port; the runnerEnv value is ignored. Set host instead to change the bind address."))
         }
         let runnerUser = config.normalizedRunnerUser

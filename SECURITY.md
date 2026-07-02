@@ -2,12 +2,12 @@
 
 ## Supported versions
 
-Hearth is pre-1.0. Security fixes land on the latest release line.
+Security fixes land on the latest 1.x release line.
 
 | Version | Supported |
 |---------|-----------|
-| 0.1.x   | yes       |
-| < 0.1   | no        |
+| 1.x     | yes       |
+| < 1.0   | no        |
 
 ## Reporting a vulnerability
 

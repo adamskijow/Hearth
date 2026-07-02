@@ -79,9 +79,9 @@ See [ollama.md](ollama.md) for the full Ollama setup guide, including deep probe
 | `probeIntervalSeconds` | number | `5` | How often to probe while healthy. |
 | `startupGraceSeconds` | number | `30` | How long to allow for the runner to come up before treating it as failed. |
 | `startupProbeIntervalSeconds` | number | `1` | Probe cadence during startup and restart. |
-| `initialBackoffSeconds` | number | `1` | Wait before the first restart attempt. |
+| `initialBackoffSeconds` | number | `1` | Wait before the first restart attempt (floored at 0.1s, so a zero cannot respawn a failing runner in a no-delay loop). |
 | `backoffMultiplier` | number | `2` | Each failed restart multiplies the wait by this (clamped to at least 1). |
-| `maxBackoffSeconds` | number | `60` | Upper limit on the restart wait. |
+| `maxBackoffSeconds` | number | `60` | Upper limit on the restart wait (floored at the initial backoff, so backoff can always grow). |
 | `crashLoopThreshold` | int | `5` | Failures within the window that trip the crash-loop brake (clamped to at least 1). |
 | `crashLoopWindowSeconds` | number | `60` | Sliding window for counting failures toward the brake. |
 | `failingProbeIntervalSeconds` | number | `30` | Slow, steady retry cadence once in the crash-loop (failing) state. |
@@ -96,9 +96,9 @@ See [ollama.md](ollama.md) for the full Ollama setup guide, including deep probe
 | Key | Type | Default | Meaning |
 |-----|------|---------|---------|
 | `localNotifications` | bool | `true` | Show a macOS notification on down/recovered (needs a logged-in session and a signed app). |
-| `ntfyTopic` | string or null | `null` | Subscribe to this topic in the [ntfy](https://ntfy.sh) app for phone alerts. Null disables ntfy. |
+| `ntfyTopic` | string or null | `null` | Subscribe to this topic in the [ntfy](https://ntfy.sh) app for phone alerts. Null disables ntfy. Stick to letters, digits, dashes, and underscores: anything else is percent-encoded into a single path segment, so the topic you subscribe to must match exactly. A delivery failure (bad server, 401) is logged to stderr, one line per alert. |
 | `ntfyServer` | string | `"https://ntfy.sh"` | ntfy server URL. |
-| `webhookURL` | string or null | `null` | POST a small JSON status body (`level`, `title`, `body`, `event`, `timestamp`) to this URL on each notification, to wire Hearth into your own automation. Null disables it. Only Hearth's own status is sent, never runner content. |
+| `webhookURL` | string or null | `null` | POST a small JSON status body (`level`, `title`, `body`, `event`, `timestamp`) to this URL on each notification, to wire Hearth into your own automation. Null disables it. Only Hearth's own status is sent, never runner content. Delivery failures are logged to stderr. |
 | `memoryAlertPercent` | int | `90` | Alert when system memory used reaches this percent (the precursor to the runner being killed under pressure). `0` disables the memory alert. |
 | `thermalAlerts` | bool | `true` | Alert when the Mac's thermal state goes serious or critical. |
 

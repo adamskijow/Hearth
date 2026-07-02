@@ -176,7 +176,7 @@ struct WelcomeView: View {
                 Text(message)
                     .font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Button("Watch the existing runner instead", action: onSwitchToAttached)
+                Button("Watch the Existing Runner Instead", action: onSwitchToAttached)
                     .controlSize(.small)
             }
             Spacer(minLength: 0)

@@ -70,3 +70,11 @@ also shows a "config issues" line when it finds any.
   runner when this happens; if it happens often, the
   [Ollama setup guide](ollama.md) covers deep probes, and a recurring hang after
   heavy load is usually the runner or GPU, not Hearth.
+- **Phone alerts (ntfy) or webhooks stopped arriving.** Delivery failures are
+  logged, one line per alert, to Hearth's stderr: `Hearth: ntfy alert to
+  <server> failed: ...` (or `webhook alert to <host> failed`). For the menubar
+  app that lands in Console.app (search "Hearth"); for the headless daemon it
+  is in the launchd log path from its plist. A repeating line means a
+  misconfigured endpoint (wrong server, 401, firewall), and it repeats on
+  every alert until fixed, so a long-broken endpoint also makes that log
+  noisy. Preferences has a "Send test notification" button to verify a fix.

@@ -15,9 +15,12 @@ curl -X POST -H "Authorization: Bearer $TOKEN" http://HOST:11435/stop
 curl -X POST -H "Authorization: Bearer $TOKEN" http://HOST:11435/start
 ```
 
-`/status` returns a compact JSON document with the phase, resident models, uptime,
-restart count, last restart reason, and the system metrics (thermal state, memory
-used percent, runner resident bytes). `/metrics` returns the same data as a
+`/status` returns a compact JSON document. The exact keys, for anything that
+parses it: `phase` (string), `models` (array of strings), `uptimeSeconds`
+(number or absent), `restartCount` (number), `consecutiveFailures` (number),
+`lastRestartReason` (string or absent), `thermal` (string or absent),
+`memoryUsedPercent` (number or absent), and `runnerResidentBytes` (number or
+absent). `/metrics` returns the same data as a
 Prometheus text exposition (also behind the token), so you can scrape Hearth into
 Grafana or Uptime Kuma; and the unauthenticated `/healthz` returns `200` when Hearth
 is up, for an uptime monitor. Ready-made Prometheus, Grafana, and Uptime Kuma recipes
@@ -36,6 +39,11 @@ When Hearth detects a Tailscale address on the machine (an interface in the
 100.64.0.0/10 range), the menubar shows a "Phone access" line with the full control
 URL to use from your phone. Hearth only reads the interface list; it does not
 configure Tailscale.
+
+`controlHost` can be an IPv6 address (`::1`, or a Tailscale `fd7a:...` address):
+set the bare address in the config and Hearth brackets it wherever a URL is
+built, including `hearth status` and the advertised phone-access URL. In your
+own curl invocations, bracket it yourself (`http://[fd7a::...]:11435/status`).
 
 ## Local status and logs
 
@@ -62,6 +70,11 @@ hearth uninstall-agent     # remove that login agent
 queries the control endpoint when it is enabled, printing the full picture. With the
 control endpoint off it falls back to a reduced report: whether a supervised runner
 is recorded and alive, and whether anything is serving on the runner's port.
+
+Exit codes, for scripts: subcommands exit `0` on success and non-zero on failure
+(`hearth doctor` exits non-zero when it finds an error; `hearth wait-ready` exits
+`1` on timeout). An unknown subcommand (`hearth statuss`) prints an error to
+stderr and exits `2` rather than launching the app.
 
 Hearth records its own decisions (became healthy, down with the cause, restart
 scheduled, recovered, crash loop) to a small line-capped `events.log` next to the

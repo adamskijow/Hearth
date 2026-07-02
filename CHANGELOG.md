@@ -8,6 +8,18 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## Unreleased
 
 ### Added
+- A beginner-oriented FAQ (`docs/faq.md`): is Hearth for me, which mode do I
+  want, how do I know it is working, does my data leave the machine, and how to
+  uninstall. Troubleshooting gained entries for the crash loop, spawn failures,
+  and the "stuck (still running, but not answering)" wording.
+- The menu now carries next steps in its two not-recovering states: a crash
+  loop points at Open Logs and `hearth doctor`, and a watched (attached-mode)
+  runner that is down says plainly that Hearth will not start it, with a
+  one-click switch to managed. Both conflict warnings (brew services, a runner
+  already on the port) offer a one-click "Watch the Existing Runner Instead".
+- A `ModeKind` type owns the managed/attached user-facing vocabulary (status
+  phrase, Preferences picker labels), mirroring `RunnerKind`, and the menu
+  guidance wording lives in `StatusText` where tests lock it down.
 - `hearth mode managed|attached`: explicitly switch whether Hearth starts and
   restarts the runner or watches a runner started by something else. Switching to
   attached mode refuses by default unless a compatible runner is already serving;
@@ -26,8 +38,63 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `hearth doctor` now distinguishes a compatible already-running runner from an
   unknown listener on the port, and attached mode tells you whether nothing is
   serving or the service is not the configured runner.
+- A user-facing copy pass for people newer to local LLMs: crash reasons are
+  said in plain words with the raw signal or exit code in parentheses, the
+  wedge label reads "stuck (still running, but not answering)", the status
+  line says "started by Hearth" or "watched (started elsewhere)" instead of
+  managed/attached, notification bodies end with where to look next (naming
+  CLI equivalents so headless setups are not pointed at a menu), the Advanced
+  preferences collapse behind a disclosure, and the README leads with what
+  Hearth does, an is-it-safe-to-install answer, and an uninstall line.
+- A manual restart of an already-healthy runner comes back quietly instead of
+  announcing a spurious "Runner recovered"; a manual restart of a down or
+  failing runner still announces the all-clear.
+- Foreign-runner detection (the "Already running" warning) now requires the
+  runner's own readiness endpoint to answer with success; an unrelated service
+  holding the port is a port conflict, not a reason to suggest attached mode.
+- A typo'd subcommand (`hearth statuss`) prints an error and exits 2 instead
+  of silently launching the menubar agent; flag-style launch arguments from
+  Finder and Xcode are exempt.
+- Start at Login auto-registers once, on the genuine first run; a config
+  reload no longer re-enables it after the user turned it off.
+- `initialBackoffSeconds` and `maxBackoffSeconds` are floored (0.1s, and the
+  initial backoff respectively) like their neighbors, and `hearth doctor`
+  warns on a non-positive initial backoff.
+- GitHub Actions workflows use `actions/checkout@v5`.
 
 ### Fixed
+- The shutdown group SIGKILL skipped the most common leak shape: a leader that
+  exited on SIGTERM (an unreaped zombie) while a wedged group member survived
+  holding GPU and unified memory. It now gates on the deferred-kill rule
+  (unreaped means unrecycled) and takes the group down.
+- Engine races around user restarts: a probe that was in flight across a
+  restart could mark the fresh child healthy with the old child's report
+  (skipping startup grace), and a restart during backoff spawned a child that
+  went unprobed until the backoff elapsed. Control actions now invalidate
+  stale reports and wake the loop.
+- A `waitpid` failure was misreported as a SIGKILL ("force-killed") exit; it
+  now reports an unknown exit, and a failed reap no longer drops the
+  crash-recovery record for a possibly live process.
+- Out-of-memory stderr signatures only count for an abnormal exit, so a runner
+  that once logged an allocation complaint and then exited cleanly is not
+  reported as an OOM kill. An attached-mode hang now reads as stuck rather
+  than an invented "unknown exit".
+- `hearth status` no longer crashes on an IPv6 (Tailscale) `controlHost`; the
+  URL is bracketed and falls back to the reduced status, and the advertised
+  phone-access URL brackets IPv6 too.
+- The readiness probe client refuses HTTP redirects, so a misbehaving runner
+  cannot have another host's answer scored as its health or replay the deep
+  probe body off-box; response bodies are drained in chunks with the same
+  hard size cap.
+- ntfy topics are percent-encoded strictly (a slash cannot change the path),
+  and ntfy, webhook, and runner-log-open failures each surface as one stderr
+  line instead of failing silently. The event log serializes its appends, the
+  standby lock retries an interrupted `flock`, the privilege-drop spawn shim
+  does its non-async-signal-safe work before the fork and returns fork errors
+  as negated errno, and the menubar menu no longer crashes when opened in the
+  instant before the first config load completes.
+- The smoke test's power-assertion check is scoped to the test agent's pid,
+  so a real Hearth login agent on the same Mac no longer fails it.
 - With `host` set to `0.0.0.0` (or `::`), readiness probes now dial loopback
   instead of the wildcard address, which is not connectable. `hearth wait-ready`,
   `hearth doctor`, `hearth setup`, the attached-mode gate, and the supervisor's

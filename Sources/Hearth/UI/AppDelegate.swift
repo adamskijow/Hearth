@@ -305,20 +305,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let color: NSColor = errorCount > 0 ? .systemRed : .systemYellow
             let label = configDiagnostics.count == 1 ? "1 config issue" : "\(configDiagnostics.count) config issues"
             menu.addItem(infoRow(headlineAttr("\u{26A0} \(label)", color: color)))
-            for diagnostic in configDiagnostics {
+            // Cap the detail rows: a badly broken config can produce many, and
+            // a menu taller than the screen helps nobody. Doctor has them all.
+            let shown = configDiagnostics.prefix(5)
+            for diagnostic in shown {
                 menu.addItem(infoRow(detailAttr("   \(diagnostic.message)")))
+            }
+            if configDiagnostics.count > shown.count {
+                menu.addItem(infoRow(detailAttr("   \u{2026}and \(configDiagnostics.count - shown.count) more; run `hearth doctor` for the full list.")))
             }
             menu.addItem(.separator())
         }
-        if let conflict = competingManagerWarning {
-            menu.addItem(infoRow(headlineAttr("\u{26A0} Competing manager", color: .systemYellow)))
-            menu.addItem(infoRow(detailAttr("   \(conflict)")))
-            addAction("Watch the Existing Runner Instead", #selector(switchToAttachedTapped), enabled: true)
-            menu.addItem(.separator())
-        }
-        if let warning = preexistingRunnerWarning {
-            menu.addItem(infoRow(headlineAttr("\u{26A0} Already running", color: .systemYellow)))
-            menu.addItem(infoRow(detailAttr("   \(warning)")))
+        // The two conflict warnings share one fix, so when both fire (a brew
+        // service AND a foreign runner) there is still exactly one button.
+        if competingManagerWarning != nil || preexistingRunnerWarning != nil {
+            if let conflict = competingManagerWarning {
+                menu.addItem(infoRow(headlineAttr("\u{26A0} Competing manager", color: .systemYellow)))
+                menu.addItem(infoRow(detailAttr("   \(conflict)")))
+            }
+            if let warning = preexistingRunnerWarning {
+                menu.addItem(infoRow(headlineAttr("\u{26A0} Already running", color: .systemYellow)))
+                menu.addItem(infoRow(detailAttr("   \(warning)")))
+            }
             addAction("Watch the Existing Runner Instead", #selector(switchToAttachedTapped), enabled: true)
             menu.addItem(.separator())
         }

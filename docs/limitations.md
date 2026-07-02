@@ -22,7 +22,10 @@ does not reimplement the operating system.
 - Out of memory classification is a heuristic and is UNVERIFIED against a real
   out of memory kill, which could not be induced on high unified-memory hardware.
   The signatures are confirmed absent from a healthy Ollama's output (so they do
-  not false-positive), but not confirmed to fire on a real Metal OOM.
+  not false-positive), but not confirmed to fire on a real Metal OOM. The
+  signatures are also only consulted for an abnormal exit (a signal or a
+  non-zero code): a runner that logged an allocation complaint and then exited
+  cleanly is reported as a clean exit, not an OOM.
 - If Hearth itself is killed without the chance to run its teardown (a hard
   SIGKILL of the agent), the runner process group it spawned keeps running until
   Hearth next launches. On launch Hearth recognizes the leaked group by its

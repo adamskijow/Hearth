@@ -62,7 +62,7 @@ enum StatusCLI {
             }
             if !json {
                 FileHandle.standardError.write(Data(
-                    "Could not reach Hearth's control endpoint at \(config.controlHost):\(config.controlPort).\n".utf8))
+                    "Hearth: could not reach the control endpoint at \(config.controlHost):\(config.controlPort).\n".utf8))
             }
         }
 

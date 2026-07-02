@@ -38,14 +38,15 @@ public enum ControlRouting {
                               token: String,
                               state: SupervisorState,
                               now: Date,
-                              metrics: SystemMetrics? = nil) -> ControlOutcome {
+                              metrics: SystemMetrics? = nil,
+                              tokens: TokenMetricsStore.Snapshot? = nil) -> ControlOutcome {
         if let early = earlyOutcome(method: method, path: path, authorization: authorization, token: token) {
             return early
         }
         // Only authenticated reads that need live state and a metrics sample reach
         // here: /status (JSON) and /metrics (Prometheus exposition).
         if trimmedPath(path) == "/metrics" {
-            return .prometheus(prometheusText(state, now: now, metrics: metrics))
+            return .prometheus(prometheusText(state, now: now, metrics: metrics, tokens: tokens))
         }
         return .status(statusJSON(state, now: now, metrics: metrics))
     }
@@ -141,7 +142,9 @@ public enum ControlRouting {
 
     /// A Prometheus text exposition of the same status, so the homelab crowd can
     /// scrape Hearth into Grafana or Uptime Kuma alongside everything else.
-    public static func prometheusText(_ state: SupervisorState, now: Date, metrics: SystemMetrics? = nil) -> Data {
+    public static func prometheusText(_ state: SupervisorState, now: Date,
+                                      metrics: SystemMetrics? = nil,
+                                      tokens: TokenMetricsStore.Snapshot? = nil) -> Data {
         var lines: [String] = []
         func metric(_ name: String, _ help: String, _ type: String, _ value: String, labels: String = "") {
             lines.append("# HELP \(name) \(help)")
@@ -173,6 +176,15 @@ public enum ControlRouting {
         }
         if let sample = metrics, sample.thermal != .unknown {
             metric("hearth_thermal", "Thermal state, 1 for the active one.", "gauge", "1", labels: "{state=\"\(sample.thermal.rawValue)\"}")
+        }
+        // Present only when the opt-in metrics proxy is routing generation
+        // traffic; the numbers come from what the runner itself reports.
+        if let tokens {
+            metric("hearth_generation_requests_total", "Generations seen by the metrics proxy.", "counter", String(tokens.generationRequests))
+            metric("hearth_generation_tokens_total", "Generated tokens seen by the metrics proxy.", "counter", String(tokens.generationTokensTotal))
+            if let rate = tokens.lastTokensPerSecond {
+                metric("hearth_tokens_per_second", "Throughput of the most recent generation with timing.", "gauge", String(format: "%.2f", rate))
+            }
         }
         return Data((lines.joined(separator: "\n") + "\n").utf8)
     }

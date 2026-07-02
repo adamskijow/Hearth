@@ -95,4 +95,12 @@ public protocol ProcessControlling: Sendable {
     /// version. nil if it cannot be read. Follows symlinks: a Homebrew binary is a
     /// symlink into the Cellar, which retargets on upgrade.
     func executableFingerprint(at url: URL) -> String?
+
+    /// Resident memory of the spawned process, for the opt-in memory-limit
+    /// watchdog. nil when unknown (dead, unsupported, or not implemented).
+    func residentBytes(_ id: ProcessHandleID) -> Int64?
+}
+
+public extension ProcessControlling {
+    func residentBytes(_ id: ProcessHandleID) -> Int64? { nil }
 }

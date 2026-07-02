@@ -34,11 +34,12 @@ reminder after a change.
 
 | Key | Type | Default | Meaning |
 |-----|------|---------|---------|
-| `runner` | string | `"ollama"` | Which runner to supervise: `ollama`, `lmstudio`, or `mlx`. |
+| `runner` | string | `"ollama"` | Which runner to supervise: `ollama`, `lmstudio`, `mlx`, or `osaurus`. |
 | `mode` | string | `"managed"` | `managed` (Hearth launches and owns the runner) or `attached` (Hearth only watches a runner you start yourself). |
 | `ollamaBinaryPath` | string | `"/opt/homebrew/bin/ollama"` | Path to the `ollama` binary (managed Ollama). |
 | `lmStudioBinaryPath` | string | `"/usr/local/bin/lms"` | Path to the `lms` CLI (managed LM Studio). |
 | `mlxBinaryPath` | string | `"/opt/homebrew/bin/mlx_lm.server"` | Path to `mlx_lm.server` (managed mlx_lm). |
+| `osaurusBinaryPath` | string | `"/Applications/Osaurus.app/Contents/MacOS/osaurus"` | Path to the `osaurus` CLI. Osaurus usually serves on port 1337; attached mode (start it with `osaurus serve`, let Hearth watch) is the recommended path, like LM Studio. |
 | `host` | string | `"127.0.0.1"` | Address the runner binds to. `127.0.0.1` keeps it on this machine; `0.0.0.0` opens it to your LAN so another computer can reach it (`hearth doctor` reports the URL and the firewall caveat). |
 | `port` | int | `11434` | Port the runner serves on (Ollama's default is 11434). |
 | `runnerEnv` | object | `{}` | Extra environment variables for a managed runner, so a hand-tuned setup is a config key rather than a launchd plist edit. Example: `{"OLLAMA_LOAD_TIMEOUT": "10m", "OLLAMA_KEEP_ALIVE": "30m"}`. Merged into the child's environment at spawn. Hearth derives `OLLAMA_HOST` from `host`/`port`, so a value for it here is ignored (and `hearth doctor` warns). |
@@ -88,7 +89,8 @@ See [ollama.md](ollama.md) for the full Ollama setup guide, including deep probe
 | `maintenanceRestartHours` | number | `0` | Proactively cycle a healthy runner this often (in hours) to clear the memory creep that degrades a 24/7 runner. `0` disables it; an enabled value is floored at 1 hour. A common value is `24`. |
 | `maintenanceWindow` | string or null | `null` | Optional daily window (`"HH:MM-HH:MM"`, 24-hour local time) during which scheduled maintenance restarts may fire; a due restart waits for the window to open. Spans midnight when the end is before the start (`"23:00-06:00"`). Null means any time. |
 | `warmModelsAfterRestart` | bool | `false` | After a restart, load the models that were resident before it (a one-token generation each, the same request the deep probe uses), so recovery does not hand the next request a multi-gigabyte cold start. A model that fails to load triggers a "Models not restored" alert. Off by default because it does GPU work right after recovery. |
-| `restartOnBinaryChange` | bool | `false` | Restart a managed runner when its binary changes on disk (an upgrade), so it adopts the new version instead of serving the old one. Catches a Homebrew Cellar relink. |
+| `restartOnBinaryChange` | bool | `false` | Restart a managed runner when its binary changes on disk (an upgrade), so it adopts the new version instead of serving the old one. Catches a Homebrew Cellar relink. `hearth update` pairs with this: it runs `brew upgrade ollama` and makes sure a running Hearth adopts the result. |
+| `runnerMemoryLimitMB` | int | `0` | Restart a healthy managed runner whose resident memory crosses this many megabytes, catching the RSS-creep slow death (growing latency, then a wedge) before the wedge. Fires a "Memory limit restart" alert. `0` disables the watchdog; values must comfortably exceed what your loaded models need. |
 | `probeModel` | string or null | `null` | Optional deep readiness probe. The default `/api/version` probe only proves the HTTP server answers; it misses a wedged model runner that still responds there (a GPU or model-load hang). Set a model name and Hearth periodically runs a one-token generation against it, so an inference-level wedge is caught and restarted. Off by default; it names a model and does GPU work. It sends no `keep_alive`, so the model's residency follows the runner's own policy (your `OLLAMA_KEEP_ALIVE`), not one the probe imposes. |
 | `deepProbeIntervalSeconds` | number | `60` | How often to run the deep probe, separate from and slower than the shallow probe. Floored at 5. |
 | `deepProbeTimeoutSeconds` | number | `30` | How long the deep probe may take before it counts as wedged. Generous, because a cold model load is legitimately slow. Floored at 1. |
@@ -106,6 +108,13 @@ See [ollama.md](ollama.md) for the full Ollama setup guide, including deep probe
 | `notificationsPaused` | bool | `false` | Vacation mode: silence every channel (local, ntfy, webhook) without touching their settings. Events are still logged. Also togglable from the menu (Pause Notifications). |
 | `heartbeatURL` | string or null | `null` | Dead-man's-switch heartbeat: while the runner is healthy, GET this URL on an interval. Point it at an Uptime Kuma push monitor or a healthchecks.io check; silence then means down, and the monitor you already run does the alerting. Null disables it. |
 | `heartbeatIntervalSeconds` | number | `60` | How often to send the heartbeat while healthy. Floored at 10. |
+
+## Metrics proxy (opt-in tokens per second)
+
+| Key | Type | Default | Meaning |
+|-----|------|---------|---------|
+| `metricsProxyEnabled` | bool | `false` | A transparent relay in front of the runner: point your apps at the proxy port instead of the runner port, and every byte passes through untouched while the response side is scanned for the throughput numbers the runner itself reports (`eval_count`/`eval_duration`, or `completion_tokens`). Feeds `hearth_tokens_per_second`, `hearth_generation_tokens_total`, and `hearth_generation_requests_total` in `/metrics`. Approximate by design: it is a metrics tap, not a parser of record, and clients that keep talking to the runner directly are simply not counted. |
+| `metricsProxyPort` | int | `11436` | Port the proxy listens on, on the same host as the runner. Must differ from the runner and control ports. |
 
 ## Control endpoint (phone-side remote control)
 

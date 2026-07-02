@@ -25,6 +25,7 @@ final class ControlServer: @unchecked Sendable {
     private let token: String
     private let coordinator: SupervisionCoordinator
     private let metrics: MetricsProviding?
+    private let tokenMetrics: TokenMetricsStore?
     private let queue = DispatchQueue(label: "com.hearth.control")
     /// Set once the server is torn down (a config reload replaces it). A request
     /// accepted before the teardown must not drive the now-replaced coordinator.
@@ -32,7 +33,8 @@ final class ControlServer: @unchecked Sendable {
     private var stoppedFlag = false
     private var isStopped: Bool { stoppedLock.withLock { stoppedFlag } }
 
-    init?(host: String, port: Int, token: String, coordinator: SupervisionCoordinator, metrics: MetricsProviding? = nil) {
+    init?(host: String, port: Int, token: String, coordinator: SupervisionCoordinator,
+          metrics: MetricsProviding? = nil, tokenMetrics: TokenMetricsStore? = nil) {
         guard !token.isEmpty,
               port > 0, port <= 65_535,
               let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else { return nil }
@@ -56,6 +58,7 @@ final class ControlServer: @unchecked Sendable {
         self.token = token
         self.coordinator = coordinator
         self.metrics = metrics
+        self.tokenMetrics = tokenMetrics
     }
 
     func start() {
@@ -123,7 +126,8 @@ final class ControlServer: @unchecked Sendable {
                     token: token,
                     state: state,
                     now: Date(),
-                    metrics: metrics?.sample()
+                    metrics: metrics?.sample(),
+                    tokens: self?.tokenMetrics?.snapshot()
                 )
             }
 

@@ -106,6 +106,8 @@ public enum StatusText {
             return missing.isEmpty
                 ? "Warmed the models back up after the restart"
                 : "Models not restored after the restart: \(missing.joined(separator: ", "))"
+        case .memoryLimitExceeded(let resident, let limit):
+            return "Memory limit restart (\(byteString(resident)) resident, limit \(byteString(limit)))"
         case .stopped: return "Stopped"
         }
     }

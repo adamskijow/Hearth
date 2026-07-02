@@ -20,7 +20,8 @@ struct EngineTests {
 
     private func makeHarness(policy: RestartPolicyConfig = RestartPolicyConfig(startupGrace: 30),
                              deepProbe: DeepProbeConfig? = nil,
-                             warmModels: Bool = false) -> Harness {
+                             warmModels: Bool = false,
+                             memoryLimitBytes: Int64 = 0) -> Harness {
         let clock = ManualClock(now: Date(timeIntervalSince1970: 0))
         let processes = FakeProcessController()
         let http = FakeHTTPClient()
@@ -36,7 +37,8 @@ struct EngineTests {
             notifier: notifier,
             policy: policy,
             deepProbe: deepProbe,
-            warmModels: warmModels
+            warmModels: warmModels,
+            memoryLimitBytes: memoryLimitBytes
         )
         return Harness(engine: engine, clock: clock, processes: processes, http: http,
                        power: power, notifier: notifier, runner: runner)
@@ -216,6 +218,42 @@ struct EngineTests {
 
         for _ in 0..<50 { await Task.yield() }
         #expect(h.http.postCount(to: warmURL) == 0)
+    }
+
+    @Test func memoryWatchdogRestartsARunnerOverItsLimit() async {
+        let limit: Int64 = 1_073_741_824   // 1 GiB
+        let h = makeHarness(memoryLimitBytes: limit)
+        makeServing(h)
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+        #expect(await h.engine.snapshot().phase == .healthy)
+        #expect(h.processes.spawnCount == 1)
+
+        // RSS creeps past the ceiling while the runner still answers probes:
+        // the slow death a readiness check alone only catches at the wedge.
+        h.processes.setResidentBytes(limit * 2)
+        _ = await h.engine.stepOnce()
+        #expect(h.processes.spawnCount == 2)
+        let warned = await h.notifier.received.contains { $0.title == "Memory limit restart" }
+        #expect(warned)
+
+        // The fresh child is under the limit and comes back quietly, without a
+        // spurious recovery push (nothing failed from the user's view).
+        h.processes.setResidentBytes(limit / 2)
+        _ = await h.engine.stepOnce()
+        #expect(await h.engine.snapshot().phase == .healthy)
+        let recovered = await h.notifier.received.contains { $0.event == .recovered }
+        #expect(!recovered)
+    }
+
+    @Test func memoryWatchdogIsOffByDefault() async {
+        let h = makeHarness()
+        makeServing(h)
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+        h.processes.setResidentBytes(1 << 40)   // absurd RSS, no limit configured
+        _ = await h.engine.stepOnce()
+        #expect(h.processes.spawnCount == 1)
     }
 
     @Test func wedgedRunnerIsCaughtByReadinessWhilePidIsAlive() async throws {

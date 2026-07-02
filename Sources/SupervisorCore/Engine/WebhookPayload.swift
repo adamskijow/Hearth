@@ -40,6 +40,7 @@ public enum WebhookPayload {
         case .enteredFailing: return "failing"
         case .modelsUpdated: return "models_updated"
         case .warmupFinished: return "warmup_finished"
+        case .memoryLimitExceeded: return "memory_limit_exceeded"
         case .stopped: return "stopped"
         }
     }

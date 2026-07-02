@@ -140,6 +140,7 @@ struct PreferencesView: View {
                 Text("Ollama").tag("ollama")
                 Text("LM Studio").tag("lmstudio")
                 Text("mlx_lm").tag("mlx")
+                Text("Osaurus").tag("osaurus")
             }
             .help("Which local LLM server Hearth supervises.")
             Picker("Mode", selection: $model.config.mode) {

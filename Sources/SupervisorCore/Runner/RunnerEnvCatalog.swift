@@ -25,6 +25,7 @@ public enum RunnerEnvCatalog {
     public static func variables(for runner: String) -> [RunnerEnvVar] {
         switch RunnerKind(fromConfigString: runner) {
         case .lmStudio: return []   // LM Studio is configured in its app, not by env
+        case .osaurus: return []    // Osaurus is configured in its app, not by env
         case .mlx: return mlx
         case .ollama: return ollama
         }

@@ -27,6 +27,10 @@ public actor SupervisorEngine {
     /// again (a one-token generation each) once the runner is healthy, so
     /// recovery does not hand the next client a multi-gigabyte cold start.
     private let warmModels: Bool
+    /// Restart a healthy managed runner whose resident size crosses this
+    /// ceiling, catching the RSS-creep slow death before it becomes a wedge.
+    /// Zero disables the watchdog.
+    private let memoryLimitBytes: Int64
 
     private var machine: SupervisorMachine
     private var currentHandle: ProcessHandleID?
@@ -79,7 +83,8 @@ public actor SupervisorEngine {
                 policy: RestartPolicyConfig,
                 managed: Bool = true,
                 deepProbe: DeepProbeConfig? = nil,
-                warmModels: Bool = false) {
+                warmModels: Bool = false,
+                memoryLimitBytes: Int64 = 0) {
         self.clock = clock
         self.processes = processes
         self.http = http
@@ -90,6 +95,7 @@ public actor SupervisorEngine {
         self.managed = managed
         self.deepProbe = deepProbe
         self.warmModels = warmModels
+        self.memoryLimitBytes = memoryLimitBytes
         self.machine = SupervisorMachine(config: policy)
 
         let (stateStream, stateCont) = AsyncStream.makeStream(of: SupervisorState.self)
@@ -159,8 +165,10 @@ public actor SupervisorEngine {
         await withCheckedContinuation { continuation in
             loopWake = continuation
             Task {
+                // Inherits the actor, so expireSleep is a plain same-actor call
+                // once the (suspending) clock sleep returns.
                 try? await self.clock.sleep(seconds: seconds)
-                await self.expireSleep(generation)
+                self.expireSleep(generation)
             }
         }
     }
@@ -201,6 +209,18 @@ public actor SupervisorEngine {
             // A busy probe carries no model list (the fetch would queue behind
             // the very work making it busy); keep the current one.
             await apply(output, models: runnerBusy ? nil : report.models)
+            // The opt-in memory watchdog: Ollama's documented slow death is RSS
+            // creep, then growing latency, then a wedge; a readiness probe only
+            // catches the end. Restarting at a resident-size ceiling catches it
+            // first (pm2's max_memory_restart, translated to unified memory).
+            if managed, machine.phase == .healthy, memoryLimitBytes > 0,
+               let handle = currentHandle,
+               let resident = processes.residentBytes(handle), resident > memoryLimitBytes {
+                let output = machine.memoryLimitRestart(
+                    residentBytes: resident, limitBytes: memoryLimitBytes, now: now)
+                await apply(output, models: nil)
+                return output.nextWait
+            }
             // Proactive maintenance restart, both off unless configured: cycle a
             // long-healthy managed runner to clear the memory creep and VRAM
             // fragmentation that degrade a 24/7 runner, or adopt a runner binary
@@ -493,6 +513,13 @@ public actor SupervisorEngine {
                 level: .warning,
                 title: "Models not restored",
                 body: "After the restart, \(missing.joined(separator: ", ")) could not be loaded again; the next request will pay the cold start. The runner log shows why (`hearth logs`).",
+                event: event
+            )
+        case .memoryLimitExceeded(let resident, let limit):
+            return HearthNotification(
+                level: .warning,
+                title: "Memory limit restart",
+                body: "The runner reached \(StatusText.byteString(resident)) resident, over the \(StatusText.byteString(limit)) limit, and was restarted before it could wedge. If this repeats quickly, the limit may be too small for the loaded models.",
                 event: event
             )
         default:

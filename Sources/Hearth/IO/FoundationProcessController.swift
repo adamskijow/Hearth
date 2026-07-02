@@ -453,7 +453,16 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
     /// Resident size of the most recently spawned child, for the metrics readout.
     func latestResidentBytes() -> Int64? {
         let pid: pid_t? = lock.withLock { latestPID }
-        guard let pid else { return nil }
+        return pid.flatMap(Self.residentBytes(ofPid:))
+    }
+
+    /// Resident size of a specific handle's child, for the memory-limit watchdog.
+    func residentBytes(_ id: ProcessHandleID) -> Int64? {
+        let pid: pid_t? = lock.withLock { entries[id]?.pid }
+        return pid.flatMap(Self.residentBytes(ofPid:))
+    }
+
+    private static func residentBytes(ofPid pid: pid_t) -> Int64? {
         var info = proc_taskinfo()
         let size = Int32(MemoryLayout<proc_taskinfo>.size)
         let written = proc_pidinfo(pid, PROC_PIDTASKINFO, 0, &info, size)

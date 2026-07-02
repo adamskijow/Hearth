@@ -45,7 +45,7 @@ public enum ConfigDiagnostics {
             issues.append(.init(.error, "Runner port \(config.port) is out of range (1-65535)."))
         }
         if !RunnerKind.knownConfigStrings.contains(config.runner.lowercased()) {
-            issues.append(.init(.error, "Unknown runner \"\(config.runner)\"; expected ollama, lmstudio, or mlx."))
+            issues.append(.init(.error, "Unknown runner \"\(config.runner)\"; expected ollama, lmstudio, mlx, or osaurus."))
         }
         let mode = config.mode.lowercased()
         if !ModeKind.knownConfigStrings.contains(mode) {
@@ -62,6 +62,15 @@ public enum ConfigDiagnostics {
         }
         if config.runnerKind == .mlx, config.port == 11434 {
             issues.append(.init(.warning, "mlx_lm.server usually serves on port 8080; this config still uses Ollama's default 11434. Set port to 8080 unless you changed mlx_lm."))
+        }
+        // Osaurus's CLI is the app binary and `osaurus serve` may hand the server
+        // off rather than staying in the foreground; recommend attached, like LM
+        // Studio, rather than letting managed mode thrash mysteriously.
+        if config.runnerKind == .osaurus, mode == "managed" {
+            issues.append(.init(.warning, "Managed mode with Osaurus is best effort: if it thrashes (down, restarting, down), start the server yourself with `osaurus serve` and use attached mode."))
+        }
+        if config.runnerKind == .osaurus, config.port == 11434 {
+            issues.append(.init(.warning, "Osaurus usually serves on port 1337; this config still uses Ollama's default 11434. Set port to 1337 unless you changed Osaurus."))
         }
         // Hearth derives OLLAMA_HOST from host and port, so a runnerEnv value for it
         // is overwritten at spawn; flag it rather than letting it silently lose.
@@ -141,6 +150,23 @@ public enum ConfigDiagnostics {
         }
         if config.heartbeatIntervalSeconds < 10 {
             issues.append(.init(.warning, "heartbeatIntervalSeconds below 10 is clamped to 10; a monitor rarely needs a faster pulse."))
+        }
+        if config.runnerMemoryLimitMB > 0, config.runnerMemoryLimitMB < 512 {
+            issues.append(.init(.warning, "runnerMemoryLimitMB \(config.runnerMemoryLimitMB) is smaller than almost any loaded model; the watchdog would restart the runner in a loop. Use a value above what your models need, or 0 to disable."))
+        }
+        if config.metricsProxyEnabled {
+            if !isValidPort(config.metricsProxyPort) {
+                issues.append(.init(.error, "Metrics proxy port \(config.metricsProxyPort) is out of range (1-65535)."))
+            }
+            if config.metricsProxyPort == config.port {
+                issues.append(.init(.error, "Metrics proxy port and runner port are both \(config.port); they must differ."))
+            }
+            if config.controlEnabled, config.metricsProxyPort == config.controlPort {
+                issues.append(.init(.error, "Metrics proxy port and control port are both \(config.controlPort); they must differ."))
+            }
+            if !config.controlEnabled {
+                issues.append(.init(.warning, "metricsProxyEnabled without controlEnabled: throughput is collected but nothing serves /metrics. Enable the control endpoint to read it."))
+            }
         }
         if config.maxBackoffSeconds < config.initialBackoffSeconds {
             issues.append(.init(.warning, "Max backoff is less than the initial backoff, so backoff cannot grow."))

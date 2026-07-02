@@ -18,6 +18,12 @@ public enum RunnerLocation {
         case .mlx:
             return ["/opt/homebrew/bin/mlx_lm.server", "/usr/local/bin/mlx_lm.server"]
                 + pathCandidates(for: "mlx_lm.server", path: path)
+        case .osaurus:
+            return [
+                "/Applications/Osaurus.app/Contents/MacOS/osaurus",
+                "/opt/homebrew/bin/osaurus",
+                "/usr/local/bin/osaurus"
+            ] + pathCandidates(for: "osaurus", path: path)
         case .ollama:
             return [
                 "/opt/homebrew/bin/ollama",

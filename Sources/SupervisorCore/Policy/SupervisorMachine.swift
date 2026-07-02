@@ -125,6 +125,30 @@ struct SupervisorMachine {
         )
     }
 
+    /// The memory-limit watchdog tripped: the healthy runner's resident size
+    /// crossed the configured ceiling, the slow-death ladder (growing latency,
+    /// then a wedge) that a readiness probe only catches at the end. Same shape
+    /// as a maintenance restart, but it emits a notable event: the user set a
+    /// limit and should hear when it bites.
+    mutating func memoryLimitRestart(residentBytes: Int64, limitBytes: Int64, now: Date) -> MachineOutput {
+        consecutiveFailures = 0
+        failureTimestamps.removeAll()
+        failingSince = nil
+        healthySince = nil
+        restartCount += 1
+        phase = .restarting
+        spawnTime = now
+        lastRestartReason = "memory limit exceeded"
+        lastDownCategory = "memory-limit"
+        lastRestartWasMaintenance = true   // the return to healthy is quiet
+        lastRestartWasManualFromHealthy = false
+        lastTransition = now
+        return MachineOutput(
+            effects: [.kill, .spawn, .emit(.memoryLimitExceeded(residentBytes: residentBytes, limitBytes: limitBytes))],
+            nextWait: config.startupProbeInterval
+        )
+    }
+
     /// A scheduled maintenance restart of a healthy runner: cycle it to clear
     /// memory creep. Like a user restart (not a crash, so it clears failure
     /// history and does not count toward backoff), but power is already held and

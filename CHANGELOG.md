@@ -28,6 +28,21 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `/metrics` and `/status` for Grafana and friends.
 - The FAQ documents running two runners with two Hearth instances (the
   single-instance lock is keyed to the config file).
+- A memory watchdog (`runnerMemoryLimitMB`): a healthy managed runner whose
+  resident size crosses the ceiling is restarted before the RSS-creep slow
+  death becomes a wedge, with a "Memory limit restart" alert. pm2's
+  max_memory_restart, translated to unified memory.
+- `hearth update`: runs `brew upgrade ollama` and then makes sure a running
+  Hearth actually adopts the new binary, via restartOnBinaryChange, the
+  control endpoint, or printed instructions.
+- Osaurus (the native MLX server for Apple Silicon) is the fourth supervised
+  runner: `runner: "osaurus"`, OpenAI-compatible probing on port 1337,
+  attached mode recommended like LM Studio.
+- An opt-in tokens-per-second tap (`metricsProxyEnabled`): a transparent
+  relay in front of the runner that scans responses for the throughput
+  numbers the runner itself reports and feeds `hearth_tokens_per_second`,
+  `hearth_generation_tokens_total`, and `hearth_generation_requests_total`
+  in `/metrics`. Bytes pass through untouched; nothing scanned is stored.
 - A beginner-oriented FAQ (`docs/faq.md`): is Hearth for me, which mode do I
   want, how do I know it is working, does my data leave the machine, and how to
   uninstall. Troubleshooting gained entries for the crash loop, spawn failures,

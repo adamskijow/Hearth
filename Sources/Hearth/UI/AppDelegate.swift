@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var controlServer: ControlServer?
     private var pressureMonitor: PressureMonitor?
     private var heartbeat: HeartbeatPinger?
+    private var metricsProxy: MetricsProxy?
     private var processController: FoundationProcessController!
     private var metricsProvider: SystemMetricsProvider!
     private var config = HearthConfig()
@@ -66,6 +67,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controlServer?.stop()
         pressureMonitor?.stop()
         heartbeat?.stop()
+        metricsProxy?.stop()
         guard let coordinator else { return }
         let semaphore = DispatchSemaphore(value: 0)
         Task.detached {
@@ -114,6 +116,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controlServer?.stop()
         pressureMonitor?.stop()
         heartbeat?.stop()
+        metricsProxy?.stop()
         stateTask?.cancel()
         eventTask?.cancel()
         if let coordinator { await coordinator.end() }
@@ -152,6 +155,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pressureMonitor?.start()
         heartbeat = assembly.heartbeat
         heartbeat?.start()
+        metricsProxy = assembly.metricsProxy
+        metricsProxy?.start()
 
         // Auto-enable Start at Login exactly once, on the genuine first run.
         // applyConfig runs on every reload (Preferences Save, SIGHUP, the menu's

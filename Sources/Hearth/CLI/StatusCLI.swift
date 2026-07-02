@@ -22,6 +22,7 @@ enum StatusCLI {
           Hearth metrics            Show memory and thermal history over the retained window.
           Hearth doctor             Check the config and environment for problems.
           Hearth doctor-daemon      Check the root daemon config at /etc/hearth/config.json.
+          Hearth update             Upgrade a Homebrew Ollama, then have Hearth adopt the new binary.
           Hearth mode managed|attached [--daemon] [--force]
                                     Set whether Hearth starts the runner or watches one.
           Hearth setup              Turnkey: detect the runner, install the login agent, wait for ready.

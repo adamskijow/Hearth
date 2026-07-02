@@ -15,6 +15,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     public var ollamaBinaryPath: String
     public var lmStudioBinaryPath: String
     public var mlxBinaryPath: String
+    public var osaurusBinaryPath: String
     public var host: String
     public var port: Int
     /// Extra environment variables to set on a managed runner process, so a
@@ -46,6 +47,10 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     /// one-token generation each), so recovery does not hand the next request a
     /// multi-gigabyte cold start. Off by default: it does GPU work unprompted.
     public var warmModelsAfterRestart: Bool
+    /// Restart a healthy managed runner whose resident memory crosses this many
+    /// megabytes, catching the RSS-creep slow death before it becomes a wedge.
+    /// Zero disables the watchdog.
+    public var runnerMemoryLimitMB: Int
     /// Restart the runner when its binary changes on disk (an upgrade), so a
     /// managed runner adopts the new version instead of serving the old one. Off
     /// by default.
@@ -86,6 +91,13 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     public var controlPort: Int
     public var controlToken: String?
 
+    // Opt-in tokens-per-second tap: a transparent relay in front of the runner.
+    // Clients point at metricsProxyPort instead of the runner port; bytes pass
+    // through untouched while the response side is scanned for the throughput
+    // numbers the runner itself reports, surfaced in /metrics.
+    public var metricsProxyEnabled: Bool
+    public var metricsProxyPort: Int
+
     // Runner log rotation
     public var logMaxBytes: Int
     public var logKeepFiles: Int
@@ -120,6 +132,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 ollamaBinaryPath: String = HearthConfig.defaultOllamaBinaryPath,
                 lmStudioBinaryPath: String = HearthConfig.defaultLMStudioBinaryPath,
                 mlxBinaryPath: String = HearthConfig.defaultMLXBinaryPath,
+                osaurusBinaryPath: String = HearthConfig.defaultOsaurusBinaryPath,
                 host: String = "127.0.0.1",
                 port: Int = 11434,
                 runnerEnv: [String: String] = [:],
@@ -136,6 +149,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 maintenanceRestartHours: Double = 0,
                 maintenanceWindow: String? = nil,
                 warmModelsAfterRestart: Bool = false,
+                runnerMemoryLimitMB: Int = 0,
                 restartOnBinaryChange: Bool = false,
                 probeModel: String? = nil,
                 deepProbeIntervalSeconds: Double = 60,
@@ -153,6 +167,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 controlHost: String = "127.0.0.1",
                 controlPort: Int = 11435,
                 controlToken: String? = nil,
+                metricsProxyEnabled: Bool = false,
+                metricsProxyPort: Int = 11436,
                 logMaxBytes: Int = 5_000_000,
                 logKeepFiles: Int = 3,
                 rebootOnWedge: Bool = false,
@@ -166,6 +182,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.ollamaBinaryPath = ollamaBinaryPath
         self.lmStudioBinaryPath = lmStudioBinaryPath
         self.mlxBinaryPath = mlxBinaryPath
+        self.osaurusBinaryPath = osaurusBinaryPath
         self.host = host
         self.port = port
         self.runnerEnv = runnerEnv
@@ -182,6 +199,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.maintenanceRestartHours = maintenanceRestartHours
         self.maintenanceWindow = maintenanceWindow
         self.warmModelsAfterRestart = warmModelsAfterRestart
+        self.runnerMemoryLimitMB = runnerMemoryLimitMB
         self.restartOnBinaryChange = restartOnBinaryChange
         self.probeModel = probeModel
         self.deepProbeIntervalSeconds = deepProbeIntervalSeconds
@@ -199,6 +217,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.controlHost = controlHost
         self.controlPort = controlPort
         self.controlToken = controlToken
+        self.metricsProxyEnabled = metricsProxyEnabled
+        self.metricsProxyPort = metricsProxyPort
         self.logMaxBytes = logMaxBytes
         self.logKeepFiles = logKeepFiles
         self.rebootOnWedge = rebootOnWedge
@@ -221,6 +241,10 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     /// environment's bin; set `mlxBinaryPath` to wherever `mlx_lm.server` lives.
     public static let defaultMLXBinaryPath = "/opt/homebrew/bin/mlx_lm.server"
 
+    /// Default Osaurus CLI location: the app bundle binary, which exists whenever
+    /// the app is installed. Homebrew also links it as `osaurus` on the PATH.
+    public static let defaultOsaurusBinaryPath = "/Applications/Osaurus.app/Contents/MacOS/osaurus"
+
     // Lenient decoding: every key optional, fall back to defaults.
     public init(from decoder: Decoder) throws {
         let defaults = HearthConfig()
@@ -233,6 +257,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         ollamaBinaryPath = try value(.ollamaBinaryPath, defaults.ollamaBinaryPath)
         lmStudioBinaryPath = try value(.lmStudioBinaryPath, defaults.lmStudioBinaryPath)
         mlxBinaryPath = try value(.mlxBinaryPath, defaults.mlxBinaryPath)
+        osaurusBinaryPath = try value(.osaurusBinaryPath, defaults.osaurusBinaryPath)
         host = try value(.host, defaults.host)
         port = try value(.port, defaults.port)
         runnerEnv = try value(.runnerEnv, defaults.runnerEnv)
@@ -249,6 +274,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         maintenanceRestartHours = try value(.maintenanceRestartHours, defaults.maintenanceRestartHours)
         maintenanceWindow = try c.decodeIfPresent(String.self, forKey: .maintenanceWindow)
         warmModelsAfterRestart = try value(.warmModelsAfterRestart, defaults.warmModelsAfterRestart)
+        runnerMemoryLimitMB = try value(.runnerMemoryLimitMB, defaults.runnerMemoryLimitMB)
         restartOnBinaryChange = try value(.restartOnBinaryChange, defaults.restartOnBinaryChange)
         probeModel = try c.decodeIfPresent(String.self, forKey: .probeModel)
         deepProbeIntervalSeconds = try value(.deepProbeIntervalSeconds, defaults.deepProbeIntervalSeconds)
@@ -266,6 +292,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         controlHost = try value(.controlHost, defaults.controlHost)
         controlPort = try value(.controlPort, defaults.controlPort)
         controlToken = try c.decodeIfPresent(String.self, forKey: .controlToken)
+        metricsProxyEnabled = try value(.metricsProxyEnabled, defaults.metricsProxyEnabled)
+        metricsProxyPort = try value(.metricsProxyPort, defaults.metricsProxyPort)
         logMaxBytes = try value(.logMaxBytes, defaults.logMaxBytes)
         logKeepFiles = try value(.logKeepFiles, defaults.logKeepFiles)
         rebootOnWedge = try value(.rebootOnWedge, defaults.rebootOnWedge)
@@ -365,6 +393,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
             return LMStudioRunner(binaryPath: lmStudioBinaryPath, host: host, port: port, extraEnvironment: runnerEnv)
         case .mlx:
             return MLXRunner(binaryPath: mlxBinaryPath, host: host, port: port, extraEnvironment: runnerEnv)
+        case .osaurus:
+            return OsaurusRunner(binaryPath: osaurusBinaryPath, host: host, port: port, extraEnvironment: runnerEnv)
         case .ollama:
             return makeOllamaRunner()
         }
@@ -382,6 +412,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         switch runnerKind {
         case .lmStudio: return lmStudioBinaryPath
         case .mlx: return mlxBinaryPath
+        case .osaurus: return osaurusBinaryPath
         case .ollama: return ollamaBinaryPath
         }
     }
@@ -392,6 +423,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         switch runnerKind {
         case .lmStudio: lmStudioBinaryPath = path
         case .mlx: mlxBinaryPath = path
+        case .osaurus: osaurusBinaryPath = path
         case .ollama: ollamaBinaryPath = path
         }
     }

@@ -12,11 +12,13 @@ public enum RunnerKind: String, CaseIterable, Sendable {
     case ollama
     case lmStudio
     case mlx
+    case osaurus
 
     public init(fromConfigString raw: String) {
         switch raw.lowercased() {
         case "lmstudio", "lm-studio", "lm_studio": self = .lmStudio
         case "mlx", "mlx_lm", "mlx-lm": self = .mlx
+        case "osaurus": self = .osaurus
         default: self = .ollama
         }
     }
@@ -25,7 +27,7 @@ public enum RunnerKind: String, CaseIterable, Sendable {
     /// the doctor check that warns on an unrecognized value, which the kind mapping
     /// itself cannot express since it defaults anything unknown to ollama.
     public static let knownConfigStrings: [String] = [
-        "ollama", "lmstudio", "lm-studio", "lm_studio", "mlx", "mlx_lm", "mlx-lm",
+        "ollama", "lmstudio", "lm-studio", "lm_studio", "mlx", "mlx_lm", "mlx-lm", "osaurus",
     ]
 
     /// Human-readable name for menus and messages.
@@ -34,6 +36,7 @@ public enum RunnerKind: String, CaseIterable, Sendable {
         case .ollama: return "Ollama"
         case .lmStudio: return "LM Studio"
         case .mlx: return "mlx_lm"
+        case .osaurus: return "Osaurus"
         }
     }
 
@@ -43,6 +46,7 @@ public enum RunnerKind: String, CaseIterable, Sendable {
         case .ollama: return "brew install ollama"
         case .lmStudio: return "brew install --cask lm-studio"
         case .mlx: return "pip install mlx-lm"
+        case .osaurus: return "brew install --cask osaurus"
         }
     }
 }

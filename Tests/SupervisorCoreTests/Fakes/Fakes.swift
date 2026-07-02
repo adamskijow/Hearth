@@ -100,6 +100,15 @@ final class FakeProcessController: ProcessControlling, @unchecked Sendable {
     func executableFingerprint(at url: URL) -> String? {
         lock.withLock { _fingerprint }
     }
+
+    private var _residentBytes: Int64?
+    /// Set the resident size the engine sees, to trip the memory watchdog.
+    func setResidentBytes(_ value: Int64?) {
+        lock.withLock { _residentBytes = value }
+    }
+    func residentBytes(_ id: ProcessHandleID) -> Int64? {
+        lock.withLock { _residentBytes }
+    }
 }
 
 /// A scriptable HTTP client. Returns the outcome set for a URL, or a default.

@@ -43,6 +43,14 @@ When Hearth detects a Tailscale address on the machine (an interface in the
 URL to use from your phone. Hearth only reads the interface list; it does not
 configure Tailscale.
 
+With the opt-in metrics proxy enabled (`metricsProxyEnabled`; point your apps
+at `metricsProxyPort` instead of the runner port), `/metrics` also carries
+request-level throughput: `hearth_tokens_per_second` (the most recent
+generation with timing), `hearth_generation_tokens_total`, and
+`hearth_generation_requests_total`. The numbers are what the runner itself
+reports in its responses; traffic that goes straight to the runner is not
+counted.
+
 For a dashboard you already run, Hearth can also push instead of being polled:
 set `heartbeatURL` to an Uptime Kuma push monitor or a healthchecks.io check
 URL and Hearth GETs it on an interval while the runner is healthy. The pulse

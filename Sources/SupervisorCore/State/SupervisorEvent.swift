@@ -59,6 +59,9 @@ public enum SupervisorEvent: Sendable, Equatable {
     /// The post-restart model warm-up finished. `missing` lists models that were
     /// resident before the restart but could not be loaded again.
     case warmupFinished(missing: [String])
+    /// The opt-in memory watchdog restarted the runner: its resident size
+    /// crossed the configured ceiling.
+    case memoryLimitExceeded(residentBytes: Int64, limitBytes: Int64)
     /// Supervision stopped by request.
     case stopped
 
@@ -70,6 +73,8 @@ public enum SupervisorEvent: Sendable, Equatable {
             return true
         case .warmupFinished(let missing):
             return !missing.isEmpty
+        case .memoryLimitExceeded:
+            return true
         default:
             return false
         }

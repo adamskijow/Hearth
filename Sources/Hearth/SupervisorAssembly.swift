@@ -15,6 +15,7 @@ struct SupervisorAssembly {
     let notifier: Notifier
     let pressureMonitor: PressureMonitor
     let heartbeat: HeartbeatPinger?
+    let metricsProxy: MetricsProxy?
 
     /// `includeLocalNotifications` is false in headless mode, where there is no
     /// GUI session for the local Notification Center to reach.
@@ -40,9 +41,26 @@ struct SupervisorAssembly {
             policy: config.policy(),
             managed: config.isManaged,
             deepProbe: config.deepProbe(),
-            warmModels: config.warmModelsAfterRestart
+            warmModels: config.warmModelsAfterRestart,
+            memoryLimitBytes: Int64(max(0, config.runnerMemoryLimitMB)) * 1_048_576
         )
         let coordinator = SupervisionCoordinator(engine: engine)
+
+        // The opt-in tokens-per-second tap. The proxy listens where the runner
+        // does (same host semantics) and relays to it; the store feeds /metrics.
+        var metricsProxy: MetricsProxy?
+        var tokenMetrics: TokenMetricsStore?
+        if config.metricsProxyEnabled {
+            let store = TokenMetricsStore()
+            metricsProxy = MetricsProxy(
+                host: config.host,
+                port: config.metricsProxyPort,
+                upstreamHost: probeHost(for: config.host),
+                upstreamPort: config.port,
+                store: store
+            )
+            tokenMetrics = metricsProxy == nil ? nil : store
+        }
 
         var controlServer: ControlServer?
         if config.controlEnabled, let token = config.controlToken, !token.isEmpty {
@@ -51,7 +69,8 @@ struct SupervisorAssembly {
                 port: config.controlPort,
                 token: token,
                 coordinator: coordinator,
-                metrics: metricsProvider
+                metrics: metricsProvider,
+                tokenMetrics: tokenMetrics
             )
         }
 
@@ -81,7 +100,8 @@ struct SupervisorAssembly {
             runner: runner,
             notifier: notifier,
             pressureMonitor: pressureMonitor,
-            heartbeat: heartbeat
+            heartbeat: heartbeat,
+            metricsProxy: metricsProxy
         )
     }
 

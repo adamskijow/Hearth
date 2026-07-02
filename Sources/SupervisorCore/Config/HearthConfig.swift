@@ -436,6 +436,33 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     /// The runner kind these settings select, resolving the `runner` aliases once.
     public var runnerKind: RunnerKind { RunnerKind(fromConfigString: runner) }
 
+    /// A config with every optional set, so encoding it emits every key the
+    /// schema knows. Exists only to derive `knownKeys`: adding a property to the
+    /// struct automatically adds its key, with no hand-maintained list to drift.
+    /// A test asserts (via Mirror) that no field here is nil, so a new optional
+    /// that is forgotten fails CI instead of silently narrowing `knownKeys`.
+    static var fullyPopulated: HearthConfig {
+        var config = HearthConfig()
+        config.maintenanceWindow = "02:00-05:00"
+        config.probeModel = "placeholder"
+        config.ntfyTopic = "placeholder"
+        config.webhookURL = "https://example.invalid"
+        config.heartbeatURL = "https://example.invalid"
+        config.controlToken = "placeholder"
+        config.runnerUser = "placeholder"
+        return config
+    }
+
+    /// Every top-level key the config schema understands, for the unknown-key
+    /// (typo) warning. Derived from the encoder, not a hand-written list.
+    public static var knownKeys: Set<String> {
+        guard let data = try? JSONEncoder().encode(fullyPopulated),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return []
+        }
+        return Set(object.keys)
+    }
+
     /// The supervision mode these settings select, resolving the `mode` string once.
     public var modeKind: ModeKind { ModeKind(fromConfigString: mode) }
 

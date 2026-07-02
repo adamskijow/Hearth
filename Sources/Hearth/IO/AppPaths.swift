@@ -60,6 +60,8 @@ struct ConfigLoad {
     var note: String?
     var isProblem: Bool
     var createdDefault: Bool
+    /// Unknown/misspelled keys the lenient decoder ignored, for doctor and menu.
+    var keyDiagnostics: [Diagnostic] = []
 }
 
 enum ConfigStore {
@@ -99,7 +101,8 @@ enum ConfigStore {
             config: resolution.config,
             note: resolution.note,
             isProblem: resolution.isProblem,
-            createdDefault: resolution.createdDefault
+            createdDefault: resolution.createdDefault,
+            keyDiagnostics: resolution.keyDiagnostics
         )
     }
 

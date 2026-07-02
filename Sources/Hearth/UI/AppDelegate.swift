@@ -132,7 +132,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         config = loaded.config
         configNote = loaded.note
         configProblem = loaded.isProblem
-        configDiagnostics = ConfigDiagnostics.check(loaded.config)
+        configDiagnostics = loaded.keyDiagnostics + ConfigDiagnostics.check(loaded.config)
         // Keep an open Preferences window honest about what is now on disk.
         preferences?.externalConfigDidChange(loaded.config)
         competingManagerWarning = RunnerManagerConflict.warning(

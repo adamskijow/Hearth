@@ -258,7 +258,8 @@ enum StatusCLI {
             if diagnostic.severity == .error { errors += 1 } else { warnings += 1 }
         }
 
-        // Pure config rules.
+        // Pure config rules, plus unknown/misspelled keys the lenient decoder ignored.
+        for diagnostic in load.keyDiagnostics { report(diagnostic) }
         for diagnostic in ConfigDiagnostics.check(config, runningAsRoot: runningAsRoot) { report(diagnostic) }
         if includeDaemonHint, daemonAppearsInstalled(), ProcessInfo.processInfo.environment["HEARTH_CONFIG"] == nil {
             report(Diagnostic(.warning, "A root daemon appears installed. This doctor is checking \(configURL.path); check the daemon config with `sudo hearth doctor-daemon`."))

@@ -10,12 +10,17 @@ public struct ConfigResolution: Sendable, Equatable {
     public var note: String?
     public var isProblem: Bool
     public var createdDefault: Bool
+    /// Warnings about the file's keys themselves (unknown or misspelled keys the
+    /// lenient decoder silently ignored), for doctor and the menu to surface.
+    public var keyDiagnostics: [Diagnostic]
 
-    public init(config: HearthConfig, note: String?, isProblem: Bool, createdDefault: Bool) {
+    public init(config: HearthConfig, note: String?, isProblem: Bool, createdDefault: Bool,
+                keyDiagnostics: [Diagnostic] = []) {
         self.config = config
         self.note = note
         self.isProblem = isProblem
         self.createdDefault = createdDefault
+        self.keyDiagnostics = keyDiagnostics
     }
 }
 
@@ -47,7 +52,8 @@ public enum ConfigLoading {
 
         do {
             let config = try JSONDecoder().decode(HearthConfig.self, from: data)
-            return ConfigResolution(config: config, note: nil, isProblem: false, createdDefault: false)
+            return ConfigResolution(config: config, note: nil, isProblem: false, createdDefault: false,
+                                    keyDiagnostics: ConfigDiagnostics.unknownKeys(inRawConfig: data))
         } catch {
             return ConfigResolution(
                 config: HearthConfig(),

@@ -25,6 +25,60 @@ public struct Diagnostic: Sendable, Equatable {
 /// testable without a filesystem or a running app.
 public enum ConfigDiagnostics {
 
+    /// Warn about top-level keys the schema does not know. Decoding is lenient
+    /// (a misspelled key is ignored and its default applies), which is right for
+    /// forward compatibility but wrong to leave silent: a typo like "probemodel"
+    /// means the deep probe the user thinks they enabled never runs. Warnings
+    /// only, never errors, so a config from a newer Hearth still loads.
+    public static func unknownKeys(inRawConfig data: Data,
+                                   known: Set<String> = HearthConfig.knownKeys) -> [Diagnostic] {
+        guard !known.isEmpty,
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return []
+        }
+        return object.keys
+            .filter { !known.contains($0) }
+            .sorted()
+            .map { key in
+                if let suggestion = closestKey(to: key, in: known) {
+                    return Diagnostic(.warning, "Unknown config key \"\(key)\"; did you mean \"\(suggestion)\"? The key is being ignored.")
+                }
+                return Diagnostic(.warning, "Unknown config key \"\(key)\"; it is being ignored.")
+            }
+    }
+
+    /// The known key within edit distance 2 (case-insensitively closest first),
+    /// or nil when nothing is near enough to be a plausible typo.
+    private static func closestKey(to key: String, in known: Set<String>) -> String? {
+        var best: (key: String, distance: Int)?
+        for candidate in known {
+            let distance = editDistance(key.lowercased(), candidate.lowercased())
+            if distance <= 2, distance < (best?.distance ?? Int.max) {
+                best = (candidate, distance)
+            }
+        }
+        return best?.key
+    }
+
+    /// Plain Levenshtein distance. Keys are short (under ~30 chars), so the
+    /// quadratic table is nothing.
+    static func editDistance(_ a: String, _ b: String) -> Int {
+        let a = Array(a.unicodeScalars), b = Array(b.unicodeScalars)
+        if a.isEmpty { return b.count }
+        if b.isEmpty { return a.count }
+        var previous = Array(0...b.count)
+        var current = [Int](repeating: 0, count: b.count + 1)
+        for i in 1...a.count {
+            current[0] = i
+            for j in 1...b.count {
+                let substitution = previous[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1)
+                current[j] = min(previous[j] + 1, current[j - 1] + 1, substitution)
+            }
+            swap(&previous, &current)
+        }
+        return previous[b.count]
+    }
+
     public static func check(_ config: HearthConfig, runningAsRoot: Bool = false) -> [Diagnostic] {
         var issues: [Diagnostic] = []
 

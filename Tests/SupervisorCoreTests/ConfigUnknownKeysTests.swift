@@ -106,3 +106,11 @@ struct ConfigUnknownKeysTests {
         #expect(ConfigDiagnostics.editDistance("kitten", "sitting") == 3)
     }
 }
+
+/// Where `hearth update` looks for the cask footprint, on both brew layouts.
+struct SelfUpdateTests {
+    @Test func caskroomFollowsTheBrewPrefix() {
+        #expect(SelfUpdate.caskroomPath(forBrew: "/opt/homebrew/bin/brew") == "/opt/homebrew/Caskroom/hearth")
+        #expect(SelfUpdate.caskroomPath(forBrew: "/usr/local/bin/brew") == "/usr/local/Caskroom/hearth")
+    }
+}

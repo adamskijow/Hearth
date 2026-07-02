@@ -329,6 +329,18 @@ enum StatusCLI {
             report(Diagnostic(.warning, "Log directory \(AppPaths.logDirectory.path) is not writable; runner logs will be lost."))
         }
 
+        // Which supervision layers are installed, and who holds the lock. Layers
+        // accumulate silently across installs; the lock keeps the extras as hot
+        // standbys, but leftovers deserve naming.
+        let layers = gatherSupervisionLayers(configURL: configURL)
+        let layerReport = layers.report()
+        for line in layerReport.lines {
+            // "Could not be checked" is information, not a passed check.
+            let prefix = line.contains("could not be checked") ? "      " : mark(nil) + " "
+            print(prefix + line)
+        }
+        for diagnostic in layerReport.diagnostics { report(diagnostic) }
+
         print("")
         print("\(errors) error\(errors == 1 ? "" : "s"), \(warnings) warning\(warnings == 1 ? "" : "s").")
         exit(errors == 0 ? 0 : 1)
@@ -336,6 +348,28 @@ enum StatusCLI {
 
     private static func daemonAppearsInstalled() -> Bool {
         FileManager.default.fileExists(atPath: "/Library/LaunchDaemons/com.hearth.daemon.plist")
+    }
+
+    /// Gather the layer facts (file existence, lock pid); SupervisionLayers
+    /// decides what they mean. The login item is checked only when the process
+    /// can see the app bundle; from a bare CLI context it reports undetermined
+    /// rather than guessing.
+    private static func gatherSupervisionLayers(configURL: URL) -> SupervisionLayers {
+        var lockPID: Int?
+        var lockAlive = false
+        if let raw = try? String(contentsOfFile: configURL.path + ".lock", encoding: .utf8),
+           let pid = Int(raw.trimmingCharacters(in: .whitespacesAndNewlines)), pid > 0 {
+            lockPID = pid
+            // kill(pid, 0) probes existence; EPERM still means the pid is alive.
+            lockAlive = kill(pid_t(pid), 0) == 0 || errno == EPERM
+        }
+        return SupervisionLayers(
+            rootDaemonInstalled: daemonAppearsInstalled(),
+            userAgentInstalled: AgentInstaller.isInstalled,
+            loginItemEnabled: LoginItem.isAvailable ? LoginItem.isRegistered : nil,
+            lockHolderPID: lockPID,
+            lockHolderAlive: lockAlive
+        )
     }
 
     private static func mark(_ severity: Diagnostic.Severity?) -> String {

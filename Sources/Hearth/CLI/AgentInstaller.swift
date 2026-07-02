@@ -16,6 +16,11 @@ enum AgentInstaller {
             .appendingPathComponent("Library/LaunchAgents/\(label).plist")
     }
 
+    /// Whether the login agent's plist is installed, for doctor's layer report.
+    static var isInstalled: Bool {
+        FileManager.default.fileExists(atPath: plistURL.path)
+    }
+
     static func install() -> Never {
         let result = performInstall()
         for line in result.lines { print(line) }

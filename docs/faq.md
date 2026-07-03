@@ -21,6 +21,25 @@ Mac awake while it serves, and alerts you when something breaks.
 Hearth does not run, install, or download models. It stands behind the runner
 you already use.
 
+## Ollama keeps crashing or not responding on my Mac. Does Hearth fix that?
+
+Probably, if any of these sound familiar:
+
+- Ollama **stops responding after a while** and you restart it by hand.
+- The server is "up" but **requests hang forever**, with nothing useful in the logs.
+- Ollama **dies overnight on a Mac mini** (or any always-on Mac) and nothing brings
+  it back.
+- It **falls back to CPU, or the GPU hangs**, and generations crawl for hours.
+- You want to run `ollama serve` as an **always-on service on Apple Silicon** that
+  survives crashes, sleep, and reboots.
+- `launchd` or `brew services` restart the process, but **not when it is wedged**
+  (still running, no longer answering).
+
+Hearth watches whether Ollama actually answers, not just whether the process is
+alive, so it catches the "running but not responding" case those tools miss, and it
+keeps the Mac awake while it serves. The [How it works](how-it-works.md) page has the
+mechanism and a real GPU-crash recovery.
+
 ## Does it work on a normal Mac, or only a server?
 
 Any Mac running macOS 14 or later: a desktop, a Mac mini in a closet, or a

@@ -285,16 +285,19 @@ public actor SupervisorEngine {
             // long-healthy managed runner to clear the memory creep and VRAM
             // fragmentation that degrade a 24/7 runner, or adopt a runner binary
             // that was upgraded on disk rather than serving the old one forever.
-            if managed, machine.phase == .healthy,
-               policy.maintenanceRestartDue(healthySince: machine.healthySince, now: now,
-                                            minuteOfDay: Self.minuteOfDay(of: now)) || binaryWasUpgraded() {
+            let maintenanceDue = policy.maintenanceRestartDue(
+                healthySince: machine.healthySince, now: now, minuteOfDay: Self.minuteOfDay(of: now))
+            let upgraded = binaryWasUpgraded()
+            if managed, machine.phase == .healthy, maintenanceDue || upgraded {
                 // A routine restart can afford manners: with the metrics proxy
                 // watching traffic, wait for in-flight generations to finish
                 // (bounded by drainSeconds) instead of cutting one off mid-token.
                 if shouldDrainBeforeRoutineRestart(now: now) {
                     return policy.probeInterval
                 }
-                let maintenance = machine.maintenanceRestart(now: now)
+                // A binary change is the more specific reason when both apply.
+                let category = upgraded ? "binary-upgrade" : "maintenance"
+                let maintenance = machine.maintenanceRestart(now: now, category: category)
                 await apply(maintenance, models: nil)
                 return maintenance.nextWait
             }
@@ -597,6 +600,7 @@ public actor SupervisorEngine {
             failingStreakHadProcessExit: machine.failingStreakHadProcessExit,
             busy: runnerBusy && machine.phase == .healthy,
             lastDownCategory: machine.lastDownCategory,
+            lastRestartCategory: machine.lastRestartCategory,
             deepProbeConfigured: deepProbe != nil,
             deepProbeLastFailedAt: lastDeepProbeFailedAt
         )

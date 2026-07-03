@@ -50,6 +50,7 @@ public enum ControlRouting {
                               namedTokens: [ControlToken] = [],
                               state: SupervisorState,
                               now: Date,
+                              runnerKind: String = "unknown",
                               metrics: SystemMetrics? = nil,
                               tokens: TokenMetricsStore.Snapshot? = nil) -> ControlOutcome {
         if let early = earlyOutcome(method: method, path: path, authorization: authorization,
@@ -59,9 +60,9 @@ public enum ControlRouting {
         // Only authenticated reads that need live state and a metrics sample reach
         // here: /status (JSON) and /metrics (Prometheus exposition).
         if trimmedPath(path) == "/metrics" {
-            return .prometheus(prometheusText(state, now: now, metrics: metrics, tokens: tokens))
+            return .prometheus(prometheusText(state, now: now, runnerKind: runnerKind, metrics: metrics, tokens: tokens))
         }
-        return .status(statusJSON(state, now: now, metrics: metrics, tokens: tokens))
+        return .status(statusJSON(state, now: now, runnerKind: runnerKind, metrics: metrics, tokens: tokens))
     }
 
     /// The outcome for every route that needs no supervisor state or metrics, so
@@ -156,10 +157,12 @@ public enum ControlRouting {
 
     /// A compact status document for the phone.
     public static func statusJSON(_ state: SupervisorState, now: Date,
+                                  runnerKind: String = "unknown",
                                   metrics: SystemMetrics? = nil,
                                   tokens: TokenMetricsStore.Snapshot? = nil) -> Data {
         let payload = StatusPayload(
             phase: state.phase.rawValue,
+            runner: runnerKind,
             busy: state.busy,
             models: state.residentModels.map(\.name),
             uptimeSeconds: state.uptime(asOf: now).map { Int($0.rounded()) },
@@ -167,6 +170,7 @@ public enum ControlRouting {
             consecutiveFailures: state.consecutiveFailures,
             lastRestartReason: state.lastRestartReason,
             lastDownCategory: state.lastDownCategory,
+            lastRestartCategory: state.lastRestartCategory,
             deepProbeConfigured: state.deepProbeConfigured,
             thermal: metrics.flatMap { $0.thermal == .unknown ? nil : $0.thermal.rawValue },
             memoryUsedPercent: metrics?.memoryUsedFraction.map { Int(($0 * 100).rounded()) },
@@ -182,6 +186,7 @@ public enum ControlRouting {
     /// A Prometheus text exposition of the same status, so the homelab crowd can
     /// scrape Hearth into Grafana or Uptime Kuma alongside everything else.
     public static func prometheusText(_ state: SupervisorState, now: Date,
+                                      runnerKind: String = "unknown",
                                       metrics: SystemMetrics? = nil,
                                       tokens: TokenMetricsStore.Snapshot? = nil) -> Data {
         var lines: [String] = []
@@ -191,11 +196,17 @@ public enum ControlRouting {
             lines.append("\(name)\(labels) \(value)")
         }
         metric("hearth_up", "Whether Hearth is up and answering.", "gauge", "1")
+        // Static identity: which runner this Hearth supervises, as a
+        // low-cardinality info metric to join on in queries.
+        metric("hearth_runner_info", "The runner Hearth supervises, always 1.", "gauge", "1", labels: "{runner=\"\(runnerKind)\"}")
         metric("hearth_healthy", "Whether the runner is healthy (1) or not (0).", "gauge", state.phase == .healthy ? "1" : "0")
         metric("hearth_busy", "Whether the last probe answered busy (queue full).", "gauge", state.busy ? "1" : "0")
         metric("hearth_phase", "Current supervisor phase, 1 for the active one.", "gauge", "1", labels: "{phase=\"\(state.phase.rawValue)\"}")
         if let category = state.lastDownCategory {
             metric("hearth_last_down", "Most recent failure category this session, 1 for the active one.", "gauge", "1", labels: "{reason=\"\(category)\"}")
+        }
+        if let category = state.lastRestartCategory {
+            metric("hearth_last_restart", "Most recent restart category this session (also covers deliberate restarts), 1 for the active one.", "gauge", "1", labels: "{category=\"\(category)\"}")
         }
         metric("hearth_deep_probe_configured", "Whether the deep readiness probe is configured.", "gauge", state.deepProbeConfigured ? "1" : "0")
         if let failedAt = state.deepProbeLastFailedAt {
@@ -244,6 +255,7 @@ public enum ControlRouting {
 
 private struct StatusPayload: Encodable {
     var phase: String
+    var runner: String
     var busy: Bool
     var models: [String]
     var uptimeSeconds: Int?
@@ -251,6 +263,7 @@ private struct StatusPayload: Encodable {
     var consecutiveFailures: Int
     var lastRestartReason: String?
     var lastDownCategory: String?
+    var lastRestartCategory: String?
     var deepProbeConfigured: Bool
     var thermal: String?
     var memoryUsedPercent: Int?

@@ -59,6 +59,10 @@ public struct SupervisorState: Sendable, Equatable {
     /// Bounded category of the most recent failure (wedged, crash, oom, signal),
     /// for metrics labels. Nil until something has failed this session.
     public var lastDownCategory: String?
+    /// Bounded category of the most recent restart, covering deliberate restarts
+    /// too (adds memory-limit, maintenance, manual, binary-upgrade). Nil until
+    /// the first restart this session.
+    public var lastRestartCategory: String?
     /// Whether the optional deep readiness probe is configured.
     public var deepProbeConfigured: Bool
     /// When the deep probe last failed, if it ever has this session.
@@ -76,6 +80,7 @@ public struct SupervisorState: Sendable, Equatable {
                 failingStreakHadProcessExit: Bool = false,
                 busy: Bool = false,
                 lastDownCategory: String? = nil,
+                lastRestartCategory: String? = nil,
                 deepProbeConfigured: Bool = false,
                 deepProbeLastFailedAt: Date? = nil) {
         self.phase = phase
@@ -90,6 +95,7 @@ public struct SupervisorState: Sendable, Equatable {
         self.failingStreakHadProcessExit = failingStreakHadProcessExit
         self.busy = busy
         self.lastDownCategory = lastDownCategory
+        self.lastRestartCategory = lastRestartCategory
         self.deepProbeConfigured = deepProbeConfigured
         self.deepProbeLastFailedAt = deepProbeLastFailedAt
     }

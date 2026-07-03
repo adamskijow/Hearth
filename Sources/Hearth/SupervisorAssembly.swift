@@ -80,6 +80,7 @@ struct SupervisorAssembly {
                 token: token,
                 coordinator: coordinator,
                 namedTokens: config.namedControlTokens,
+                runnerKind: config.runnerKind.rawValue.lowercased(),
                 metrics: metricsProvider,
                 tokenMetrics: tokenMetrics,
                 onControlAction: { command, actor in

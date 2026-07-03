@@ -26,6 +26,12 @@ Most of this document's original near-term list has landed:
   configured and when it last failed.
 - **Busy state:** `hearth_busy`, so a runner that answers 503 (queue full) is
   distinguishable from a wedge.
+- **Runner kind:** `hearth_runner_info{runner="ollama"}` (a low-cardinality info
+  gauge, always 1, to join on in queries), and a `runner` field on `/status`.
+- **Restart category:** `hearth_last_restart{category}`, a bounded gauge covering
+  deliberate restarts too (wedged, crash, oom, signal, memory-limit, maintenance,
+  manual, binary-upgrade), and `lastRestartCategory` on `/status`, alongside the
+  existing free-form `lastRestartReason`.
 - **Throughput:** `hearth_tokens_per_second`, `hearth_generation_tokens_total`, and
   `hearth_generation_requests_total`, with `tokensPerSecond` and
   `generationTokensTotal` on `/status`. This is measured by the optional,
@@ -36,13 +42,6 @@ Most of this document's original near-term list has landed:
 
 ## Still open
 
-- **Runner-kind label.** The metrics do not yet distinguish runner kinds (Ollama,
-  LM Studio, mlx_lm, Osaurus). Add a low-cardinality `runner` label or a per-kind
-  gauge, avoiding binary paths.
-- **A bounded restart-category metric.** The down cause is exposed as
-  `hearth_last_down`, but the restart reason on `/status` is still a free-form
-  string. A bounded restart-category gauge (crash, wedged, maintenance, manual,
-  binary-upgrade) is not yet a metric.
 - **Richer inference profiling.** Tokens/sec is a single scalar. Latency
   distributions, time-to-first-token, and queue depth would need either stable
   runner-provided counters or deeper response parsing, and are deliberately not

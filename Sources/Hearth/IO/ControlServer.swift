@@ -24,6 +24,7 @@ final class ControlServer: @unchecked Sendable {
     private let listener: NWListener
     private let token: String
     private let namedTokens: [ControlToken]
+    private let runnerKind: String
     private let coordinator: SupervisionCoordinator
     private let metrics: MetricsProviding?
     private let tokenMetrics: TokenMetricsStore?
@@ -39,6 +40,7 @@ final class ControlServer: @unchecked Sendable {
 
     init?(host: String, port: Int, token: String, coordinator: SupervisionCoordinator,
           namedTokens: [ControlToken] = [],
+          runnerKind: String = "unknown",
           metrics: MetricsProviding? = nil, tokenMetrics: TokenMetricsStore? = nil,
           onControlAction: (@Sendable (ControlCommand, String) -> Void)? = nil) {
         guard !token.isEmpty,
@@ -63,6 +65,7 @@ final class ControlServer: @unchecked Sendable {
         }
         self.token = token
         self.namedTokens = namedTokens
+        self.runnerKind = runnerKind
         self.coordinator = coordinator
         self.metrics = metrics
         self.tokenMetrics = tokenMetrics
@@ -114,6 +117,7 @@ final class ControlServer: @unchecked Sendable {
     private func respond(_ box: ConnectionBox, _ request: HTTPRequestHead) {
         let token = self.token
         let namedTokens = self.namedTokens
+        let runnerKind = self.runnerKind
         let coordinator = self.coordinator
         let metrics = self.metrics
         Task { [weak self] in
@@ -136,6 +140,7 @@ final class ControlServer: @unchecked Sendable {
                     namedTokens: namedTokens,
                     state: state,
                     now: Date(),
+                    runnerKind: runnerKind,
                     metrics: metrics?.sample(),
                     tokens: self?.tokenMetrics?.snapshot()
                 )

@@ -7,6 +7,17 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Added
+
+- `hearth_runner_info{runner="ollama"}` Prometheus metric (a low-cardinality info
+  gauge) and a `runner` field on `/status`, so a dashboard can tell which runner
+  each Hearth supervises.
+- `hearth_last_restart{category}` Prometheus metric and `lastRestartCategory` on
+  `/status`: a bounded restart category (wedged, crash, oom, signal, memory-limit,
+  maintenance, manual, binary-upgrade) that covers deliberate restarts too, not
+  just failures like the existing `hearth_last_down`. Closes the two open items in
+  the observability roadmap.
+
 ## [1.0.0] - 2026-07-02
 
 The 1.0 release. Hearth's core, keeping a local LLM runner alive through

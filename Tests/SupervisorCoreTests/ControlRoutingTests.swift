@@ -60,18 +60,31 @@ struct ControlRoutingTests {
         let full = SupervisorState(phase: .healthy, residentModels: [ResidentModel(name: "m")],
                                    healthySince: now.addingTimeInterval(-60), lastRestartReason: "crash",
                                    restartCount: 1, busy: true, lastDownCategory: "crash",
-                                   deepProbeConfigured: true)
+                                   lastRestartCategory: "crash", deepProbeConfigured: true)
         let metrics = SystemMetrics(thermal: .nominal, memoryUsedFraction: 0.5, runnerResidentBytes: 1024)
         let tokens = TokenMetricsStore.Snapshot(
             generationRequests: 1, generationTokensTotal: 10, lastTokensPerSecond: 5)
-        let data = ControlRouting.statusJSON(full, now: now, metrics: metrics, tokens: tokens)
+        let data = ControlRouting.statusJSON(full, now: now, runnerKind: "ollama", metrics: metrics, tokens: tokens)
         let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         #expect(Set(object.keys) == [
-            "phase", "busy", "models", "uptimeSeconds", "restartCount",
+            "phase", "runner", "busy", "models", "uptimeSeconds", "restartCount",
             "consecutiveFailures", "lastRestartReason", "lastDownCategory",
-            "deepProbeConfigured", "thermal", "memoryUsedPercent",
+            "lastRestartCategory", "deepProbeConfigured", "thermal", "memoryUsedPercent",
             "runnerResidentBytes", "tokensPerSecond", "generationTokensTotal",
         ])
+        #expect(object["runner"] as? String == "ollama")
+        #expect(object["lastRestartCategory"] as? String == "crash")
+    }
+
+    @Test func prometheusCarriesRunnerInfoAndRestartCategory() {
+        let state = SupervisorState(phase: .healthy, restartCount: 1, lastRestartCategory: "maintenance")
+        let text = String(decoding: ControlRouting.prometheusText(state, now: now, runnerKind: "mlx"), as: UTF8.self)
+        #expect(text.contains("hearth_runner_info{runner=\"mlx\"} 1"))
+        #expect(text.contains("hearth_last_restart{category=\"maintenance\"} 1"))
+        // Absent until the first restart this session.
+        let fresh = String(decoding: ControlRouting.prometheusText(SupervisorState(phase: .healthy), now: now, runnerKind: "ollama"), as: UTF8.self)
+        #expect(fresh.contains("hearth_runner_info{runner=\"ollama\"} 1"))
+        #expect(!fresh.contains("hearth_last_restart"))
     }
 
     @Test func statusJSONCarriesTheNewSurfacedFields() throws {

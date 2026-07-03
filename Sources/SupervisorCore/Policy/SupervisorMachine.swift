@@ -64,6 +64,11 @@ struct SupervisorMachine {
     private(set) var lastRestartReason: String? = nil
     /// Bounded category of the most recent failure, for metrics labels.
     private(set) var lastDownCategory: String? = nil
+    /// Bounded category of the most recent restart, for metrics labels. Unlike
+    /// lastDownCategory (failures only) this also covers deliberate restarts:
+    /// wedged, crash, oom, signal, memory-limit, maintenance, manual,
+    /// binary-upgrade. Nil until the first restart this session.
+    private(set) var lastRestartCategory: String? = nil
     /// When the phase last changed.
     private(set) var lastTransition: Date = Date(timeIntervalSince1970: 0)
     /// Whether the most recent respawn was a routine maintenance restart, so the
@@ -117,6 +122,7 @@ struct SupervisorMachine {
         phase = .restarting
         spawnTime = now
         lastRestartReason = "manual restart"
+        lastRestartCategory = "manual"
         lastRestartWasMaintenance = false
         lastTransition = now
         return MachineOutput(
@@ -140,6 +146,7 @@ struct SupervisorMachine {
         spawnTime = now
         lastRestartReason = "memory limit exceeded"
         lastDownCategory = "memory-limit"
+        lastRestartCategory = "memory-limit"
         lastRestartWasMaintenance = true   // the return to healthy is quiet
         lastRestartWasManualFromHealthy = false
         lastTransition = now
@@ -153,7 +160,7 @@ struct SupervisorMachine {
     /// memory creep. Like a user restart (not a crash, so it clears failure
     /// history and does not count toward backoff), but power is already held and
     /// it emits its own routine event.
-    mutating func maintenanceRestart(now: Date) -> MachineOutput {
+    mutating func maintenanceRestart(now: Date, category: String = "maintenance") -> MachineOutput {
         consecutiveFailures = 0
         failureTimestamps.removeAll()
         failingSince = nil
@@ -162,6 +169,7 @@ struct SupervisorMachine {
         phase = .restarting
         spawnTime = now
         lastRestartReason = "scheduled maintenance restart"
+        lastRestartCategory = category
         lastRestartWasMaintenance = true
         lastRestartWasManualFromHealthy = false
         lastTransition = now
@@ -260,6 +268,7 @@ struct SupervisorMachine {
         consecutiveFailures += 1
         lastRestartReason = reason.label
         lastDownCategory = reason.category
+        lastRestartCategory = reason.category
         if case .crashed = reason { failingStreakHadProcessExit = true }
         healthySince = nil
 
@@ -315,6 +324,7 @@ struct SupervisorMachine {
         scheduledRespawnAt = .distantFuture
         lastRestartReason = nil
         lastDownCategory = nil
+        lastRestartCategory = nil
         lastRestartWasMaintenance = false
         lastRestartWasManualFromHealthy = false
     }

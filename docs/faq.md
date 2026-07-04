@@ -37,8 +37,10 @@ Probably, if any of these sound familiar:
 
 Hearth watches whether Ollama actually answers, not just whether the process is
 alive, so it catches the "running but not responding" case those tools miss, and it
-keeps the Mac awake while it serves. The [How it works](how-it-works.md) page has the
-mechanism and a real GPU-crash recovery.
+keeps the Mac awake while it serves. [Keeping Ollama running on
+macOS](keep-ollama-running-on-macos.md) walks through the causes and the manual
+fixes to try, and [How it works](how-it-works.md) has the mechanism and a real
+GPU-crash recovery.
 
 ## Does it work on a normal Mac, or only a server?
 

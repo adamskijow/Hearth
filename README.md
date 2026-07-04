@@ -85,6 +85,7 @@ and reverse-proxy setup are in the [reverse-proxy guide](docs/reverse-proxy.md).
 
 ## Docs and links
 
+- **[Keeping Ollama running on macOS](docs/keep-ollama-running-on-macos.md)**: why it stops responding, what to try, and where Hearth fits
 - **[FAQ](docs/faq.md)** and **[Troubleshooting](docs/troubleshooting.md)**: is Hearth for you, which mode, and the common fixes
 - **[How it works](docs/how-it-works.md)**: the wedge problem, the evidence, and the mechanism
 - **[Configuration](docs/configuration.md)**: every config key and default

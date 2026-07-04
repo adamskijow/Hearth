@@ -7,6 +7,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## [1.1.0] - 2026-07-04
+
+The first feature release after 1.0, focused on making the runner's memory
+behavior legible: Hearth now names a model that keeps running the Mac out of
+memory, and its metrics carry the runner kind and a bounded restart category.
+
 ### Added
 
 - Model-fit guidance: when a model is resident at repeated memory-related crashes

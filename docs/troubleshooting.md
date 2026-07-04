@@ -76,6 +76,11 @@ also shows a "config issues" line when it finds any.
   it will NOT reload a model whose load just crashed the runner (that would
   crash the GPU again); it leaves the runner idle-but-alive and alerts "Models
   not reloaded" so you can switch to a smaller model or lower the context size.
+  If the same model does this repeatedly (by default twice within 30 minutes),
+  Hearth stops guessing and says so directly: a "Model likely too large" alert
+  names the model, the menu shows a warning, and `/status` lists it under
+  `oversizedModels`, so you know exactly which model to swap. Tune or disable
+  this with `modelOOMThreshold` and `modelOOMWindowSeconds`.
   To have Hearth cycle the runner pre-emptively as memory creeps, before a hard
   crash, set `runnerMemoryLimitMB` to a ceiling above what your good models
   need. Note that Ollama runs language and vision (image-reading) models only;

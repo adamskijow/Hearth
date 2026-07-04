@@ -67,6 +67,9 @@ public struct SupervisorState: Sendable, Equatable {
     public var deepProbeConfigured: Bool
     /// When the deep probe last failed, if it ever has this session.
     public var deepProbeLastFailedAt: Date?
+    /// Models that repeatedly ran the Mac out of memory and likely do not fit,
+    /// for the status surfaces. Empty when none are flagged.
+    public var oversizedModels: [String]
 
     public init(phase: SupervisorPhase = .stopped,
                 residentModels: [ResidentModel] = [],
@@ -82,7 +85,8 @@ public struct SupervisorState: Sendable, Equatable {
                 lastDownCategory: String? = nil,
                 lastRestartCategory: String? = nil,
                 deepProbeConfigured: Bool = false,
-                deepProbeLastFailedAt: Date? = nil) {
+                deepProbeLastFailedAt: Date? = nil,
+                oversizedModels: [String] = []) {
         self.phase = phase
         self.residentModels = residentModels
         self.healthySince = healthySince
@@ -98,6 +102,7 @@ public struct SupervisorState: Sendable, Equatable {
         self.lastRestartCategory = lastRestartCategory
         self.deepProbeConfigured = deepProbeConfigured
         self.deepProbeLastFailedAt = deepProbeLastFailedAt
+        self.oversizedModels = oversizedModels
     }
 
     /// Uptime of the current healthy streak as of `reference`. Nil if not

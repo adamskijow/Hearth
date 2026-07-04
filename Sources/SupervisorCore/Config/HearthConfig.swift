@@ -66,6 +66,12 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     public var probeModel: String?
     public var deepProbeIntervalSeconds: Double
     public var deepProbeTimeoutSeconds: Double
+    /// After a model is resident at this many memory-related crashes (an
+    /// out-of-memory kill, or a crash as it loads) within `modelOOMWindowSeconds`,
+    /// Hearth flags it as likely too large for this Mac in an alert and on
+    /// `/status`, so you switch models instead of crash-looping. Zero disables it.
+    public var modelOOMThreshold: Int
+    public var modelOOMWindowSeconds: Double
 
     // Notifications
     public var ntfyTopic: String?
@@ -182,6 +188,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 probeModel: String? = nil,
                 deepProbeIntervalSeconds: Double = 60,
                 deepProbeTimeoutSeconds: Double = 30,
+                modelOOMThreshold: Int = 2,
+                modelOOMWindowSeconds: Double = 1800,
                 ntfyTopic: String? = nil,
                 ntfyServer: String = "https://ntfy.sh",
                 webhookURL: String? = nil,
@@ -238,6 +246,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.probeModel = probeModel
         self.deepProbeIntervalSeconds = deepProbeIntervalSeconds
         self.deepProbeTimeoutSeconds = deepProbeTimeoutSeconds
+        self.modelOOMThreshold = modelOOMThreshold
+        self.modelOOMWindowSeconds = modelOOMWindowSeconds
         self.ntfyTopic = ntfyTopic
         self.ntfyServer = ntfyServer
         self.webhookURL = webhookURL
@@ -319,6 +329,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         probeModel = try c.decodeIfPresent(String.self, forKey: .probeModel)
         deepProbeIntervalSeconds = try value(.deepProbeIntervalSeconds, defaults.deepProbeIntervalSeconds)
         deepProbeTimeoutSeconds = try value(.deepProbeTimeoutSeconds, defaults.deepProbeTimeoutSeconds)
+        modelOOMThreshold = try value(.modelOOMThreshold, defaults.modelOOMThreshold)
+        modelOOMWindowSeconds = try value(.modelOOMWindowSeconds, defaults.modelOOMWindowSeconds)
         ntfyTopic = try c.decodeIfPresent(String.self, forKey: .ntfyTopic)
         webhookURL = try c.decodeIfPresent(String.self, forKey: .webhookURL)
         ntfyServer = try value(.ntfyServer, defaults.ntfyServer)

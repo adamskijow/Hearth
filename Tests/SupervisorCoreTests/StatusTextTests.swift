@@ -108,6 +108,8 @@ struct StatusTextTests {
         #expect(StatusText.describe(.maintenanceRestart) == "Maintenance restart")
         #expect(StatusText.describe(.memoryLimitExceeded(residentBytes: 2_000_000_000, limitBytes: 1_500_000_000))
                 .hasPrefix("Memory limit restart ("))
+        #expect(StatusText.describe(.modelLikelyTooLarge(model: "llama3:70b"))
+                == "llama3:70b keeps running this Mac out of memory; it likely does not fit")
         #expect(StatusText.describe(.stopped) == "Stopped")
     }
 

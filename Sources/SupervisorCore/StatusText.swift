@@ -110,6 +110,8 @@ public enum StatusText {
             return "Skipped reloading \(models.joined(separator: ", ")): the runner had just crashed loading them"
         case .memoryLimitExceeded(let resident, let limit):
             return "Memory limit restart (\(byteString(resident)) resident, limit \(byteString(limit)))"
+        case .modelLikelyTooLarge(let model):
+            return "\(model) keeps running this Mac out of memory; it likely does not fit"
         case .stopped: return "Stopped"
         }
     }

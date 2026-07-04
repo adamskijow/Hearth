@@ -9,6 +9,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Model-fit guidance: when a model is resident at repeated memory-related crashes
+  (an out-of-memory kill, or a crash as it loads) within a window, Hearth flags
+  it as likely too large for this Mac instead of letting it crash-loop silently.
+  It sends a "Model likely too large" alert naming the model, shows a menubar
+  warning, and lists it under `oversizedModels` on `/status`. Tuned by
+  `modelOOMThreshold` (default 2) and `modelOOMWindowSeconds` (default 1800); set
+  the threshold to 0 to disable. Model names are kept off Prometheus (they are
+  high-cardinality) and confined to the bounded status, menu, and alert surfaces.
 - `hearth_runner_info{runner="ollama"}` Prometheus metric (a low-cardinality info
   gauge) and a `runner` field on `/status`, so a dashboard can tell which runner
   each Hearth supervises.

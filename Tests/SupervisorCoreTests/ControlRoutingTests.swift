@@ -60,7 +60,8 @@ struct ControlRoutingTests {
         let full = SupervisorState(phase: .healthy, residentModels: [ResidentModel(name: "m")],
                                    healthySince: now.addingTimeInterval(-60), lastRestartReason: "crash",
                                    restartCount: 1, busy: true, lastDownCategory: "crash",
-                                   lastRestartCategory: "crash", deepProbeConfigured: true)
+                                   lastRestartCategory: "crash", deepProbeConfigured: true,
+                                   oversizedModels: ["big:70b"])
         let metrics = SystemMetrics(thermal: .nominal, memoryUsedFraction: 0.5, runnerResidentBytes: 1024)
         let tokens = TokenMetricsStore.Snapshot(
             generationRequests: 1, generationTokensTotal: 10, lastTokensPerSecond: 5)
@@ -69,11 +70,16 @@ struct ControlRoutingTests {
         #expect(Set(object.keys) == [
             "phase", "runner", "busy", "models", "uptimeSeconds", "restartCount",
             "consecutiveFailures", "lastRestartReason", "lastDownCategory",
-            "lastRestartCategory", "deepProbeConfigured", "thermal", "memoryUsedPercent",
-            "runnerResidentBytes", "tokensPerSecond", "generationTokensTotal",
+            "lastRestartCategory", "oversizedModels", "deepProbeConfigured", "thermal",
+            "memoryUsedPercent", "runnerResidentBytes", "tokensPerSecond", "generationTokensTotal",
         ])
         #expect(object["runner"] as? String == "ollama")
         #expect(object["lastRestartCategory"] as? String == "crash")
+        #expect(object["oversizedModels"] as? [String] == ["big:70b"])
+        // Absent, not empty, when no model is flagged.
+        let clean = ControlRouting.statusJSON(SupervisorState(phase: .healthy), now: now, runnerKind: "ollama")
+        let cleanObject = try #require(try JSONSerialization.jsonObject(with: clean) as? [String: Any])
+        #expect(cleanObject["oversizedModels"] == nil)
     }
 
     @Test func prometheusCarriesRunnerInfoAndRestartCategory() {

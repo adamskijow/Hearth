@@ -171,6 +171,7 @@ public enum ControlRouting {
             lastRestartReason: state.lastRestartReason,
             lastDownCategory: state.lastDownCategory,
             lastRestartCategory: state.lastRestartCategory,
+            oversizedModels: state.oversizedModels.isEmpty ? nil : state.oversizedModels,
             deepProbeConfigured: state.deepProbeConfigured,
             thermal: metrics.flatMap { $0.thermal == .unknown ? nil : $0.thermal.rawValue },
             memoryUsedPercent: metrics?.memoryUsedFraction.map { Int(($0 * 100).rounded()) },
@@ -264,6 +265,7 @@ private struct StatusPayload: Encodable {
     var lastRestartReason: String?
     var lastDownCategory: String?
     var lastRestartCategory: String?
+    var oversizedModels: [String]?
     var deepProbeConfigured: Bool
     var thermal: String?
     var memoryUsedPercent: Int?

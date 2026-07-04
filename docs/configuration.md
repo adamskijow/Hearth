@@ -95,6 +95,8 @@ See [ollama.md](ollama.md) for the full Ollama setup guide, including deep probe
 | `probeModel` | string or null | `null` | Optional deep readiness probe. The default `/api/version` probe only proves the HTTP server answers; it misses a wedged model runner that still responds there (a GPU or model-load hang). Set a model name and Hearth periodically runs a one-token generation against it, so an inference-level wedge is caught and restarted. Off by default; it names a model and does GPU work. It sends no `keep_alive`, so the model's residency follows the runner's own policy (your `OLLAMA_KEEP_ALIVE`), not one the probe imposes. |
 | `deepProbeIntervalSeconds` | number | `60` | How often to run the deep probe, separate from and slower than the shallow probe. Floored at 5. |
 | `deepProbeTimeoutSeconds` | number | `30` | How long the deep probe may take before it counts as wedged. Generous, because a cold model load is legitimately slow. Floored at 1. |
+| `modelOOMThreshold` | int | `2` | After a model is resident at this many memory-related crashes (an out-of-memory kill, or a crash as it loads) within `modelOOMWindowSeconds`, Hearth flags it as likely too large for this Mac: a "Model likely too large" alert, an `oversizedModels` entry on `/status`, and a menu warning, so you switch models instead of crash-looping. `0` disables the check. |
+| `modelOOMWindowSeconds` | number | `1800` | Sliding window, in seconds, for counting a model's memory-related crashes toward `modelOOMThreshold`. A model un-flags once its crashes age out of this window. |
 
 ## Notifications
 

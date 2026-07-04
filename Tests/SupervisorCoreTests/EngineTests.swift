@@ -278,6 +278,41 @@ struct EngineTests {
         #expect(told)
     }
 
+    @Test func aModelThatRepeatedlyOOMsIsFlaggedAsTooLarge() async throws {
+        // Proactive guidance: after the second out-of-memory crash with the same
+        // model resident, Hearth says the model likely does not fit, rather than
+        // letting it crash-loop silently. (Default threshold is 2.)
+        let h = makeHarness()
+        makeServing(h)   // llama3:8b resident
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+
+        func oomOnce() async throws {
+            let handle = try #require(h.processes.lastHandle)
+            h.processes.simulateExit(handle, exit: ProcessExit(code: 0, wasSignaled: true, signal: 9),
+                                     stderr: ["ggml_metal: failed to allocate buffer"])
+            let wait = await h.engine.stepOnce()   // down, out-of-memory
+            h.clock.advance(by: wait + 0.01)
+            _ = await h.engine.stepOnce()          // respawn
+            _ = await h.engine.stepOnce()          // healthy again, model resident
+        }
+
+        try await oomOnce()
+        // One incident is not enough: no too-large alert yet.
+        let earlyFlag = await h.notifier.received.contains { $0.title == "Model likely too large" }
+        #expect(!earlyFlag)
+
+        try await oomOnce()
+        let flagged = await eventually {
+            await h.notifier.received.contains {
+                $0.title == "Model likely too large" && $0.body.contains("llama3:8b")
+            }
+        }
+        #expect(flagged)
+        // And it shows on the status surface.
+        #expect(await h.engine.snapshot().oversizedModels == ["llama3:8b"])
+    }
+
     @Test func warmupResumesAfterACleanRestartFollowingAnOOM() async throws {
         // The suppression is per-recovery: once the runner comes back and later
         // restarts for an unrelated reason, warm-up works again.

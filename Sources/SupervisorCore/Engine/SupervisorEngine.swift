@@ -94,6 +94,14 @@ public actor SupervisorEngine {
     /// When the last warm-up began, to blame a crash that lands soon after on
     /// the warm-up load itself (the OOM classifier is a heuristic and can miss).
     private var lastWarmupStartedAt: Date?
+    /// Remembers which models were resident at fit-related crashes, to call out
+    /// a model that keeps running the Mac out of memory (proactive guidance, not
+    /// just reactive recovery). Windowed, so a model un-flags once it stops.
+    private var modelFit: ModelFitLedger
+    /// Models already alerted about this streak, so a single crossing pushes one
+    /// alert, not one per repeat. Reconciled with the flagged set so a model that
+    /// ages out and later re-offends alerts again.
+    private var alertedOversizedModels: Set<String> = []
     /// A cold model load is legitimately slow; give each warm-up request minutes.
     static let warmupTimeout: TimeInterval = 180
 
@@ -119,7 +127,9 @@ public actor SupervisorEngine {
                 drainSeconds: TimeInterval = 0,
                 inFlight: (@Sendable () -> Int)? = nil,
                 includeLogTail: Bool = false,
-                busyTimeout: TimeInterval = 600) {
+                busyTimeout: TimeInterval = 600,
+                modelFitThreshold: Int = 2,
+                modelFitWindow: TimeInterval = 1800) {
         self.clock = clock
         self.processes = processes
         self.http = http
@@ -135,6 +145,7 @@ public actor SupervisorEngine {
         self.inFlight = inFlight
         self.includeLogTail = includeLogTail
         self.busyTimeout = busyTimeout
+        self.modelFit = ModelFitLedger(threshold: modelFitThreshold, window: modelFitWindow)
         self.machine = SupervisorMachine(config: policy)
 
         let (stateStream, stateCont) = AsyncStream.makeStream(of: SupervisorState.self)
@@ -494,6 +505,7 @@ public actor SupervisorEngine {
     }
 
     private func handleEvent(_ event: SupervisorEvent) async {
+        var followUps: [SupervisorEvent] = []
         switch event {
         case .down(let reason):
             // A crash can land without a kill effect; snapshot here too so the
@@ -510,6 +522,15 @@ public actor SupervisorEngine {
                 && (lastWarmupStartedAt.map { clock.now.timeIntervalSince($0) < Self.warmupTimeout } ?? false)
             if oom || crashedSoonAfterWarmup {
                 suppressWarmupAfterCrash = true
+                // The same signal drives the model-fit ledger: a fit-related crash
+                // with models resident. When one crosses the threshold, say so.
+                if !modelsToRestore.isEmpty {
+                    modelFit.record(models: modelsToRestore, at: clock.now)
+                    for model in modelFit.flaggedModels(now: clock.now) where !alertedOversizedModels.contains(model) {
+                        alertedOversizedModels.insert(model)
+                        followUps.append(.modelLikelyTooLarge(model: model))
+                    }
+                }
             }
         case .recovered, .becameHealthy:
             startWarmupIfNeeded()
@@ -521,6 +542,11 @@ public actor SupervisorEngine {
             for: event,
             logTail: includeLogTail ? Self.sanitizedLogTail(lastStderrTail) : []) {
             await notifier.notify(notification)
+        }
+        // Emit any derived events (a model crossing the too-large threshold) after
+        // the triggering event, so the log reads down, then the guidance.
+        for followUp in followUps {
+            await handleEvent(followUp)
         }
     }
 
@@ -587,6 +613,11 @@ public actor SupervisorEngine {
         if let spawnError = lastSpawnError, machine.phase == .down || machine.phase == .failing {
             reason = "spawn failed: \(spawnError)"
         }
+        // Models the ledger currently considers too large. Reconcile the alerted
+        // set so a model that ages out of the window can alert again if it
+        // re-offends, and a model that stopped crashing drops off the status.
+        let oversized = modelFit.flaggedModels(now: clock.now)
+        alertedOversizedModels.formIntersection(oversized)
         let state = SupervisorState(
             phase: machine.phase,
             residentModels: currentModels,
@@ -602,7 +633,8 @@ public actor SupervisorEngine {
             lastDownCategory: machine.lastDownCategory,
             lastRestartCategory: machine.lastRestartCategory,
             deepProbeConfigured: deepProbe != nil,
-            deepProbeLastFailedAt: lastDeepProbeFailedAt
+            deepProbeLastFailedAt: lastDeepProbeFailedAt,
+            oversizedModels: oversized
         )
         current = state
         stateContinuation.yield(state)
@@ -655,6 +687,13 @@ public actor SupervisorEngine {
                 level: .warning,
                 title: "Models not reloaded",
                 body: "The runner crashed loading \(models.joined(separator: ", ")), so Hearth did not reload it after the restart: doing so would likely crash the GPU again. Load a smaller model, or lower the context size, for this machine's memory.",
+                event: event
+            )
+        case .modelLikelyTooLarge(let model):
+            return HearthNotification(
+                level: .warning,
+                title: "Model likely too large",
+                body: "\(model) has repeatedly run this Mac out of memory as it loaded. It likely does not fit in this machine's unified memory. Use a smaller model or a lower context size; a quantized variant often fits.",
                 event: event
             )
         default:

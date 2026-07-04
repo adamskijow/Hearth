@@ -342,6 +342,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             addAction("Watch the Existing Runner Instead", #selector(switchToAttachedTapped), enabled: true)
             menu.addItem(.separator())
         }
+        // A model that keeps running the Mac out of memory: name it so the fix
+        // (a smaller model or a lower context) is obvious.
+        if !latestState.oversizedModels.isEmpty {
+            let models = latestState.oversizedModels.joined(separator: ", ")
+            menu.addItem(infoRow(headlineAttr("\u{26A0} Model likely too large", color: .systemYellow)))
+            menu.addItem(infoRow(detailAttr("   \(models) keeps running out of memory; try a smaller model or lower context")))
+            menu.addItem(.separator())
+        }
 
         // Health: a bright, color-coded headline, then a couple of detail lines.
         let phaseColor = MenuFormat.tint(for: latestState.phase) ?? .labelColor

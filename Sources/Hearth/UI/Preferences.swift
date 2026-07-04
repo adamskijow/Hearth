@@ -296,6 +296,10 @@ struct PreferencesView: View {
                        help: "How long an uninterrupted busy (queue full) streak is believed before it is treated as a hang and restarted. A real queue drains; a 503 that never ends is a wedge. Floored at 30.")
                 numberInt("Memory limit (MB)", $model.config.runnerMemoryLimitMB,
                           help: "Restart a healthy Hearth-started runner whose resident memory crosses this many megabytes, catching slow memory creep before it wedges. 0 disables the watchdog.")
+                numberInt("Too-large model threshold", $model.config.modelOOMThreshold,
+                          help: "After a model is resident at this many out-of-memory crashes within the window below, Hearth flags it as likely too large for this Mac (an alert and a status flag), so you switch models instead of crash-looping. 0 disables the check.")
+                number("Too-large model window", $model.config.modelOOMWindowSeconds,
+                       help: "Time window, in seconds, for counting a model's out-of-memory crashes toward the threshold above.")
                 TextField("Deep probe model", text: optional(\.probeModel),
                           prompt: Text("optional, e.g. qwen2.5:0.5b"))
                     .help("Optional: periodically generate one token with this model (pick a small one you have pulled) to catch a runner whose API answers while the model itself is stuck.")

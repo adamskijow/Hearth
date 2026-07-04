@@ -73,6 +73,10 @@ public enum SupervisorEvent: Sendable, Equatable {
     /// The opt-in memory watchdog restarted the runner: its resident size
     /// crossed the configured ceiling.
     case memoryLimitExceeded(residentBytes: Int64, limitBytes: Int64)
+    /// A model repeatedly ran the Mac out of memory (or crashed the runner as it
+    /// loaded), so it likely does not fit on this machine. Advisory, so the user
+    /// switches to a smaller model instead of living in a crash loop.
+    case modelLikelyTooLarge(model: String)
     /// Supervision stopped by request.
     case stopped
 
@@ -87,6 +91,8 @@ public enum SupervisorEvent: Sendable, Equatable {
         case .warmupSkippedAfterCrash:
             return true
         case .memoryLimitExceeded:
+            return true
+        case .modelLikelyTooLarge:
             return true
         default:
             return false

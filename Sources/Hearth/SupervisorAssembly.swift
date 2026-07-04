@@ -68,7 +68,9 @@ struct SupervisorAssembly {
             drainSeconds: max(0, config.drainSeconds),
             inFlight: inFlight,
             includeLogTail: config.alertsIncludeLogTail,
-            busyTimeout: max(30, config.busyTimeoutSeconds)
+            busyTimeout: max(30, config.busyTimeoutSeconds),
+            modelFitThreshold: config.modelOOMThreshold,
+            modelFitWindow: config.modelOOMWindowSeconds
         )
         let coordinator = SupervisionCoordinator(engine: engine)
 

@@ -13,9 +13,10 @@
 
 **Keep Ollama alive on an always-on Mac.** Hearth is a small macOS supervisor that
 restarts your local model runner when it crashes and, unlike `launchd` or `brew
-services`, also when it is still running but has quietly stopped answering, often
-after a GPU hang. It keeps the Mac awake while serving and alerts you, including on
-your phone, when something breaks. LM Studio and mlx_lm work alongside Ollama.
+services`, also when it is still running but has quietly stopped answering. It keeps
+the runner native rather than in Docker, which on macOS is CPU-only, so you keep the
+Mac's GPU. It also keeps the Mac awake while serving and alerts you, including on your
+phone, when something breaks. LM Studio and mlx_lm work alongside Ollama.
 
 Built for any Apple Silicon Mac that serves models unattended: a Mac mini in a
 closet, a home-lab server, or a desktop left on overnight. Your apps keep talking to

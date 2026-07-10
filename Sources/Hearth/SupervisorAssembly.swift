@@ -12,7 +12,7 @@ struct SupervisorAssembly {
     let metricsProvider: SystemMetricsProvider
     let processController: FoundationProcessController
     let runner: any Runner
-    let notifier: Notifier
+    let notifier: ReloadableNotifier
     let pressureMonitor: PressureMonitor
     let heartbeat: HeartbeatPinger?
     let metricsProxy: MetricsProxy?
@@ -30,7 +30,8 @@ struct SupervisorAssembly {
             processController?.latestResidentBytes()
         })
         let runner = config.makeRunner()
-        let notifier = makeNotifier(config: config, includeLocal: includeLocalNotifications)
+        let notifier = ReloadableNotifier(
+            notificationChannels(config: config, includeLocal: includeLocalNotifications))
 
         // The opt-in tokens-per-second tap. The proxy listens where the runner
         // does (same host semantics) and relays to it; the store feeds /metrics,
@@ -123,7 +124,10 @@ struct SupervisorAssembly {
         )
     }
 
-    private static func makeNotifier(config: HearthConfig, includeLocal: Bool) -> Notifier {
+    /// Build the concrete delivery channels for a config. Kept separate from the
+    /// stable `ReloadableNotifier` that the engine holds so notification-only
+    /// changes can apply without cycling the runner.
+    static func notificationChannels(config: HearthConfig, includeLocal: Bool) -> any Notifier {
         // Vacation mode: every channel quiet, configuration untouched, events
         // still logged. The pause is one flag, not three cleared settings.
         guard !config.notificationsPaused else { return CompositeNotifier([]) }

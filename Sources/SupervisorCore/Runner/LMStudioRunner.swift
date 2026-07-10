@@ -62,6 +62,11 @@ public struct LMStudioRunner: Runner {
             .map { ResidentModel(name: $0.id, sizeBytes: $0.sizeBytes) }
     }
 
+    public func parseAvailableModels(_ data: Data) throws -> [AvailableModel] {
+        let decoded = try JSONDecoder().decode(ModelsResponse.self, from: data)
+        return decoded.data.map { AvailableModel(name: $0.id, sizeBytes: $0.sizeBytes) }
+    }
+
     public func classifyExit(_ exit: ProcessExit?, stderr: [String]) -> ExitReason {
         RunnerHeuristics.classify(exit, stderr: stderr, oomSignatures: oomSignatures)
     }

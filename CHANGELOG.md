@@ -7,6 +7,39 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## [1.2.0] - 2026-07-09
+
+The usability release: routine settings no longer disturb a serving runner, the
+phone page is a real recovery console, inference-level protection has guided
+setup and a one-click test, and retained events and metrics now have a native
+incident-history view.
+
+### Added
+
+- The browser phone console now has Start, Stop, and Restart controls, with
+  confirmation for destructive actions, correct phase-based enablement, a
+  forget-token action, model-fit warnings, the detailed last failure, and the
+  ten most recent Hearth activity lines. Control actions continue to use bearer
+  authentication and named-token auditing. `/status` adds the optional,
+  bounded `recentEvents` field; it never contains the runner log.
+- Guided deep-probe setup in Preferences: enable inference-level health checks,
+  discover the models the configured runner reports, choose from a model picker
+  ordered smallest-first when sizes are available, and run the real one-token
+  probe before saving. Ollama uses `/api/tags`; LM Studio, mlx_lm, and Osaurus
+  use their model-list APIs.
+- A native **History\u{2026}** window groups down-to-recovered events into
+  incidents, reports recovery time, summarizes incidents and crash loops, and
+  plots retained system memory and runner RSS with restart markers. The view is
+  entirely local and can copy a concise support summary.
+
+### Changed
+
+- Notification destinations and pause state, memory and thermal alert settings,
+  heartbeat, and the control endpoint now reload live in the menubar app without
+  stopping the managed runner, unloading models, or interrupting inference.
+  Preferences previews changes that still require a runner or supervision
+  restart and labels the Save action accordingly.
+
 ## [1.1.0] - 2026-07-04
 
 The first feature release after 1.0, focused on making the runner's memory

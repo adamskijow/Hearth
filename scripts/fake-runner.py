@@ -69,6 +69,14 @@ class Handler(BaseHTTPRequestHandler):
                     "expires_at": "2026-06-27T13:00:00.000Z",
                 }]
             }).encode()
+        elif self.path == "/api/tags":
+            body = json.dumps({
+                "models": [{
+                    "name": "fake-model:latest",
+                    "model": "fake-model:latest",
+                    "size": 1234567890,
+                }]
+            }).encode()
         else:
             self.send_response(404)
             self.end_headers()

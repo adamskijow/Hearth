@@ -36,14 +36,6 @@ public enum EventStats {
         }
     }
 
-    /// The formatter must match EventLogStore's stamp exactly.
-    private static let stamp: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return formatter
-    }()
-
     public static func summarize(_ lines: [String]) -> Summary {
         var downCount = 0, recoveredCount = 0, crashLoopCount = 0, maintenanceRestarts = 0
         var reasonCounts: [String: Int] = [:]
@@ -52,7 +44,9 @@ public enum EventStats {
         var pendingDownAt: Date?
 
         for line in lines {
-            guard let (date, message) = parse(line) else { continue }
+            guard let entry = EventLog.parse(line) else { continue }
+            let date = entry.at
+            let message = entry.message
             if firstDate == nil { firstDate = date }
             lastDate = date
 
@@ -84,13 +78,6 @@ public enum EventStats {
                        byReason: byReason, recoveryTimes: recoveryTimes)
     }
 
-    /// A log line is "yyyy-MM-dd HH:mm:ss  message"; two spaces separate them.
-    static func parse(_ line: String) -> (Date, String)? {
-        guard let separator = line.range(of: "  ") else { return nil }
-        let timestamp = String(line[..<separator.lowerBound])
-        guard let date = stamp.date(from: timestamp) else { return nil }
-        return (date, String(line[separator.upperBound...]))
-    }
 }
 
 private extension String {

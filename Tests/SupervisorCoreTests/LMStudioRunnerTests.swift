@@ -14,6 +14,12 @@ struct LMStudioRunnerTests {
         #expect(spec.arguments == ["server", "start", "--port", "1234"])
     }
 
+    @Test func availableModelsIncludeUnloadedChoices() throws {
+        let json = Data(#"{"data":[{"id":"small","state":"loaded","size_bytes":100},{"id":"large","state":"not-loaded","size_bytes":200}]}"#.utf8)
+        let models = try LMStudioRunner(binaryPath: "/x").parseAvailableModels(json)
+        #expect(models.map(\.name) == ["small", "large"])
+    }
+
     @Test func endpoints() {
         let runner = LMStudioRunner(binaryPath: "/x", host: "127.0.0.1", port: 1234)
         #expect(runner.readinessEndpoint.absoluteString == "http://127.0.0.1:1234/v1/models")

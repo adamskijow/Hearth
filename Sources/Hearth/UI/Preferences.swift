@@ -30,15 +30,20 @@ final class PreferencesController: NSObject, NSWindowDelegate {
     func externalConfigDidChange(_ new: HearthConfig) {
         guard window?.isVisible == true else {
             model.config = new
+            model.baseline = new
+            model.probeEnabled = Self.hasProbe(new)
             baseline = new
             return
         }
         if new == model.config {
+            model.baseline = new
             baseline = new
             return
         }
         if model.config == baseline {
             model.config = new
+            model.baseline = new
+            model.probeEnabled = Self.hasProbe(new)
             baseline = new
             model.status = "Config changed outside this window; now showing the new values."
         } else {
@@ -48,6 +53,8 @@ final class PreferencesController: NSObject, NSWindowDelegate {
 
     func show(config: HearthConfig) {
         model.config = config
+        model.baseline = config
+        model.probeEnabled = Self.hasProbe(config)
         baseline = config
         if window == nil {
             let view = PreferencesView(
@@ -78,13 +85,27 @@ final class PreferencesController: NSObject, NSWindowDelegate {
     func windowWillClose(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
     }
+
+    private static func hasProbe(_ config: HearthConfig) -> Bool {
+        !(config.probeModel ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 }
 
 @MainActor
 final class PreferencesModel: ObservableObject {
     @Published var config: HearthConfig
+    @Published var baseline: HearthConfig
     @Published var status: String = ""
-    init(_ config: HearthConfig) { self.config = config }
+    @Published var availableProbeModels: [AvailableModel] = []
+    @Published var probeStatus: String = ""
+    @Published var probeBusy = false
+    @Published var probeEnabled: Bool
+    init(_ config: HearthConfig) {
+        self.config = config
+        self.baseline = config
+        self.probeEnabled = !(config.probeModel ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 }
 
 struct PreferencesView: View {
@@ -99,6 +120,7 @@ struct PreferencesView: View {
         VStack(spacing: 0) {
             Form {
                 runnerSection
+                inferenceHealthSection
                 notificationsSection
                 controlSection
                 loggingSection
@@ -107,12 +129,27 @@ struct PreferencesView: View {
             .formStyle(.grouped)
 
             Divider()
-            HStack {
-                Text(model.status).foregroundStyle(.secondary).font(.callout)
-                Spacer()
-                Button("Close", action: onClose)
-                Button("Save") { onSave(model.config); model.status = "Saved and reloaded." }
+            VStack(alignment: .leading, spacing: 6) {
+                if saveImpact == .restart {
+                    Text(model.config.isManaged
+                         ? "These changes restart the runner and unload its models."
+                         : "These changes restart supervision; the watched runner stays running.")
+                        .foregroundStyle(.orange).font(.callout)
+                }
+                HStack {
+                    Text(model.status).foregroundStyle(.secondary).font(.callout)
+                    Spacer()
+                    Button("Close", action: onClose)
+                    Button(saveButtonTitle) {
+                        let impact = saveImpact
+                        onSave(model.config)
+                        model.baseline = model.config
+                        model.status = impact == .live
+                            ? "Saved without restarting the runner."
+                            : impact == .none ? "No changes to save." : "Saved and reloaded."
+                    }
                     .keyboardShortcut(.defaultAction)
+                }
             }
             .padding(12)
         }
@@ -132,6 +169,20 @@ struct PreferencesView: View {
                 onCancel: { showingTokensEditor = false }
             )
         }
+        .task(id: probeTarget) {
+            if deepProbeEnabled.wrappedValue {
+                await refreshProbeModels(selectSmallestWhenUnset: false)
+            }
+        }
+    }
+
+    private var saveImpact: ConfigReloadImpact {
+        ConfigReloadImpact.between(model.baseline, model.config)
+    }
+
+    private var saveButtonTitle: String {
+        guard saveImpact == .restart else { return "Save" }
+        return model.config.isManaged ? "Save & Restart Runner" : "Save & Restart Supervision"
     }
 
     /// A short summary of the configured runner environment for the Preferences row.
@@ -187,6 +238,43 @@ struct PreferencesView: View {
                 Button("Set Env\u{2026}") { showingEnvEditor = true }
             }
             .help("Extra environment variables set on a managed runner at launch, for example OLLAMA_LOAD_TIMEOUT. Click Set Env to add or remove variables.")
+        }
+    }
+
+    private var inferenceHealthSection: some View {
+        Section {
+            Toggle("Check real inference, not only the API", isOn: deepProbeEnabled)
+                .help("Periodically generate one token to catch a GPU or model hang even when the runner's lightweight API still answers.")
+            if deepProbeEnabled.wrappedValue {
+                if model.availableProbeModels.isEmpty {
+                    TextField("Probe model", text: optional(\.probeModel),
+                              prompt: Text("e.g. qwen2.5:0.5b"))
+                } else {
+                    Picker("Probe model", selection: optional(\.probeModel)) {
+                        ForEach(probeModelOptions) { option in
+                            Text(probeModelLabel(option)).tag(option.name)
+                        }
+                    }
+                }
+                HStack {
+                    Button("Refresh Models") {
+                        Task { await refreshProbeModels(selectSmallestWhenUnset: true) }
+                    }
+                    Button("Test Now") {
+                        Task { await testProbe() }
+                    }
+                    .disabled(model.probeBusy || (model.config.probeModel ?? "").isEmpty)
+                    if model.probeBusy { ProgressView().controlSize(.small) }
+                }
+                if !model.probeStatus.isEmpty {
+                    Text(model.probeStatus).font(.callout).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        } header: {
+            Text("Inference health")
+        } footer: {
+            Text("Opt in: the test loads the selected model and uses a small amount of GPU work. When sizes are available, the smallest installed model is listed first.")
         }
     }
 
@@ -300,9 +388,6 @@ struct PreferencesView: View {
                           help: "After a model is resident at this many out-of-memory crashes within the window below, Hearth flags it as likely too large for this Mac (an alert and a status flag), so you switch models instead of crash-looping. 0 disables the check.")
                 number("Too-large model window", $model.config.modelOOMWindowSeconds,
                        help: "Time window, in seconds, for counting a model's out-of-memory crashes toward the threshold above.")
-                TextField("Deep probe model", text: optional(\.probeModel),
-                          prompt: Text("optional, e.g. qwen2.5:0.5b"))
-                    .help("Optional: periodically generate one token with this model (pick a small one you have pulled) to catch a runner whose API answers while the model itself is stuck.")
                 number("Maintenance restart hours", $model.config.maintenanceRestartHours,
                        help: "Optional: restart a long-healthy Hearth-started runner this often. 0 disables it.")
                 TextField("Maintenance window", text: optional(\.maintenanceWindow),
@@ -319,7 +404,7 @@ struct PreferencesView: View {
         } header: {
             Text("Advanced")
         } footer: {
-            Text("Deep probes are optional. For the headless root daemon, set Runner user and verify with hearth doctor-daemon.")
+            Text("For the headless root daemon, set Runner user and verify with hearth doctor-daemon.")
         }
     }
 
@@ -358,6 +443,79 @@ struct PreferencesView: View {
             get: { model.config[keyPath: keyPath] ?? "" },
             set: { model.config[keyPath: keyPath] = $0.isEmpty ? nil : $0 }
         )
+    }
+
+    private var deepProbeEnabled: Binding<Bool> {
+        Binding(
+            get: { model.probeEnabled },
+            set: { enabled in
+                model.probeEnabled = enabled
+                if enabled {
+                    model.probeStatus = "Looking for models on the runner\u{2026}"
+                    Task { await refreshProbeModels(selectSmallestWhenUnset: true) }
+                } else {
+                    model.config.probeModel = nil
+                    model.probeStatus = ""
+                }
+            })
+    }
+
+    private var probeTarget: String {
+        "\(model.config.runner)|\(model.config.host)|\(model.config.port)"
+    }
+
+    private func probeModelLabel(_ model: AvailableModel) -> String {
+        guard let size = model.sizeBytes else { return model.name }
+        return "\(model.name) (\(StatusText.byteString(size)))"
+    }
+
+    private var probeModelOptions: [AvailableModel] {
+        guard let current = model.config.probeModel, !current.isEmpty,
+              !model.availableProbeModels.contains(where: { $0.name == current }) else {
+            return model.availableProbeModels
+        }
+        return [AvailableModel(name: current)] + model.availableProbeModels
+    }
+
+    @MainActor
+    private func refreshProbeModels(selectSmallestWhenUnset: Bool) async {
+        guard !model.probeBusy else { return }
+        model.probeBusy = true
+        defer { model.probeBusy = false }
+        do {
+            let models = try await RunnerProbeSetup.availableModels(config: model.config)
+            model.availableProbeModels = models
+            guard !models.isEmpty else {
+                model.probeStatus = "No models were reported. Load or install a small model, then refresh."
+                return
+            }
+            let current = (model.config.probeModel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if selectSmallestWhenUnset && current.isEmpty, let smallest = models.first {
+                model.config.probeModel = smallest.name
+                model.probeStatus = "Selected \(smallest.name), the smallest model size the runner reported. Use Test Now to verify it."
+            } else {
+                model.probeStatus = "Found \(models.count) available model\(models.count == 1 ? "" : "s")."
+            }
+        } catch {
+            model.availableProbeModels = []
+            model.probeStatus = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func testProbe() async {
+        guard !model.probeBusy,
+              let probeModel = model.config.probeModel?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !probeModel.isEmpty else { return }
+        model.probeBusy = true
+        model.probeStatus = "Running a one-token inference test\u{2026}"
+        defer { model.probeBusy = false }
+        do {
+            let result = try await RunnerProbeSetup.test(config: model.config, model: probeModel)
+            model.probeStatus = String(format: "Inference test passed in %.1f seconds. Save to enable ongoing checks.", result.elapsed)
+        } catch {
+            model.probeStatus = error.localizedDescription
+        }
     }
 
     private func chooseBinary() {

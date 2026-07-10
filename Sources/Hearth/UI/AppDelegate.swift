@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var heartbeat: HeartbeatPinger?
     private var metricsProxy: MetricsProxy?
     private var tokenMetrics: TokenMetricsStore?
+    private var notifier: ReloadableNotifier!
     private var processController: FoundationProcessController!
     private var metricsProvider: SystemMetricsProvider!
     private var config = HearthConfig()
@@ -26,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private weak var liveHeadlineField: NSTextField?
     private var preferences: PreferencesController?
     private var welcome: WelcomeController?
+    private var history: HistoryController?
 
     /// Set once the one-time Start at Login auto-registration has happened, so a
     /// later config reload never re-enables what the user explicitly turned off.
@@ -102,10 +104,72 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             LocalNotifier.post(title: "Hearth: config not applied", body: loaded.note ?? "The config could not be read.")
             return
         }
+        if engine != nil, ConfigReloadImpact.between(config, loaded.config) != .restart {
+            await applyLiveConfig(loaded)
+            if firstRun { firstRunGuidance(loaded) }
+            return
+        }
         await applyConfig(loaded)
         if firstRun {
             firstRunGuidance(loaded)
         }
+    }
+
+    /// Apply the settings owned by services around the engine without stopping
+    /// the runner or resetting supervisor state. In particular, vacation mode,
+    /// notification destinations, pressure alerts, heartbeat, and phone-control
+    /// credentials no longer unload models or interrupt an in-flight generation.
+    private func applyLiveConfig(_ loaded: ConfigLoad) async {
+        reloadGeneration &+= 1
+        let generation = reloadGeneration
+
+        controlServer?.stop()
+        pressureMonitor?.stop()
+        heartbeat?.stop()
+
+        await notifier.replace(with: SupervisorAssembly.notificationChannels(
+            config: loaded.config, includeLocal: true))
+        guard generation == reloadGeneration else { return }
+
+        updateConfigMetadata(loaded)
+
+        if config.controlEnabled, let token = config.controlToken, !token.isEmpty {
+            controlServer = ControlServer(
+                host: ControlHostResolver.resolve(config.controlHost),
+                port: config.controlPort,
+                token: token,
+                coordinator: coordinator,
+                namedTokens: config.namedControlTokens,
+                runnerKind: config.runnerKind.rawValue.lowercased(),
+                metrics: metricsProvider,
+                tokenMetrics: tokenMetrics,
+                onControlAction: { command, actor in
+                    EventLogStore.appendAudit(command: command, actor: actor)
+                })
+            controlServer?.start()
+        } else {
+            controlServer = nil
+        }
+
+        let metricsHistory = MetricsHistoryStore()
+        let currentNotifier = notifier!
+        pressureMonitor = PressureMonitor(
+            metrics: metricsProvider,
+            thresholds: config.pressureThresholds(),
+            notify: { notification in
+                Task.detached { await currentNotifier.notify(notification) }
+            },
+            onSample: { sample in metricsHistory.record(sample) })
+        pressureMonitor?.start()
+
+        heartbeat = HeartbeatPinger(
+            urlString: config.heartbeatURL,
+            intervalSeconds: config.heartbeatIntervalSeconds,
+            isHealthy: { [weak engine = self.engine] in
+                await engine?.snapshot().phase == .healthy
+            })
+        heartbeat?.start()
+        updateStatusButton()
     }
 
     /// Tear down the current engine and rebuild it from a config. Safe to call on
@@ -129,20 +193,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // second runner.
         guard generation == reloadGeneration else { return }
 
-        config = loaded.config
-        configNote = loaded.note
-        configProblem = loaded.isProblem
-        configDiagnostics = loaded.keyDiagnostics + ConfigDiagnostics.check(loaded.config)
-        // Keep an open Preferences window honest about what is now on disk.
-        preferences?.externalConfigDidChange(loaded.config)
-        competingManagerWarning = RunnerManagerConflict.warning(
-            runner: loaded.config.runner, mode: loaded.config.mode, loadedLabels: LaunchdLabels.loaded())
-        binaryMissingPath = nil
-        suggestedBinaryPath = nil
-        if config.isManaged, !FileManager.default.isExecutableFile(atPath: config.selectedBinaryPath) {
-            binaryMissingPath = config.selectedBinaryPath
-            suggestedBinaryPath = RunnerLocator.locate(config.runner)
-        }
+        updateConfigMetadata(loaded)
 
         let assembly = SupervisorAssembly.make(config: config, includeLocalNotifications: true)
         processController = assembly.processController
@@ -159,6 +210,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         metricsProxy = assembly.metricsProxy
         metricsProxy?.start()
         tokenMetrics = assembly.tokenMetrics
+        notifier = assembly.notifier
 
         // Auto-enable Start at Login exactly once, on the genuine first run.
         // applyConfig runs on every reload (Preferences Save, SIGHUP, the menu's
@@ -183,6 +235,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let foreign = await RunnerCollision.foreignRunnerServing(config: config)
         preexistingRunnerWarning = PreexistingRunner.warning(
             runner: config.runner, mode: config.mode, foreignRunnerServing: foreign)
+    }
+
+    private func updateConfigMetadata(_ loaded: ConfigLoad) {
+        config = loaded.config
+        configNote = loaded.note
+        configProblem = loaded.isProblem
+        configDiagnostics = loaded.keyDiagnostics + ConfigDiagnostics.check(loaded.config)
+        // Keep an open Preferences window honest about what is now on disk.
+        preferences?.externalConfigDidChange(loaded.config)
+        competingManagerWarning = RunnerManagerConflict.warning(
+            runner: loaded.config.runner, mode: loaded.config.mode,
+            loadedLabels: LaunchdLabels.loaded())
+        binaryMissingPath = nil
+        suggestedBinaryPath = nil
+        if config.isManaged, !FileManager.default.isExecutableFile(atPath: config.selectedBinaryPath) {
+            binaryMissingPath = config.selectedBinaryPath
+            suggestedBinaryPath = RunnerLocator.locate(config.runner)
+        }
     }
 
     private func firstRunGuidance(_ loaded: ConfigLoad) {
@@ -416,6 +486,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         addAction("Stop", #selector(stopTapped), enabled: latestState.phase != .stopped)
         addAction("Restart", #selector(restartTapped), enabled: latestState.phase != .stopped)
         addAction("Open Logs", #selector(openLogsTapped), enabled: true)
+        addAction("History\u{2026}", #selector(openHistoryTapped), enabled: true)
         addAction("Copy Diagnostics", #selector(copyDiagnosticsTapped), enabled: true)
 
         let recent = EventLogStore.recent(12)
@@ -660,6 +731,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         } else {
             NSWorkspace.shared.open(AppPaths.logDirectory)
         }
+    }
+
+    @objc private func openHistoryTapped() {
+        if history == nil { history = HistoryController() }
+        history?.show()
     }
 
     @objc private func copyPhoneURLTapped() {

@@ -57,6 +57,10 @@ public struct OllamaRunner: Runner {
         runnerEndpoint(host: host, port: port, path: "/api/ps")
     }
 
+    public var availableModelsEndpoint: URL {
+        runnerEndpoint(host: host, port: port, path: "/api/tags")
+    }
+
     public func parseResidentModels(_ data: Data) throws -> [ResidentModel] {
         let decoded = try JSONDecoder.ollama.decode(PSResponse.self, from: data)
         return decoded.models.map { entry in
@@ -65,6 +69,13 @@ public struct OllamaRunner: Runner {
                 sizeBytes: entry.size,
                 expiresAt: entry.expiresAt
             )
+        }
+    }
+
+    public func parseAvailableModels(_ data: Data) throws -> [AvailableModel] {
+        let decoded = try JSONDecoder().decode(TagsResponse.self, from: data)
+        return decoded.models.map { entry in
+            AvailableModel(name: entry.name ?? entry.model ?? "unknown", sizeBytes: entry.size)
         }
     }
 
@@ -109,6 +120,16 @@ private struct PSModel: Decodable {
         case size
         case expiresAt = "expires_at"
     }
+}
+
+private struct TagsResponse: Decodable {
+    var models: [TagsModel]
+}
+
+private struct TagsModel: Decodable {
+    var name: String?
+    var model: String?
+    var size: Int64?
 }
 
 extension JSONDecoder {

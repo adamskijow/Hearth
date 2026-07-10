@@ -42,6 +42,17 @@ struct OllamaRunnerTests {
         let runner = OllamaRunner(binaryPath: "/x", host: "127.0.0.1", port: 11434)
         #expect(runner.readinessEndpoint.absoluteString == "http://127.0.0.1:11434/api/version")
         #expect(runner.modelsEndpoint.absoluteString == "http://127.0.0.1:11434/api/ps")
+        #expect(runner.availableModelsEndpoint.absoluteString == "http://127.0.0.1:11434/api/tags")
+    }
+
+    @Test func parsesAvailableModelsForProbeSetup() throws {
+        let runner = OllamaRunner(binaryPath: "/x")
+        let json = Data(#"{"models":[{"name":"qwen2.5:0.5b","size":400000000},{"model":"llama3:8b","size":5300000000}]}"#.utf8)
+        let models = try runner.parseAvailableModels(json)
+        #expect(models == [
+            AvailableModel(name: "qwen2.5:0.5b", sizeBytes: 400_000_000),
+            AvailableModel(name: "llama3:8b", sizeBytes: 5_300_000_000),
+        ])
     }
 
     @Test func wildcardHostBindsAllInterfacesButProbesLoopback() throws {

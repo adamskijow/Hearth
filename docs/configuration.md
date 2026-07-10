@@ -6,8 +6,12 @@ Hearth reads a single JSON file. The default location is
 at another file (handy for a throwaway config). Decoding is lenient: every key is
 optional and missing keys fall back to the defaults below, so a partial or empty
 `{}` still works. Edit it from the Preferences window or by hand; either way, Save
-or `hearth` with `SIGHUP` (or the menu's Reload Config) applies it without a
-restart.
+or `hearth` with `SIGHUP` (or the menu's Reload Config) applies it. In the
+menubar app, notification destinations and pause state, pressure alerts,
+heartbeat, and control-endpoint settings reload without stopping the runner.
+Preferences labels runner and engine changes that require a restart before Save.
+The root daemon still applies config by exiting cleanly and letting launchd
+respawn it, which briefly cycles a managed runner.
 
 Run `hearth doctor` after editing to catch problems (bad ports, an unknown runner
 or mode, a control endpoint with no token, timings that cannot grow). For the root

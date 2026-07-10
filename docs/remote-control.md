@@ -24,7 +24,9 @@ one of `wedged`, `crash`, `oom`, `signal`, `clean-exit`, `unknown`),
 `deepProbeConfigured` (bool), `thermal` (string or absent),
 `memoryUsedPercent` (number or absent), `runnerResidentBytes` (number or
 absent), and, when the metrics proxy is enabled, `tokensPerSecond` and
-`generationTokensTotal`. `/metrics` returns the same data as a
+`generationTokensTotal`. `recentEvents` is an optional bounded array of Hearth's
+own latest activity lines for the phone console; it never includes the runner log.
+`/metrics` returns the same data as a
 Prometheus text exposition (also behind the token), so you can scrape Hearth into
 Grafana or Uptime Kuma; and the unauthenticated `/healthz` returns `200` when Hearth
 is up, for an uptime monitor. Ready-made Prometheus, Grafana, and Uptime Kuma recipes
@@ -35,9 +37,11 @@ to start without a token, and rejects any request whose bearer token does not ma
 
 Opening the control URL in a browser (`http://HOST:11435/`) serves a small status
 page for phones: paste your token once (it is stored in that browser only, never in
-the URL) and it polls `/status` and shows the phase, uptime, and metrics. The page
-itself is unauthenticated but reveals nothing; the status fetch it makes carries the
-token.
+the URL) and it polls `/status`, shows the phase, uptime, metrics, and recent
+activity, and provides Start, Stop, and Restart buttons. Stop and Restart require
+confirmation. The page itself is unauthenticated but reveals nothing; status and
+control requests carry the token in their authorization header. Use Forget Token
+before leaving a shared phone or browser.
 
 When Hearth detects a Tailscale address on the machine (an interface in the
 100.64.0.0/10 range), the menubar shows a "Phone access" line with the full control
@@ -104,6 +108,11 @@ runner log. Unlike the in-memory recent-activity list, this survives a restart, 
 `hearth events`, the menu's Recent activity, and the tail shown by `hearth status`
 all answer "why did it restart last night." The runner log (`hearth logs`) is the
 runner's own stdout and stderr; the event log is Hearth's view of it.
+
+The menubar's **History\u{2026}** window groups down-to-recovered activity into
+incidents, shows recovery times, and plots retained system and runner memory with
+restart markers. It uses the same local event and metrics files; nothing is sent
+off the Mac.
 
 `hearth events --stats` summarizes that log instead of printing it: how many
 times the runner went down, how often it hit a crash loop, the mean and longest

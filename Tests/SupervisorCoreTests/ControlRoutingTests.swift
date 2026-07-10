@@ -44,6 +44,9 @@ struct ControlRoutingTests {
         // that holds the bearer token. Guard that the escaper exists and is used.
         #expect(body.contains("function esc("))
         #expect(body.contains("esc(v)"))
+        #expect(body.contains("id=\"restart\""))
+        #expect(body.contains("fetch('/' + name"))
+        #expect(body.contains("confirm("))
         // /status without a token is still rejected.
         let status = ControlRouting.handle(
             method: "GET", path: "/status", authorization: nil,
@@ -65,13 +68,16 @@ struct ControlRoutingTests {
         let metrics = SystemMetrics(thermal: .nominal, memoryUsedFraction: 0.5, runnerResidentBytes: 1024)
         let tokens = TokenMetricsStore.Snapshot(
             generationRequests: 1, generationTokensTotal: 10, lastTokensPerSecond: 5)
-        let data = ControlRouting.statusJSON(full, now: now, runnerKind: "ollama", metrics: metrics, tokens: tokens)
+        let data = ControlRouting.statusJSON(
+            full, now: now, runnerKind: "ollama", metrics: metrics, tokens: tokens,
+            recentEvents: ["2026-07-09 12:00:00  Recovered"])
         let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         #expect(Set(object.keys) == [
             "phase", "runner", "busy", "models", "uptimeSeconds", "restartCount",
             "consecutiveFailures", "lastRestartReason", "lastDownCategory",
             "lastRestartCategory", "oversizedModels", "deepProbeConfigured", "thermal",
             "memoryUsedPercent", "runnerResidentBytes", "tokensPerSecond", "generationTokensTotal",
+            "recentEvents",
         ])
         #expect(object["runner"] as? String == "ollama")
         #expect(object["lastRestartCategory"] as? String == "crash")
@@ -80,6 +86,14 @@ struct ControlRoutingTests {
         let clean = ControlRouting.statusJSON(SupervisorState(phase: .healthy), now: now, runnerKind: "ollama")
         let cleanObject = try #require(try JSONSerialization.jsonObject(with: clean) as? [String: Any])
         #expect(cleanObject["oversizedModels"] == nil)
+        #expect(cleanObject["recentEvents"] == nil)
+    }
+
+    @Test func statusCanCarryBoundedRecentActivityForThePhone() throws {
+        let data = ControlRouting.statusJSON(
+            state, now: now, recentEvents: ["2026-07-09 12:00:00  Recovered"])
+        let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(object["recentEvents"] as? [String] == ["2026-07-09 12:00:00  Recovered"])
     }
 
     @Test func prometheusCarriesRunnerInfoAndRestartCategory() {

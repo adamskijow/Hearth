@@ -41,7 +41,8 @@ call the control API's `/status`, not parse CLI output.
 `busy`, `models`, `uptimeSeconds`, `restartCount`, `consecutiveFailures`,
 `lastRestartReason`, `lastDownCategory`, `lastRestartCategory`,
 `oversizedModels`, `deepProbeConfigured`, `thermal`, `memoryUsedPercent`,
-`runnerResidentBytes`, `tokensPerSecond`, `generationTokensTotal`. Optional fields may be absent (a field whose source is
+`runnerResidentBytes`, `tokensPerSecond`, `generationTokensTotal`,
+`recentEvents`. Optional fields may be absent (a field whose source is
 off, such as throughput without the metrics proxy); present fields keep their
 names and types. New fields may be added in minor releases, so consumers should
 ignore keys they do not know.

@@ -142,7 +142,8 @@ final class ControlServer: @unchecked Sendable {
                     now: Date(),
                     runnerKind: runnerKind,
                     metrics: metrics?.sample(),
-                    tokens: self?.tokenMetrics?.snapshot()
+                    tokens: self?.tokenMetrics?.snapshot(),
+                    recentEvents: EventLogStore.recent(10)
                 )
             }
 

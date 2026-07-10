@@ -67,8 +67,9 @@ too). Ollama is untouched.
 ## Configure
 
 Set options in **Preferences** (Cmd-comma) or `~/Library/Application Support/Hearth/config.json`;
-changes apply **without a restart**. The keys most people touch are `runner`/`mode`,
-the binary path and `host`/`port`, `ntfyTopic` for phone alerts, and
+notification, alert, heartbeat, and phone-control changes apply without cycling
+the runner. Preferences labels changes that need to restart it before you save.
+The keys most people touch are `runner`/`mode`, the binary path and `host`/`port`, `ntfyTopic` for phone alerts, and
 `controlEnabled`/`controlToken` for the [control endpoint](docs/remote-control.md).
 
 **managed** mode means Hearth starts and restarts the runner; **attached** means

@@ -50,6 +50,19 @@ public struct ResidentModel: Sendable, Equatable {
     }
 }
 
+/// A model the runner can use for a deep-probe test. Unlike `ResidentModel`, this
+/// is a catalog entry and does not imply the model is currently loaded in memory.
+public struct AvailableModel: Sendable, Equatable, Identifiable {
+    public var name: String
+    public var sizeBytes: Int64?
+    public var id: String { name }
+
+    public init(name: String, sizeBytes: Int64? = nil) {
+        self.name = name
+        self.sizeBytes = sizeBytes
+    }
+}
+
 /// Why the child process ended, classified from its exit status plus captured
 /// stderr. The interesting distinction is a plain crash versus an out of memory
 /// kill, because on a unified memory Mac an oversized model blows the box rather
@@ -199,6 +212,14 @@ public protocol Runner: Sendable {
     /// Parse the resident models response body. Throws on malformed input.
     func parseResidentModels(_ data: Data) throws -> [ResidentModel]
 
+    /// The endpoint listing models a user can select for the optional deep probe.
+    /// This may differ from `modelsEndpoint`, which is intentionally residency
+    /// focused for the menubar status.
+    var availableModelsEndpoint: URL { get }
+
+    /// Parse the model catalog used by guided deep-probe setup.
+    func parseAvailableModels(_ data: Data) throws -> [AvailableModel]
+
     /// Classify how the child exited, given its exit status and recent stderr.
     /// Pure: same inputs always yield the same verdict, so it is testable from
     /// fixture log lines with no real process.
@@ -212,4 +233,10 @@ public protocol Runner: Sendable {
 
 public extension Runner {
     func deepReadinessRequest(model: String) -> DeepProbeRequest? { nil }
+    var availableModelsEndpoint: URL { modelsEndpoint }
+    func parseAvailableModels(_ data: Data) throws -> [AvailableModel] {
+        try parseResidentModels(data).map {
+            AvailableModel(name: $0.name, sizeBytes: $0.sizeBytes)
+        }
+    }
 }

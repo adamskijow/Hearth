@@ -52,7 +52,8 @@ public enum ControlRouting {
                               now: Date,
                               runnerKind: String = "unknown",
                               metrics: SystemMetrics? = nil,
-                              tokens: TokenMetricsStore.Snapshot? = nil) -> ControlOutcome {
+                              tokens: TokenMetricsStore.Snapshot? = nil,
+                              recentEvents: [String] = []) -> ControlOutcome {
         if let early = earlyOutcome(method: method, path: path, authorization: authorization,
                                     token: token, namedTokens: namedTokens) {
             return early
@@ -62,7 +63,9 @@ public enum ControlRouting {
         if trimmedPath(path) == "/metrics" {
             return .prometheus(prometheusText(state, now: now, runnerKind: runnerKind, metrics: metrics, tokens: tokens))
         }
-        return .status(statusJSON(state, now: now, runnerKind: runnerKind, metrics: metrics, tokens: tokens))
+        return .status(statusJSON(state, now: now, runnerKind: runnerKind,
+                                  metrics: metrics, tokens: tokens,
+                                  recentEvents: recentEvents))
     }
 
     /// The outcome for every route that needs no supervisor state or metrics, so
@@ -159,7 +162,8 @@ public enum ControlRouting {
     public static func statusJSON(_ state: SupervisorState, now: Date,
                                   runnerKind: String = "unknown",
                                   metrics: SystemMetrics? = nil,
-                                  tokens: TokenMetricsStore.Snapshot? = nil) -> Data {
+                                  tokens: TokenMetricsStore.Snapshot? = nil,
+                                  recentEvents: [String] = []) -> Data {
         let payload = StatusPayload(
             phase: state.phase.rawValue,
             runner: runnerKind,
@@ -177,7 +181,8 @@ public enum ControlRouting {
             memoryUsedPercent: metrics?.memoryUsedFraction.map { Int(($0 * 100).rounded()) },
             runnerResidentBytes: metrics?.runnerResidentBytes,
             tokensPerSecond: tokens?.lastTokensPerSecond.map { ($0 * 10).rounded() / 10 },
-            generationTokensTotal: tokens?.generationTokensTotal
+            generationTokensTotal: tokens?.generationTokensTotal,
+            recentEvents: recentEvents.isEmpty ? nil : recentEvents
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -272,4 +277,5 @@ private struct StatusPayload: Encodable {
     var runnerResidentBytes: Int64?
     var tokensPerSecond: Double?
     var generationTokensTotal: Int?
+    var recentEvents: [String]?
 }

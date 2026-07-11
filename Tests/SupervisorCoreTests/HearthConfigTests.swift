@@ -154,13 +154,14 @@ struct HearthConfigTests {
 
     @Test func controlFieldsDecode() throws {
         let json = Data("""
-        {"controlEnabled": true, "controlHost": "100.64.0.2", "controlPort": 8443, "controlToken": "abc123"}
+        {"controlEnabled": true, "controlHost": "100.64.0.2", "controlPort": 8443, "controlToken": "abc123", "controlStatusTokens": {"hearth-monitor":"read-only"}}
         """.utf8)
         let config = try JSONDecoder().decode(HearthConfig.self, from: json)
         #expect(config.controlEnabled == true)
         #expect(config.controlHost == "100.64.0.2")
         #expect(config.controlPort == 8443)
         #expect(config.controlToken == "abc123")
+        #expect(config.controlStatusTokens == ["hearth-monitor": "read-only"])
     }
 
     @Test func controlDefaultsAreClosed() {

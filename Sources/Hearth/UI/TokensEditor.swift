@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
 
+import AppKit
 import SwiftUI
 import SupervisorCore
 
@@ -9,14 +10,23 @@ import SupervisorCore
 /// so the event history says who acted. Edits commit only on Done.
 struct TokensEditorView: View {
     @State private var rows: [TokenRow]
+    let heading: String
+    let explanation: String
+    let namePlaceholder: String
     let onDone: ([String: String]) -> Void
     let onCancel: () -> Void
 
     init(tokens: [String: String],
+         heading: String = "Named control tokens",
+         explanation: String = "Give each caller of the control endpoint its own token; start, stop, and restart actions are then logged with the token's name, so the event history says who acted. Name them after the caller (phone-kitchen, laptop). The main bearer token keeps working and is logged as “default”, so avoid that name here.",
+         namePlaceholder: String = "name (e.g. phone-kitchen)",
          onDone: @escaping ([String: String]) -> Void,
          onCancel: @escaping () -> Void) {
         _rows = State(initialValue: tokens.sorted { $0.key < $1.key }
             .map { TokenRow(name: $0.key, secret: $0.value) })
+        self.heading = heading
+        self.explanation = explanation
+        self.namePlaceholder = namePlaceholder
         self.onDone = onDone
         self.onCancel = onCancel
     }
@@ -24,8 +34,8 @@ struct TokensEditorView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Named control tokens").font(.headline)
-                Text("Give each caller of the control endpoint its own token; start, stop, and restart actions are then logged with the token's name, so the event history says who acted. Name them after the caller (phone-kitchen, laptop). The main bearer token keeps working and is logged as \u{201C}default\u{201D}, so avoid that name here.")
+                Text(heading).font(.headline)
+                Text(explanation)
                     .font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -40,7 +50,7 @@ struct TokensEditorView: View {
                     }
                     ForEach($rows) { $row in
                         HStack(spacing: 8) {
-                            TextField("name (e.g. phone-kitchen)", text: $row.name)
+                            TextField(namePlaceholder, text: $row.name)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 170)
                             TextField("secret", text: $row.secret)
@@ -48,6 +58,16 @@ struct TokensEditorView: View {
                                 .font(.system(.body, design: .monospaced))
                             Button("Generate") { row.secret = PreferencesView.randomToken() }
                                 .buttonStyle(.borderless)
+                            Button {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(row.secret, forType: .string)
+                            } label: {
+                                Image(systemName: "doc.on.doc")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(row.secret.isEmpty)
+                            .help("Copy this token")
+                            .accessibilityLabel("Copy token")
                             Button {
                                 rows.removeAll { $0.id == row.id }
                             } label: {

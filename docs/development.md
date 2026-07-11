@@ -126,3 +126,17 @@ It can also be hosted: pushing a `v*` tag runs `.github/workflows/release.yml`,
 which gates on CI and, when the signing secrets are configured (the workflow
 header lists them), signs, notarizes, and publishes the release automatically.
 Without those secrets the tag still gets a release gate and you publish locally.
+
+Hearth Monitor has a separate App Store boundary and release path. A normal CI
+run builds its universal sandbox bundle and runs
+`scripts/audit-monitor-boundary.sh`; locally, the same gate is:
+
+```sh
+./scripts/package-monitor-app.sh
+./scripts/audit-monitor-boundary.sh
+```
+
+Do not pass the full Hearth signing identity or release bundle through this
+path. Creating an uploadable Store package additionally needs the explicit App
+ID, Mac App Store provisioning profile, and distribution identities documented
+in [the Hearth Monitor App Store checklist](hearth-monitor-app-store.md).

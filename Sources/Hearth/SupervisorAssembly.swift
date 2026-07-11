@@ -82,8 +82,10 @@ struct SupervisorAssembly {
                 port: config.controlPort,
                 token: token,
                 coordinator: coordinator,
-                namedTokens: config.namedControlTokens,
+                namedTokens: config.controlEndpointTokens,
                 runnerKind: config.runnerKind.rawValue.lowercased(),
+                mode: config.modeKind.rawValue,
+                rebootOnWedge: config.rebootOnWedge,
                 metrics: metricsProvider,
                 tokenMetrics: tokenMetrics,
                 onControlAction: { command, actor in

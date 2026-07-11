@@ -7,6 +7,60 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## [1.3.0] - 2026-07-11
+
+The two-product release: full Hearth keeps its unsandboxed managed runner and
+GPU-wedge recovery powers, while the new Hearth Monitor companion brings useful,
+inference-aware attached monitoring to the Mac App Store boundary.
+
+### Added
+
+- **Hearth Monitor 0.1.0**, a separate universal macOS 14+ menu-bar app with only
+  App Sandbox and outbound network-client entitlements. It discovers or accepts
+  Ollama, LM Studio, mlx_lm, and Osaurus endpoints; monitors multiple local or
+  remote runners; distinguishes busy service from outages; optionally runs a
+  one-token inference check to catch GPU/inference wedges behind healthy HTTP;
+  and provides opt-in local alerts, snooze, Login Items registration, bounded
+  incident history, resident-model context, and copied diagnostics.
+- An optional read-only bridge from Monitor to a separately installed full
+  Hearth. Full Hearth now supports named `controlStatusTokens` that can read
+  `/status` and `/metrics` but receive HTTP 403 for start, stop, and restart.
+  Monitor verifies token scope and runner identity, stores the credential in its
+  private Keychain item, and shows managed restart/reboot coverage without ever
+  sending a control command.
+- App Store packaging and review assets: a distinct Monitor icon, privacy policy
+  and no-collection manifest, Utilities metadata, universal architecture audit,
+  distribution-signing script, reviewer checklist, user guide, and a mechanical
+  boundary audit that rejects process/privilege/control capabilities or unsafe
+  entitlements.
+
+### Changed
+
+- Full Hearth's additive `/status` document reports `mode`, `rebootOnWedge`, and
+  the authenticated credential's `credentialAccess`. Its browser page hides
+  Start/Stop/Restart when a status-only token is used. Existing primary and named
+  control tokens retain full behavior and compatibility.
+- The shared token editor can copy a generated token explicitly. Configuration
+  diagnostics reject a status credential that reuses a control secret and warn
+  when status callers share a credential, preserving independent revocation.
+- The local test runner now selects a matching installed Xcode toolchain and
+  isolated module cache when Command Line Tools contain a compiler/SDK mismatch.
+  CI packages and audits the sandboxed universal Monitor product as its own gate.
+
+### Fixed
+
+- Monitor never closes a confirmed inference incident on shallow HTTP or a busy
+  response; real one-token inference must recover. Transient misses preserve the
+  healthy-since time, overlapping and stale checks cannot overwrite newer state,
+  and one missed check never alerts or enters history.
+- Redirects, shared cookies/credentials, oversized responses, stale setup and
+  pairing success, corrupt/future settings, duplicate target IDs, Keychain/file
+  transaction failures, and misleading local-network/attached-recovery messages
+  all have bounded or actionable behavior.
+- The UI snapshot gate now hosts views in a real nonvisible AppKit window. This
+  caught and replaced a prior renderer that silently emitted unsupported-control
+  placeholders while reporting passing tests.
+
 ## [1.2.0] - 2026-07-09
 
 The usability release: routine settings no longer disturb a serving runner, the

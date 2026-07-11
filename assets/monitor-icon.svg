@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Hearth Monitor">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a1409"/><stop offset="1" stop-color="#140a05"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.52" r="0.58">
+      <stop offset="0" stop-color="#ff7a18" stop-opacity="0.35"/>
+      <stop offset="0.62" stop-color="#c43c0a" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#c43c0a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="frame" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#b52b08"/><stop offset="0.55" stop-color="#f46a14"/><stop offset="1" stop-color="#ffad35"/>
+    </linearGradient>
+    <linearGradient id="pulse" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0" stop-color="#ff6a12"/><stop offset="0.55" stop-color="#ffad2f"/><stop offset="1" stop-color="#fff0ba"/>
+    </linearGradient>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="11"/>
+    </filter>
+    <clipPath id="squircle"><rect x="64" y="64" width="896" height="896" rx="205"/></clipPath>
+  </defs>
+
+  <rect x="64" y="64" width="896" height="896" rx="205" fill="url(#bg)"/>
+  <g clip-path="url(#squircle)">
+    <ellipse cx="512" cy="540" rx="360" ry="350" fill="url(#glow)"/>
+    <rect x="179" y="237" width="666" height="550" rx="142"
+          fill="none" stroke="#e84c0d" stroke-width="44" opacity="0.25"
+          filter="url(#soft)"/>
+    <rect x="179" y="237" width="666" height="550" rx="142"
+          fill="#1d100b" fill-opacity="0.76" stroke="url(#frame)" stroke-width="30"/>
+    <path d="M236 522 H321 L371 420 L435 638 L506 347 L566 540 L616 470 L665 522 H788"
+          fill="none" stroke="#e9520f" stroke-width="54" opacity="0.30"
+          stroke-linecap="round" stroke-linejoin="round" filter="url(#soft)"/>
+    <path d="M236 522 H321 L371 420 L435 638 L506 347 L566 540 L616 470 L665 522 H788"
+          fill="none" stroke="url(#pulse)" stroke-width="34"
+          stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="782" cy="303" r="17" fill="#ffad35"/>
+  </g>
+</svg>

@@ -20,7 +20,7 @@ struct ConfigUnknownKeysTests {
     }
 
     @Test func knownKeysAreSilent() {
-        #expect(warnings(#"{"probeModel": "x", "port": 11434, "controlTokens": {"a": "b"}}"#).isEmpty)
+        #expect(warnings(#"{"probeModel": "x", "port": 11434, "controlTokens": {"a": "b"}, "controlStatusTokens": {"monitor": "c"}}"#).isEmpty)
         #expect(warnings("{}").isEmpty)
     }
 
@@ -80,7 +80,7 @@ struct ConfigUnknownKeysTests {
         // Spot-check across every config section, including all the optionals.
         for expected in ["runner", "mode", "port", "probeModel", "maintenanceWindow",
                          "ntfyTopic", "webhookURL", "heartbeatURL", "controlToken",
-                         "controlTokens", "runnerUser", "metricsProxyEnabled",
+                         "controlTokens", "controlStatusTokens", "runnerUser", "metricsProxyEnabled",
                          "rebootViaHelper", "busyTimeoutSeconds", "runnerMemoryLimitMB"] {
             #expect(keys.contains(expected), "knownKeys is missing \(expected)")
         }

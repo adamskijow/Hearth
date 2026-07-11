@@ -25,6 +25,7 @@ host, _, port = host_port.partition(":")
 port = int(port or "11434")
 
 wedged = False
+inference_wedged = bool(os.environ.get("FAKE_INFERENCE_WEDGE"))
 
 
 def _wedge(_signum, _frame):
@@ -49,16 +50,29 @@ sys.stderr.flush()
 
 
 class Handler(BaseHTTPRequestHandler):
-    def log_message(self, *args):
-        pass
+    def log_message(self, format, *args):
+        if os.environ.get("FAKE_LOG_REQUESTS"):
+            sys.stderr.write("fake-runner: " + (format % args) + "\n")
+            sys.stderr.flush()
 
     def do_GET(self):
+        global inference_wedged
         # When wedged, hang well past any readiness timeout: the process is alive
         # and still accepting connections, but the probe never gets a response.
         if wedged:
             time.sleep(600)
             return
-        if self.path == "/api/version":
+        if self.path == "/__fake/inference-wedge/on":
+            inference_wedged = True
+            self.send_response(204)
+            self.end_headers()
+            return
+        elif self.path == "/__fake/inference-wedge/off":
+            inference_wedged = False
+            self.send_response(204)
+            self.end_headers()
+            return
+        elif self.path == "/api/version":
             body = json.dumps({"version": "fake-0.1"}).encode()
         elif self.path == "/api/ps":
             body = json.dumps({
@@ -92,7 +106,7 @@ class Handler(BaseHTTPRequestHandler):
         # full wedge) hangs here while /api/version keeps answering above, the exact
         # case a shallow readiness probe misses: the HTTP server is fine, but the
         # model runner is deadlocked.
-        if wedged or os.environ.get("FAKE_INFERENCE_WEDGE"):
+        if wedged or inference_wedged:
             time.sleep(600)
             return
         body = json.dumps({"model": "fake-model:latest", "response": "ok", "done": True}).encode()

@@ -38,7 +38,9 @@ let package = Package(
     ],
     products: [
         .library(name: "SupervisorCore", targets: ["SupervisorCore"]),
+        .library(name: "HearthMonitorCore", targets: ["HearthMonitorCore"]),
         .executable(name: "Hearth", targets: ["Hearth"]),
+        .executable(name: "HearthMonitor", targets: ["HearthMonitor"]),
         .executable(name: "hearth-reboot-helper", targets: ["HearthRebootHelper"])
     ],
     targets: [
@@ -47,6 +49,13 @@ let package = Package(
         // protocols so the whole target is unit testable with fakes.
         .target(
             name: "SupervisorCore"
+        ),
+        // App Store monitor behavior with no AppKit and no real I/O. Keeping the
+        // state reducer and probe orchestration here makes the sandboxed product
+        // deterministic under tests without adding monitor policy to full Hearth.
+        .target(
+            name: "HearthMonitorCore",
+            dependencies: ["SupervisorCore"]
         ),
         // A tiny C shim: fork + privilege drop + execve for the optional
         // root-daemon runnerUser drop, which posix_spawn cannot express. Kept in C
@@ -69,9 +78,28 @@ let package = Package(
             // .app bundle, not as an SPM resource.
             exclude: ["Resources/Info.plist"]
         ),
+        // The Mac App Store companion is a separate sandboxed product. It shares
+        // only SupervisorCore's pure runner/status vocabulary with full Hearth;
+        // process control, root helpers, Homebrew integration, and daemon install
+        // code are intentionally outside this target's dependency graph.
+        .executableTarget(
+            name: "HearthMonitor",
+            dependencies: ["HearthMonitorCore", "SupervisorCore"],
+            exclude: [
+                "Resources/Info.plist",
+                "Resources/HearthMonitor.entitlements",
+                "Resources/PrivacyInfo.xcprivacy"
+            ]
+        ),
         .testTarget(
             name: "SupervisorCoreTests",
             dependencies: ["SupervisorCore"],
+            swiftSettings: testingFrameworkSettings.swift,
+            linkerSettings: testingFrameworkSettings.linker
+        ),
+        .testTarget(
+            name: "HearthMonitorTests",
+            dependencies: ["HearthMonitor", "HearthMonitorCore", "SupervisorCore"],
             swiftSettings: testingFrameworkSettings.swift,
             linkerSettings: testingFrameworkSettings.linker
         ),

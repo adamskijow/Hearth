@@ -114,6 +114,7 @@ struct PreferencesView: View {
     let onClose: () -> Void
     @State private var showingEnvEditor = false
     @State private var showingTokensEditor = false
+    @State private var showingStatusTokensEditor = false
     @State private var showAdvancedTuning = false
 
     var body: some View {
@@ -169,6 +170,16 @@ struct PreferencesView: View {
                 onCancel: { showingTokensEditor = false }
             )
         }
+        .sheet(isPresented: $showingStatusTokensEditor) {
+            TokensEditorView(
+                tokens: model.config.controlStatusTokens,
+                heading: "Status-only tokens",
+                explanation: "Give dashboards and Hearth Monitor a read-only credential. These tokens can read /status and /metrics, but Hearth rejects start, stop, and restart with HTTP 403. Use a unique token per caller so access can be revoked independently.",
+                namePlaceholder: "name (e.g. hearth-monitor)",
+                onDone: { model.config.controlStatusTokens = $0; showingStatusTokensEditor = false },
+                onCancel: { showingStatusTokensEditor = false }
+            )
+        }
         .task(id: probeTarget) {
             if deepProbeEnabled.wrappedValue {
                 await refreshProbeModels(selectSmallestWhenUnset: false)
@@ -194,6 +205,11 @@ struct PreferencesView: View {
     /// A short summary of the named control tokens for the Preferences row.
     private var tokensSummary: String {
         let count = model.config.controlTokens.count
+        return count == 0 ? "None" : "\(count) token\(count == 1 ? "" : "s")"
+    }
+
+    private var statusTokensSummary: String {
+        let count = model.config.controlStatusTokens.count
         return count == 0 ? "None" : "\(count) token\(count == 1 ? "" : "s")"
     }
 
@@ -336,6 +352,13 @@ struct PreferencesView: View {
                 Button("Edit Tokens\u{2026}") { showingTokensEditor = true }
             }
             .help("Optional: give each caller its own named token, so start, stop, and restart actions are logged with the caller's name. The bearer token above keeps working and is logged as default.")
+            HStack {
+                Text("Status-only tokens")
+                Spacer()
+                Text(statusTokensSummary).foregroundStyle(.secondary)
+                Button("Edit Read-Only Tokens\u{2026}") { showingStatusTokensEditor = true }
+            }
+            .help("Least privilege for Hearth Monitor and dashboards: these tokens can read status and metrics but cannot start, stop, or restart the runner.")
             Button("Copy phone URL") { copyPhoneURL() }
             Toggle("Tokens-per-second metrics proxy", isOn: $model.config.metricsProxyEnabled)
                 .help("Opt-in: a transparent relay in front of the runner that reads the throughput numbers generations already report, surfaced on the status page, hearth status, and /metrics. Point your clients at the proxy port instead of the runner port; hearth proxy-setup prints ready-made snippets.")

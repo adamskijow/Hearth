@@ -13,11 +13,28 @@ public enum ControlCommand: String, Sendable, Equatable {
 /// A named control token, so a shared endpoint can tell whose request a
 /// start/stop/restart was (the audit trail) instead of one anonymous secret.
 public struct ControlToken: Sendable, Equatable {
+    public enum Access: String, Sendable, Equatable {
+        case control
+        case statusOnly
+    }
+
     public let name: String
     public let secret: String
-    public init(name: String, secret: String) {
+    public let access: Access
+    public init(name: String, secret: String, access: Access = .control) {
         self.name = name
         self.secret = secret
+        self.access = access
+    }
+}
+
+public struct ControlAuthorization: Sendable, Equatable {
+    public let name: String
+    public let access: ControlToken.Access
+
+    public init(name: String, access: ControlToken.Access) {
+        self.name = name
+        self.access = access
     }
 }
 
@@ -27,6 +44,8 @@ public struct ControlToken: Sendable, Equatable {
 public enum ControlOutcome: Sendable, Equatable {
     /// Missing or wrong bearer token.
     case unauthorized
+    /// A valid status-only token attempted a process command.
+    case forbidden
     /// Unknown method or path.
     case notFound
     /// A 200 with this already shaped JSON body.
@@ -51,6 +70,8 @@ public enum ControlRouting {
                               state: SupervisorState,
                               now: Date,
                               runnerKind: String = "unknown",
+                              mode: String = "managed",
+                              rebootOnWedge: Bool = false,
                               metrics: SystemMetrics? = nil,
                               tokens: TokenMetricsStore.Snapshot? = nil,
                               recentEvents: [String] = []) -> ControlOutcome {
@@ -64,8 +85,12 @@ public enum ControlRouting {
             return .prometheus(prometheusText(state, now: now, runnerKind: runnerKind, metrics: metrics, tokens: tokens))
         }
         return .status(statusJSON(state, now: now, runnerKind: runnerKind,
+                                  mode: mode, rebootOnWedge: rebootOnWedge,
                                   metrics: metrics, tokens: tokens,
-                                  recentEvents: recentEvents))
+                                  recentEvents: recentEvents,
+                                  credentialAccess: ControlRouting.authorization(
+                                    authorization, token: token,
+                                    namedTokens: namedTokens)?.access))
     }
 
     /// The outcome for every route that needs no supervisor state or metrics, so
@@ -90,7 +115,8 @@ public enum ControlRouting {
         if method.uppercased() == "GET", trimmedPath(path) == "/" {
             return .html(Data(ControlStatusPage.html.utf8))
         }
-        guard authenticate(authorization, token: token, namedTokens: namedTokens) != nil else {
+        guard let authorized = ControlRouting.authorization(
+            authorization, token: token, namedTokens: namedTokens) else {
             return .unauthorized
         }
         // Prometheus metrics: authenticated and needs live state, so defer to
@@ -101,7 +127,7 @@ public enum ControlRouting {
         case .status:
             return nil
         case .start, .stop, .restart:
-            return .perform(command)
+            return authorized.access == .control ? .perform(command) : .forbidden
         }
     }
 
@@ -136,7 +162,7 @@ public enum ControlRouting {
     /// non empty configured token, compared without an early out on mismatch.
     public static func isAuthorized(_ authorization: String?, token: String,
                                     namedTokens: [ControlToken] = []) -> Bool {
-        authenticate(authorization, token: token, namedTokens: namedTokens) != nil
+        self.authorization(authorization, token: token, namedTokens: namedTokens) != nil
     }
 
     /// The name of the token that authorizes this request, or nil for none. The
@@ -145,14 +171,27 @@ public enum ControlRouting {
     /// token, or how many, matched. This name is the audit-trail actor.
     public static func authenticate(_ authorization: String?, token: String,
                                     namedTokens: [ControlToken] = []) -> String? {
+        self.authorization(authorization, token: token, namedTokens: namedTokens)?.name
+    }
+
+    /// The matched token's actor and scope. The unnamed legacy token remains a
+    /// full-control "default" token; named status-only credentials can read
+    /// status and metrics but cannot start, stop, or restart a runner.
+    public static func authorization(_ authorization: String?, token: String,
+                                     namedTokens: [ControlToken] = []) -> ControlAuthorization? {
         guard let authorization else { return nil }
-        var matched: String?
+        var matched: ControlAuthorization?
         if !token.isEmpty, constantTimeEquals(authorization, "Bearer \(token)") {
-            matched = "default"
+            matched = ControlAuthorization(name: "default", access: .control)
         }
         for named in namedTokens where !named.secret.isEmpty {
             if constantTimeEquals(authorization, "Bearer \(named.secret)") {
-                matched = named.name
+                // Duplicate secrets are a config error, but auth still fails
+                // safely: never let a later status-only entry downgrade a full
+                // control credential with the same bytes.
+                if matched?.access != .control || named.access == .control {
+                    matched = ControlAuthorization(name: named.name, access: named.access)
+                }
             }
         }
         return matched
@@ -161,12 +200,17 @@ public enum ControlRouting {
     /// A compact status document for the phone.
     public static func statusJSON(_ state: SupervisorState, now: Date,
                                   runnerKind: String = "unknown",
+                                  mode: String = "managed",
+                                  rebootOnWedge: Bool = false,
                                   metrics: SystemMetrics? = nil,
                                   tokens: TokenMetricsStore.Snapshot? = nil,
-                                  recentEvents: [String] = []) -> Data {
+                                  recentEvents: [String] = [],
+                                  credentialAccess: ControlToken.Access? = nil) -> Data {
         let payload = StatusPayload(
             phase: state.phase.rawValue,
             runner: runnerKind,
+            mode: mode,
+            rebootOnWedge: rebootOnWedge,
             busy: state.busy,
             models: state.residentModels.map(\.name),
             uptimeSeconds: state.uptime(asOf: now).map { Int($0.rounded()) },
@@ -182,7 +226,8 @@ public enum ControlRouting {
             runnerResidentBytes: metrics?.runnerResidentBytes,
             tokensPerSecond: tokens?.lastTokensPerSecond.map { ($0 * 10).rounded() / 10 },
             generationTokensTotal: tokens?.generationTokensTotal,
-            recentEvents: recentEvents.isEmpty ? nil : recentEvents
+            recentEvents: recentEvents.isEmpty ? nil : recentEvents,
+            credentialAccess: credentialAccess?.rawValue
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
@@ -262,6 +307,8 @@ public enum ControlRouting {
 private struct StatusPayload: Encodable {
     var phase: String
     var runner: String
+    var mode: String
+    var rebootOnWedge: Bool
     var busy: Bool
     var models: [String]
     var uptimeSeconds: Int?
@@ -278,4 +325,5 @@ private struct StatusPayload: Encodable {
     var tokensPerSecond: Double?
     var generationTokensTotal: Int?
     var recentEvents: [String]?
+    var credentialAccess: String?
 }

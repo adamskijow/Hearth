@@ -72,6 +72,12 @@ Adapt this text to the live review fixture and include every non-obvious feature
 > behind it. The app may recreate its own session but cannot restart Apple's
 > system model service.
 >
+> The optional Private Model Lab is a deliberate one-turn test of the same
+> on-device model. It streams the response and shows timing plus bounded sampling
+> controls. Prompt and response remain in memory only, are cleared when the
+> window closes, and never affect monitoring, incidents, alerts, or diagnostics.
+> Manual and scheduled requests share a non-stacking gate.
+>
 > Local AI Runners mode requires no separate Hearth installation. It probes
 > user-operated Ollama, LM Studio, mlx_lm, or Osaurus endpoints, shows
 > multi-runner health and incident history, and can optionally request one token
@@ -93,8 +99,8 @@ review Mac with Apple Intelligence enabled and should be the first review path.
 Also provide a live compatible HTTPS runner fixture and exact secondary-mode
 steps; keep it available until review finishes. Do not submit placeholder
 credentials or ask the reviewer to install full Hearth. Screenshots must show
-Apple health, the two-mode onboarding, configured runner state, Details, History,
-and the optional inference distinction.
+Apple health, the private Model Lab, the two-mode onboarding, configured runner
+state, Details, History, and the optional inference distinction.
 
 ## Release gate
 
@@ -106,12 +112,14 @@ and the optional inference distinction.
 4. Run the signed app's `--self-test-keychain` outside any enclosing automation
    sandbox; it writes, reads, and deletes one random private item.
 5. On an eligible Mac, run the signed app's `--self-test-apple-model` and require
-   a completed real response. Exercise the injected timeout-containment test and
-   confirm a timed-out request prevents a second request from starting.
+   a completed real response, then run `--self-test-apple-model-lab` and require a
+   completed streamed response. Exercise the injected timeout-containment test
+   and confirm health and lab requests cannot stack.
 6. Exercise a real compatible runner and an inference-only wedge through the
    signed app. Confirm the incident closes only after real inference succeeds.
-7. Verify VoiceOver labels, keyboard-only setup, light/dark appearance, disabled
-   Apple Intelligence, model-not-ready, ineligible/old Mac, Low Power Mode,
+7. Verify VoiceOver labels, keyboard-only setup, light/dark appearance, Model Lab
+   streaming/stop/retry/close clearing, disabled Apple Intelligence,
+   model-not-ready, ineligible/old Mac, Low Power Mode,
    thermal pause, denied
    Local Network and Notifications paths, Login Items approval, sleep/wake,
    network loss, and launch after reboot on the oldest and current supported

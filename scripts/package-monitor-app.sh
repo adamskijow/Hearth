@@ -89,6 +89,9 @@ if [[ "${HEARTH_MONITOR_APPLE_MODEL_SELF_TEST:-0}" == "1" ]]; then
   elif [[ "$APPLE_MODEL_RESULT" != "0" ]]; then
     exit "$APPLE_MODEL_RESULT"
   fi
+  if [[ "$APPLE_MODEL_RESULT" == "0" ]]; then
+    "$APP/Contents/MacOS/HearthMonitor" --self-test-apple-model-lab
+  fi
 fi
 
 echo "Built sandboxed app: $APP"

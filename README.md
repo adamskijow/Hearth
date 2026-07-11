@@ -53,10 +53,12 @@ Hearth now has two deliberately separate Mac products:
 - **[Hearth Monitor](docs/hearth-monitor.md)** is the sandboxed, universal
   menu-bar companion for the Mac App Store. Its Apple Intelligence mode checks
   whether the on-device system model is available and actually completes a tiny
-  private response. Its Local AI Runners mode watches Ollama, LM Studio, mlx_lm,
-  and Osaurus, keeps inference-aware history and alerts, and never controls a
-  process. An optional read-only connection can show whether a separately
-  installed full Hearth is providing managed recovery.
+  private response. An optional private Model Lab can stream a deliberate manual
+  prompt with timing and bounded generation controls without changing health
+  state. Its Local AI Runners mode watches Ollama, LM Studio, mlx_lm, and Osaurus,
+  keeps inference-aware history and alerts, and never controls a process. An
+  optional read-only connection can show whether a separately installed full
+  Hearth is providing managed recovery.
 
 The runner probe catches an inference/GPU wedge in both products. Full Hearth can
 recover it; Monitor reports it. For Apple Intelligence, Monitor can recreate its

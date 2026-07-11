@@ -608,3 +608,47 @@ is active without weakening the Store boundary.
   certificates/profile, TestFlight receipt build, reviewer fixture, VoiceOver and
   clean-account checks, and App Review itself. They must not be represented as
   passed until performed on the distribution build.
+
+## Gate 10: private Model Lab without product dilution
+
+### Product-value and scope audit
+
+- A comparable Foundation Models lab product validated demand for deliberate
+  prompt testing, streaming output, timing, stop/retry, and sampling controls.
+  Hearth adopts those useful primitives as an optional one-turn diagnostic lab
+  while retaining health monitoring and wedge detection as the primary promise.
+- Persistent chats, accounts, cloud models, tool calling, prompt libraries, and
+  saved sessions remain excluded. They would turn a focused monitor into a
+  generic assistant and create retention/privacy obligations without improving
+  incident detection.
+- The lab reports Apple's exact response-token count only on macOS 26.4 or later,
+  where the public tokenizer API exists. Earlier systems show that the metric is
+  unavailable rather than presenting a word-count estimate as tokens.
+
+### Reliability, energy, and privacy audit
+
+- Manual lab work and unattended canaries share one request lease. Scheduled
+  functional checks pause while the lab is active, a race returns a neutral busy
+  state, and Stop keeps the lease until the underlying stream actually exits.
+  This preserves the earlier no-stacking guarantee across both product paths.
+- Prompt input is bounded to 8,000 characters, instructions to 2,000, and output
+  to 16 through 512 tokens. Generation is user-initiated, never scheduled, and
+  the health engine receives none of the prompt, output, timing, or result.
+- Prompt and response exist only in the live view model and framework session.
+  Closing the window clears both; no value enters settings, copied health
+  diagnostics, incident history, notifications, or configured runner traffic.
+
+### UX and boundary audit
+
+- The Apple submenu and health-details window expose **Private Model Lab** as a
+  secondary action. The release-sized view explains the health-state separation,
+  memory-only privacy, availability, input bounds, sampling behavior, streaming
+  progress, stop state, and Command-Return shortcut without requiring users to
+  understand Foundation Models APIs.
+- Foundation Models remains imported by exactly one adapter file. The mechanical
+  boundary audit now rejects any future framework import elsewhere in Monitor or
+  its pure core, in addition to its process, privilege, secret, architecture,
+  entitlement, and weak-link checks.
+- Six new tests cover streaming state, stop behavior, unavailable state, input
+  bounds, close clearing, and the shared health/lab request gate. The complete
+  repository now passes 460 tests in 77 suites before signed-runtime validation.

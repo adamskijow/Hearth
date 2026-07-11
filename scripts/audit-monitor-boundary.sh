@@ -52,6 +52,12 @@ if search_sources 'public[[:space:]]+var[[:space:]]+(token|secret|bearer)[[:spac
   exit 1
 fi
 
+if search_sources 'import[[:space:]]+FoundationModels' "${SOURCES[@]}" \
+  | grep -Ev '^Sources/HearthMonitor/AppleFoundationModelProbe\.swift:'; then
+  echo "Hearth Monitor boundary audit failed: Foundation Models escaped its single adapter file."
+  exit 1
+fi
+
 test -x "$APP/Contents/MacOS/HearthMonitor"
 lipo "$APP/Contents/MacOS/HearthMonitor" -verify_arch arm64 x86_64
 if ! otool -L "$APP/Contents/MacOS/HearthMonitor" \

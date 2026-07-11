@@ -19,6 +19,7 @@ final class AppleModelHealthCoordinator: ObservableObject {
     private var settings = AppleModelMonitorSettings()
     private var loop: Task<Void, Never>?
     private var systemIsAwake = true
+    private var manualLabActive = false
 
     init(probe: any AppleModelProbing) {
         self.probe = probe
@@ -48,14 +49,21 @@ final class AppleModelHealthCoordinator: ObservableObject {
         }
     }
 
+    func setManualLabActive(_ active: Bool) {
+        manualLabActive = active
+        if !active, settings.enabled {
+            Task { [weak self] in await self?.checkNow(forceFunctional: false) }
+        }
+    }
+
     func checkNow(forceFunctional: Bool = true) async {
         guard let engine, !isChecking else { return }
         isChecking = true
         defer { isChecking = false }
         let prior = snapshot
         let next = await engine.check(
-            forceFunctional: forceFunctional,
-            functionalChecksAllowed: functionalChecksAllowed)
+            forceFunctional: forceFunctional && !manualLabActive,
+            functionalChecksAllowed: functionalChecksAllowed && !manualLabActive)
         guard !Task.isCancelled else { return }
         snapshot = next
         onSnapshot?(prior, next)

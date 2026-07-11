@@ -42,6 +42,17 @@ unconfirmed timeout, and a persistent functional failure. It requires two failed
 checks before recording an incident or notifying you. It also refuses to stack a
 new request behind one that timed out.
 
+PRIVATE MODEL LAB
+
+Open an optional one-turn lab to try your own prompt with Apple's on-device
+model. Watch the response stream, see first-output and total timing, stop or run
+again, and choose bounded sampling, temperature, and response length. On macOS
+26.4 or later, Hearth also shows Apple's exact response-token count.
+
+The lab does not become chat history. Prompt and response are cleared when its
+window closes and never affect health status, incidents, diagnostics, or alerts.
+Manual and scheduled checks share one non-stacking request gate.
+
 LOCAL AI RUNNERS
 
 Attach to Ollama, LM Studio, mlx_lm, or Osaurus on this Mac, your private network,
@@ -79,6 +90,8 @@ by Apple, Ollama, or the other supported runner vendors.
   mode, with shared history, alerts, and diagnostics.
 - Added two-mode onboarding, Apple health details, energy-aware scheduling, and
   explicit privacy and recovery explanations.
+- Added a private, ephemeral Model Lab with streaming output, timing, stop and
+  retry, bounded generation controls, and exact token counts on macOS 26.4+.
 
 ## Screenshot sequence
 
@@ -86,7 +99,9 @@ by Apple, Ollama, or the other supported runner vendors.
    Intelligence and Local AI Runners shown together.
 2. **Private Apple Intelligence health**: healthy details with availability,
    response time, personal baseline, privacy, and recovery boundary.
-3. **Catch inference wedges behind healthy HTTP**: configured Ollama details with
+3. **Try the model without creating history**: the private Model Lab with a
+   streaming response, timing, and bounded controls.
+4. **Catch inference wedges behind healthy HTTP**: configured Ollama details with
    the optional one-token check and resident-model context.
 4. **Confirmed incidents, not noisy samples**: unified history containing Apple
    and runner examples with recovery duration.

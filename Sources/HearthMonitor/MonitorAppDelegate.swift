@@ -12,7 +12,9 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
     private let historyStore = MonitorHistoryStore()
     private let notifier = MonitorLocalNotifier()
     private let secrets = MonitorKeychainSecretStore()
-    private let appleProbe = AppleFoundationModelProbe()
+    private let appleRequestGate = AppleModelRequestGate()
+    private lazy var appleProbe = AppleFoundationModelProbe(gate: appleRequestGate)
+    private lazy var appleLab = AppleFoundationModelLab(gate: appleRequestGate)
     private lazy var fleet = MonitorFleetCoordinator(http: http)
     private lazy var appleHealth = AppleModelHealthCoordinator(probe: appleProbe)
     private lazy var fullHearthClient = FullHearthClient(http: http)
@@ -34,6 +36,7 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
     private var diagnosticsController: MonitorDiagnosticsController?
     private var pairingController: FullHearthPairingController?
     private var appleDetailsController: AppleModelDetailsController?
+    private var appleLabController: AppleModelLabController?
     private var welcomeController: MonitorWelcomeController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -267,6 +270,12 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: "")
         details.target = self
         submenu.addItem(details)
+        let lab = NSMenuItem(
+            title: "Open Private Model Lab…",
+            action: #selector(appleLabTapped),
+            keyEquivalent: "")
+        lab.target = self
+        submenu.addItem(lab)
         item.submenu = submenu
         return item
     }
@@ -795,11 +804,26 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
                 onCheck: { [weak self] in
                     Task { await self?.appleHealth.checkNow(forceFunctional: true) }
                 },
+                onOpenLab: { [weak self] in self?.openAppleModelLab() },
                 onOpenSettings: { [weak self] in self?.openSettings() })
         }
         appleDetailsController?.show(
             snapshot: appleHealth.snapshot,
             settings: settings.appleModel)
+    }
+
+    @objc private func appleLabTapped() { openAppleModelLab() }
+
+    private func openAppleModelLab() {
+        if appleLabController == nil {
+            appleLabController = AppleModelLabController(
+                runner: appleLab,
+                availability: appleHealth.snapshot.availability,
+                onActivityChanged: { [weak self] active in
+                    self?.appleHealth.setManualLabActive(active)
+                })
+        }
+        appleLabController?.show(availability: appleHealth.snapshot.availability)
     }
 
     private func observeSystemPowerState() {

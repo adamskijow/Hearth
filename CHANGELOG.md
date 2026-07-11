@@ -5,6 +5,23 @@ All notable changes to Hearth are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project aims to
 follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- A private Apple Intelligence Model Lab for deliberate manual testing. It
+  streams an ephemeral response, reports first-output and total timing, exposes
+  bounded sampling and response-length controls, supports stop and retry, and
+  reports exact response tokens on macOS 26.4 or later. Prompts and responses
+  are cleared when the window closes and never enter health history or alerts.
+
+### Changed
+
+- Manual Model Lab requests and unattended Apple health canaries now share one
+  non-stacking lease. Health inference pauses while the lab is active, and a
+  request whose cancellation is still unwinding blocks another request rather
+  than competing for the system model.
+
 ## [1.4.0] - 2026-07-11
 
 ### Added

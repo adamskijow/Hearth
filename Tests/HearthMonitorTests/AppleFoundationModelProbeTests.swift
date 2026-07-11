@@ -27,6 +27,15 @@ struct AppleFoundationModelProbeTests {
         func count() -> Int { calls }
     }
 
+    actor ImmediateOperation {
+        var calls = 0
+        func run() -> AppleModelFunctionalResult {
+            calls += 1
+            return .completed(0.2)
+        }
+        func count() -> Int { calls }
+    }
+
     @Test("A timed-out request is retained and a second request is not stacked")
     func timeoutContainment() async {
         let operations = Operations()
@@ -54,5 +63,31 @@ struct AppleFoundationModelProbeTests {
         }
         #expect(third == .completed(0.1))
         #expect(await operations.count() == 2)
+    }
+
+    @Test("Health and manual Apple requests share one non-stacking gate")
+    func sharedRequestGate() async {
+        let gate = AppleModelRequestGate()
+        let held = Operations()
+        let immediate = ImmediateOperation()
+        let healthProbe = AppleFoundationModelProbe(
+            operation: { await held.run() }, gate: gate)
+        let otherRequest = AppleFoundationModelProbe(
+            operation: { await immediate.run() }, gate: gate)
+
+        #expect(await healthProbe.runFunctionalCheck(timeout: 0.01) == .timedOut)
+        #expect(await otherRequest.runFunctionalCheck(timeout: 0.01) == .requestStillRunning)
+        #expect(await immediate.count() == 0)
+
+        await held.finishFirst()
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(1))
+        var result = await otherRequest.runFunctionalCheck(timeout: 0.1)
+        while result == .requestStillRunning, clock.now < deadline {
+            await Task.yield()
+            result = await otherRequest.runFunctionalCheck(timeout: 0.1)
+        }
+        #expect(result == .completed(0.2))
+        #expect(await immediate.count() == 1)
     }
 }

@@ -13,6 +13,9 @@ reporting service, account system, or third-party SDK.
   latency samples, and confirmed incidents stay inside Hearth Monitor's private
   App Sandbox container. The fixed canary prompt and generated response are
   never written to disk or included in diagnostics.
+- Text entered in the optional private Model Lab and its streamed response exist
+  only in app memory for that window. They are cleared when it closes and are
+  never added to settings, history, alerts, diagnostics, or runner requests.
 - Runner addresses, monitoring preferences, and incident history are stored in
   Hearth Monitor's private App Sandbox container.
 - An optional status-only credential for a separately installed full Hearth is
@@ -51,6 +54,10 @@ explain health.
 Functional checks default to 15 minutes apart and pause during sleep, Low Power
 Mode, and serious thermal pressure. Disabling functional checks leaves only the
 public availability check.
+
+The optional private Model Lab runs only when you explicitly submit a prompt.
+It uses the same on-device framework, stores no chat history, and pauses
+unattended functional canaries while the manual request is active.
 
 ## Full Hearth
 

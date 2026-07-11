@@ -101,6 +101,7 @@ struct MonitorUIRenderTests {
                 settings: AppleModelMonitorSettings(functionalChecksEnabled: true)),
             onCopy: {},
             onCheck: {},
+            onOpenLab: {},
             onOpenSettings: {},
             onDone: {})
             .frame(width: 640, height: 700)
@@ -114,6 +115,7 @@ struct MonitorUIRenderTests {
                 settings: AppleModelMonitorSettings(functionalChecksEnabled: true)),
             onCopy: {},
             onCheck: {},
+            onOpenLab: {},
             onOpenSettings: {},
             onDone: {})
             .frame(width: 640, height: 700)
@@ -122,6 +124,23 @@ struct MonitorUIRenderTests {
         let darkDetailsImage = try render(darkDetails, size: NSSize(width: 640, height: 700))
         #expect(darkDetailsImage.size == NSSize(width: 640, height: 700))
         try writeIfRequested(darkDetailsImage, suffix: "apple-intelligence-details-dark")
+
+        let labModel = AppleModelLabModel(
+            runner: RenderModelLabRunner(),
+            availability: .available)
+        let lab = AppleModelLabView(model: labModel, onCopy: {}, onDone: {})
+            .frame(width: 720, height: 780)
+            .background(Color(nsColor: .windowBackgroundColor))
+        var labImage = try render(lab, size: NSSize(width: 720, height: 780))
+        if try darkPixelFraction(labImage) >= 0.20 {
+            // TextEditor-backed SwiftUI views can occasionally snapshot before
+            // AppKit finishes its first layout pass on a headless test host.
+            // Retry once, then keep the dark-area assertion as the real gate.
+            labImage = try render(lab, size: NSSize(width: 720, height: 780))
+        }
+        #expect(labImage.size == NSSize(width: 720, height: 780))
+        #expect(try darkPixelFraction(labImage) < 0.20)
+        try writeIfRequested(labImage, suffix: "apple-intelligence-model-lab")
     }
 
     @Test("History and live details render at release sizes")
@@ -263,4 +282,22 @@ private struct RenderSecrets: MonitorSecretStoring {
     func token(for targetID: UUID) throws -> String? { nil }
     func setToken(_ token: String, for targetID: UUID) throws {}
     func deleteToken(for targetID: UUID) throws {}
+}
+
+private struct RenderModelLabRunner: AppleModelLabRunning {
+    func availability() async -> AppleModelAvailability { .available }
+
+    func run(
+        _ request: AppleModelLabRequest,
+        onPartial: @escaping @Sendable (String, TimeInterval?) async -> Void
+    ) async -> AppleModelLabResult {
+        .completed(
+            text: "A healthy AI service responds correctly and consistently.",
+            metrics: AppleModelLabMetrics(
+                timeToFirstOutputSeconds: 0.2,
+                totalSeconds: 0.8,
+                responseTokens: 9))
+    }
+
+    func stop() async {}
 }

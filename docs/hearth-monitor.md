@@ -60,6 +60,21 @@ Hearth creates a fresh app session for each functional check. A successful fresh
 session can verify app-level recovery, but Hearth cannot kill or restart Apple's
 OS-owned service and never claims it did.
 
+## Try a private prompt
+
+Choose **Apple Intelligence → Open Private Model Lab…** for a deliberate manual
+test. The lab streams the on-device response, shows time to first output and
+total time, and supports repeatable or varied sampling, a bounded temperature,
+and a 16-to-512-token response limit. Exact response tokens appear on macOS 26.4
+or later, where Apple's public tokenizer API is available.
+
+The lab is intentionally one ephemeral turn rather than a saved chat product.
+Its prompt and response live only in memory and are cleared when the window
+closes. They never enter settings, diagnostics, notifications, health history,
+or incident state. While the lab runs, scheduled functional health checks pause;
+both paths share one request gate, so Stop cannot cause a new request to stack
+behind model work that macOS is still unwinding.
+
 ## Set up a Local AI Runner
 
 1. Open Hearth Monitor. It appears in the menu bar rather than the Dock.

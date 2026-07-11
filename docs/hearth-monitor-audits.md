@@ -469,10 +469,10 @@ is active without weakening the Store boundary.
   write/read/delete cycle outside the enclosing automation sandbox, and the
   credential was deleted. The app bundle contains both `arm64` and `x86_64`
   executable slices.
-- Release validation exposed a split Command Line Tools compiler/SDK and a Bash
-  3.2 empty-array failure in the test harness. The scripts now select the matching
-  installed Xcode toolchain when needed, isolate build caches, and pass SwiftPM's
-  no-plugin sandbox option consistently.
+- Release validation exposed a split Command Line Tools compiler/SDK and Bash
+  3.2 empty-array failures in the test and CI harnesses. The scripts now select
+  the matching installed Xcode toolchain when needed, isolate build caches, and
+  avoid optional-array expansion while preserving hosted SwiftPM sandboxing.
 - The staged release audit caught trailing whitespace in the new entitlement
   file and project-forbidden punctuation in previously untracked UI strings and
   docs. CI now checks working-tree, staged, and committed whitespace and includes

@@ -17,20 +17,28 @@ set -uo pipefail
 
 cd "$(dirname "$0")/.."
 
-SWIFT_FLAGS=()
+SWIFT_DISABLE_SANDBOX=0
 if [ "$(xcode-select -p 2>/dev/null || true)" = "/Library/Developer/CommandLineTools" ] \
    && [ -d "/Applications/Xcode.app/Contents/Developer" ]; then
   export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
   export CLANG_MODULE_CACHE_PATH="${TMPDIR:-/tmp}/hearth-ci-clang-cache"
   export SWIFTPM_MODULECACHE_OVERRIDE="${TMPDIR:-/tmp}/hearth-ci-swiftpm-cache"
-  SWIFT_FLAGS+=(--disable-sandbox)
+  SWIFT_DISABLE_SANDBOX=1
 elif [ "$(xcode-select -p 2>/dev/null || true)" = "/Library/Developer/CommandLineTools" ] \
    && [ -d "/Library/Developer/CommandLineTools/SDKs/MacOSX15.4.sdk" ]; then
   export SDKROOT="/Library/Developer/CommandLineTools/SDKs/MacOSX15.4.sdk"
   export CLANG_MODULE_CACHE_PATH="${TMPDIR:-/tmp}/hearth-ci-clang-cache"
   export SWIFTPM_MODULECACHE_OVERRIDE="${TMPDIR:-/tmp}/hearth-ci-swiftpm-cache"
-  SWIFT_FLAGS+=(--disable-sandbox)
+  SWIFT_DISABLE_SANDBOX=1
 fi
+
+swift_build() {
+  if [ "$SWIFT_DISABLE_SANDBOX" = "1" ]; then
+    swift build --disable-sandbox "$@"
+  else
+    swift build "$@"
+  fi
+}
 
 SMOKE=0; REAL=0
 for arg in "$@"; do
@@ -50,10 +58,10 @@ bad()     { echo "  FAIL: $1"; FAIL=1; }
 die()     { echo "  FAIL: $1"; exit 1; }
 
 section "Build (debug)"
-swift build "${SWIFT_FLAGS[@]}" && ok || die "debug build failed"
+swift_build && ok || die "debug build failed"
 
 section "Build (release)"
-swift build "${SWIFT_FLAGS[@]}" -c release && ok || die "release build failed"
+swift_build -c release && ok || die "release build failed"
 
 section "Hearth Monitor App Store boundary"
 if ./scripts/package-monitor-app.sh && ./scripts/audit-monitor-boundary.sh; then

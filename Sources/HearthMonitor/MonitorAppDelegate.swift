@@ -12,7 +12,9 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
     private let historyStore = MonitorHistoryStore()
     private let notifier = MonitorLocalNotifier()
     private let secrets = MonitorKeychainSecretStore()
+    private let appleProbe = AppleFoundationModelProbe()
     private lazy var fleet = MonitorFleetCoordinator(http: http)
+    private lazy var appleHealth = AppleModelHealthCoordinator(probe: appleProbe)
     private lazy var fullHearthClient = FullHearthClient(http: http)
     private lazy var fullHearthBridge = FullHearthBridgeCoordinator(
         client: fullHearthClient,
@@ -31,6 +33,8 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
     private var historyController: MonitorHistoryController?
     private var diagnosticsController: MonitorDiagnosticsController?
     private var pairingController: FullHearthPairingController?
+    private var appleDetailsController: AppleModelDetailsController?
+    private var welcomeController: MonitorWelcomeController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let loaded = store.load()
@@ -44,26 +48,33 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
             self?.handleSnapshot(target: target, prior: prior, snapshot: snapshot)
         }
         fleet.onTargetRemoved = { [weak self] id in self?.handleTargetRemoved(id) }
+        appleHealth.onSnapshot = { [weak self] prior, snapshot in
+            self?.handleAppleSnapshot(prior: prior, snapshot: snapshot)
+        }
         fullHearthBridge.onUpdate = { [weak self] in self?.refreshRuntimePresentation() }
 
         configureStatusItem()
+        appleHealth.apply(settings.appleModel)
         fleet.apply(settings.targets)
         fullHearthBridge.apply(settings.targets)
+        observeSystemPowerState()
         refreshRuntimePresentation()
 
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             if self.settingsProblem != nil {
                 self.openSettings()
-            } else if self.settings.targets.isEmpty {
-                self.openFirstRunEditor()
+            } else if !self.settings.onboardingCompleted {
+                self.openWelcome()
             }
         }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         fleet.stop()
+        appleHealth.stop()
         fullHearthBridge.stop()
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
 
     private func configureStatusItem() {
@@ -87,27 +98,47 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
             description = "Hearth Monitor settings need attention"
             tint = .systemOrange
         } else {
-            switch fleet.overallPhase {
-            case .healthy:
+            let apple = settings.appleModel.enabled && !appleIsUnavailableByDesign
+                ? appleHealth.snapshot.phase : nil
+            switch (apple, fleet.overallPhase) {
+            case (.down, _), (_, .down):
+                symbol = "exclamationmark.circle.fill"
+                description = "Hearth Monitor: local AI needs attention"
+                tint = .systemRed
+            case (.verifying, _), (_, .checking):
+                symbol = "exclamationmark.triangle.fill"
+                description = "Hearth Monitor: verifying local AI health"
+                tint = .systemOrange
+            case (.unavailable, _):
+                symbol = "circle.slash"
+                description = "Hearth Monitor: Apple Intelligence unavailable"
+                tint = .systemOrange
+            case (.slow, _):
+                symbol = "gauge.with.dots.needle.67percent"
+                description = "Hearth Monitor: Apple Intelligence is responding slowly"
+                tint = .systemOrange
+            case (.healthy, .healthy), (.healthy, .busy), (.healthy, nil),
+                 (.available, .healthy), (.available, .busy), (.available, nil),
+                 (nil, .healthy):
                 symbol = "checkmark.circle.fill"
-                description = "Hearth Monitor: all runners healthy"
+                description = "Hearth Monitor: local AI healthy"
                 tint = .systemGreen
-            case .busy:
+            case (_, .busy):
                 symbol = "hourglass.circle.fill"
                 description = "Hearth Monitor: a runner is busy"
                 tint = .systemBlue
-            case .down:
-                symbol = "exclamationmark.circle.fill"
-                description = "Hearth Monitor: a runner is down"
-                tint = .systemRed
-            case .checking:
+            case (.checking, _):
                 symbol = "circle.dotted"
-                description = "Hearth Monitor: checking runners"
+                description = "Hearth Monitor: checking local AI"
                 tint = .systemOrange
-            case nil:
+            case (nil, nil):
                 symbol = "waveform.path.ecg.rectangle"
-                description = "Hearth Monitor: no runner configured"
+                description = "Hearth Monitor: monitoring is not configured"
                 tint = nil
+            default:
+                symbol = "circle.dotted"
+                description = "Hearth Monitor: checking local AI"
+                tint = .systemOrange
             }
         }
         button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: description)
@@ -129,16 +160,26 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
             addWarning("History needs attention", detail: historyProblem)
         }
 
+        if settings.appleModel.enabled {
+            menu.addItem(.separator())
+            menu.addItem(appleModelMenuItem())
+        }
+
+        menu.addItem(.separator())
+        let runnerHeading = NSMenuItem(title: "Local AI Runners", action: nil, keyEquivalent: "")
+        runnerHeading.isEnabled = false
+        menu.addItem(runnerHeading)
         if settings.targets.isEmpty {
             let empty = NSMenuItem(title: "No runner configured", action: nil, keyEquivalent: "")
             empty.isEnabled = false
             menu.addItem(empty)
         } else {
-            menu.addItem(.separator())
             for target in settings.targets { menu.addItem(targetMenuItem(target)) }
-            menu.addItem(.separator())
-            addAction("Check All Now", #selector(checkAllTapped), keyEquivalent: "r")
-            addAction("Open Details…", #selector(detailsTapped), keyEquivalent: "d")
+        }
+        menu.addItem(.separator())
+        addAction("Check All Now", #selector(checkAllTapped), keyEquivalent: "r")
+        if !settings.targets.isEmpty {
+            addAction("Open Runner Details…", #selector(detailsTapped), keyEquivalent: "d")
         }
 
         menu.addItem(.separator())
@@ -154,13 +195,80 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var overallMenuTitle: String {
-        guard !settings.targets.isEmpty else { return "Hearth Monitor" }
+        if settings.appleModel.enabled && !appleIsUnavailableByDesign {
+            switch appleHealth.snapshot.phase {
+            case .down: return "Hearth Monitor: Apple Intelligence needs attention"
+            case .verifying: return "Hearth Monitor: verifying Apple Intelligence"
+            case .slow: return "Hearth Monitor: Apple Intelligence slow"
+            default: break
+            }
+        }
+        guard !settings.targets.isEmpty else {
+            if !settings.appleModel.enabled { return "Hearth Monitor" }
+            return appleIsUnavailableByDesign
+                ? "Hearth Monitor: add a Local AI Runner"
+                : "Hearth Monitor: Apple Intelligence"
+        }
         let snapshots = settings.targets.compactMap { fleet.snapshots[$0.id] }
         let down = snapshots.filter { $0.phase == .down }.count
         if down > 0 { return "Hearth Monitor: \(down) down" }
         if snapshots.contains(where: { $0.phase == .checking }) { return "Hearth Monitor: checking" }
         if snapshots.contains(where: { $0.phase == .busy }) { return "Hearth Monitor: serving" }
         return "Hearth Monitor: all healthy"
+    }
+
+    private var appleIsUnavailableByDesign: Bool {
+        switch appleHealth.snapshot.availability {
+        case .unavailable(.unsupportedOS), .unavailable(.deviceNotEligible): return true
+        default: return false
+        }
+    }
+
+    private func appleModelMenuItem() -> NSMenuItem {
+        let snapshot = appleHealth.snapshot
+        let item = NSMenuItem(
+            title: "Apple Intelligence: \(AppleModelPresentation.title(snapshot))",
+            action: nil,
+            keyEquivalent: "")
+        item.image = NSImage(
+            systemSymbolName: AppleModelPresentation.symbol(snapshot),
+            accessibilityDescription: AppleModelPresentation.title(snapshot))
+        item.toolTip = AppleModelPresentation.detail(snapshot)
+
+        let submenu = NSMenu(title: "Apple Intelligence")
+        let detail = NSMenuItem(title: AppleModelPresentation.detail(snapshot), action: nil, keyEquivalent: "")
+        detail.isEnabled = false
+        submenu.addItem(detail)
+        let checked = NSMenuItem(
+            title: "Checked \(MonitorPresentation.relative(snapshot.checkedAt))",
+            action: nil,
+            keyEquivalent: "")
+        checked.isEnabled = false
+        submenu.addItem(checked)
+        if let latency = snapshot.lastLatencySeconds {
+            let timing = NSMenuItem(
+                title: String(format: "Last functional response: %.2f seconds", latency),
+                action: nil,
+                keyEquivalent: "")
+            timing.isEnabled = false
+            submenu.addItem(timing)
+        }
+        submenu.addItem(.separator())
+        let check = NSMenuItem(
+            title: settings.appleModel.functionalChecksEnabled ? "Run Functional Check" : "Check Availability",
+            action: #selector(checkAppleModelTapped),
+            keyEquivalent: "")
+        check.target = self
+        check.isEnabled = !appleHealth.isChecking
+        submenu.addItem(check)
+        let details = NSMenuItem(
+            title: "Open Apple Intelligence Details…",
+            action: #selector(appleDetailsTapped),
+            keyEquivalent: "")
+        details.target = self
+        submenu.addItem(details)
+        item.submenu = submenu
+        return item
     }
 
     private func targetMenuItem(_ target: MonitorTarget) -> NSMenuItem {
@@ -350,6 +458,16 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
         Task { [weak self] in await self?.deliverAlerts(for: event) }
     }
 
+    private func handleAppleSnapshot(prior: AppleModelHealthSnapshot?,
+                                     snapshot: AppleModelHealthSnapshot) {
+        let event = ledger.observeAppleModel(snapshot: snapshot)
+        if event != .none { persistHistory() }
+        historyController?.update(ledger: ledger, problem: historyProblem)
+        appleDetailsController?.update(snapshot)
+        refreshRuntimePresentation()
+        Task { [weak self] in await self?.deliverAlerts(for: event) }
+    }
+
     private func handleTargetRemoved(_ id: UUID) {
         let event = ledger.stopMonitoring(targetID: id)
         if event != .none { persistHistory() }
@@ -376,9 +494,13 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
         guard settings.alertsEnabled,
               settings.alertsSnoozedUntil.map({ $0 <= now }) ?? true else { return }
 
+        var monitoredIDs = Set(settings.targets.map(\.id))
+        if settings.appleModel.enabled && settings.appleModel.functionalChecksEnabled {
+            monitoredIDs.insert(AppleModelHealthSnapshot.incidentTargetID)
+        }
         let pendingOutages = MonitorAlertPolicy.pendingOutages(
             in: ledger,
-            monitoredTargetIDs: Set(settings.targets.map(\.id)),
+            monitoredTargetIDs: monitoredIDs,
             alertsEnabled: settings.alertsEnabled,
             snoozedUntil: settings.alertsSnoozedUntil,
             now: now)
@@ -431,13 +553,30 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func openFirstRunEditor() {
-        editor = MonitorTargetEditorController(
-            target: MonitorTarget(),
-            http: http,
-            onSave: { [weak self] target in try self?.save(target) },
-            onClose: { [weak self] in self?.editor = nil })
-        editor?.show(title: "Welcome to Hearth Monitor", discoverOnOpen: true)
+    private func openWelcome() {
+        Task { [weak self] in
+            guard let self else { return }
+            let availability = await self.appleProbe.availability()
+            self.showWelcome(availability: availability)
+        }
+    }
+
+    private func showWelcome(availability: AppleModelAvailability) {
+        if welcomeController == nil {
+            welcomeController = MonitorWelcomeController(
+                appleAvailability: availability,
+                onContinue: { [weak self] functionalChecks in
+                    guard let self else { return }
+                    var updated = self.settings
+                    updated.onboardingCompleted = true
+                    updated.appleModel.enabled = true
+                    updated.appleModel.functionalChecksEnabled = functionalChecks
+                    try self.save(updated)
+                    Task { await self.appleHealth.checkNow(forceFunctional: functionalChecks) }
+                },
+                onAddRunner: { [weak self] in self?.addRunnerTapped() })
+        }
+        welcomeController?.show()
     }
 
     private func openSettings() {
@@ -517,8 +656,10 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
             for (id, token) in tokenBackups { try? secrets.setToken(token, for: id) }
             throw error
         }
+        handleAppleMonitoringChange(from: settings, to: updated)
         settings = updated
         settingsProblem = nil
+        appleHealth.apply(updated.appleModel)
         fleet.apply(updated.targets)
         fullHearthBridge.apply(updated.targets)
         preferences?.settingsDidChange(updated)
@@ -530,10 +671,25 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
 
     private func saveGlobalSettings(_ updated: MonitorSettings) throws {
         try store.save(updated)
+        handleAppleMonitoringChange(from: settings, to: updated)
         settings = updated
         settingsProblem = nil
+        appleHealth.apply(updated.appleModel)
         preferences?.settingsDidChange(updated)
         refreshRuntimePresentation()
+    }
+
+    private func handleAppleMonitoringChange(from old: MonitorSettings,
+                                             to new: MonitorSettings) {
+        let wasIncidentMonitored = old.appleModel.enabled
+            && old.appleModel.functionalChecksEnabled
+        let remainsIncidentMonitored = new.appleModel.enabled
+            && new.appleModel.functionalChecksEnabled
+        if wasIncidentMonitored && !remainsIncidentMonitored {
+            let event = ledger.stopMonitoring(
+                targetID: AppleModelHealthSnapshot.incidentTargetID)
+            if event != .none { persistHistory() }
+        }
     }
 
     private func openFullHearthConnection(targetID: UUID) {
@@ -622,7 +778,46 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
     @objc func settingsTapped() { openSettings() }
     @objc private func historyTapped() { openHistory() }
     @objc private func detailsTapped() { openDiagnostics(selectedID: settings.selectedTargetID) }
-    @objc private func checkAllTapped() { fleet.checkAllNow() }
+    @objc private func checkAllTapped() {
+        fleet.checkAllNow()
+        Task { [weak self] in await self?.appleHealth.checkNow(forceFunctional: true) }
+    }
+
+    @objc private func checkAppleModelTapped() {
+        Task { [weak self] in await self?.appleHealth.checkNow(forceFunctional: true) }
+    }
+
+    @objc private func appleDetailsTapped() {
+        if appleDetailsController == nil {
+            appleDetailsController = AppleModelDetailsController(
+                snapshot: appleHealth.snapshot,
+                settings: settings.appleModel,
+                onCheck: { [weak self] in
+                    Task { await self?.appleHealth.checkNow(forceFunctional: true) }
+                },
+                onOpenSettings: { [weak self] in self?.openSettings() })
+        }
+        appleDetailsController?.show(
+            snapshot: appleHealth.snapshot,
+            settings: settings.appleModel)
+    }
+
+    private func observeSystemPowerState() {
+        let center = NSWorkspace.shared.notificationCenter
+        center.addObserver(
+            self,
+            selector: #selector(systemWillSleep),
+            name: NSWorkspace.willSleepNotification,
+            object: nil)
+        center.addObserver(
+            self,
+            selector: #selector(systemDidWake),
+            name: NSWorkspace.didWakeNotification,
+            object: nil)
+    }
+
+    @objc private func systemWillSleep() { appleHealth.setSystemAwake(false) }
+    @objc private func systemDidWake() { appleHealth.setSystemAwake(true) }
 
     @objc private func checkTargetTapped(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let id = UUID(uuidString: raw) else { return }

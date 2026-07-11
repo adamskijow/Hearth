@@ -60,6 +60,9 @@ final class MonitorPreferencesController: NSObject, NSWindowDelegate {
                 onAdd: { [weak self] in self?.addTarget() },
                 onEdit: { [weak self] in self?.editTarget() },
                 onRemove: { [weak self] in self?.removeTarget() },
+                onSetAppleEnabled: { [weak self] enabled in self?.setAppleEnabled(enabled) },
+                onSetFunctionalChecks: { [weak self] enabled in self?.setFunctionalChecks(enabled) },
+                onSetAppleInterval: { [weak self] interval in self?.setAppleInterval(interval) },
                 onSetAlerts: { [weak self] enabled in self?.setAlerts(enabled) },
                 onResumeAlerts: { [weak self] in self?.resumeAlerts() },
                 onSetLogin: { [weak self] enabled in self?.setLogin(enabled) },
@@ -68,8 +71,8 @@ final class MonitorPreferencesController: NSObject, NSWindowDelegate {
             let window = NSWindow(contentViewController: hosting)
             window.title = "Hearth Monitor Settings"
             window.styleMask = [.titled, .closable, .resizable]
-            window.minSize = NSSize(width: 540, height: 500)
-            window.setContentSize(NSSize(width: 620, height: 640))
+            window.minSize = NSSize(width: 540, height: 520)
+            window.setContentSize(NSSize(width: 640, height: 720))
             window.isReleasedWhenClosed = false
             window.delegate = self
             window.center()
@@ -143,6 +146,24 @@ final class MonitorPreferencesController: NSObject, NSWindowDelegate {
         guard let id = model.selectedID else { return }
         var updated = model.settings
         guard updated.removeTarget(id: id) else { return }
+        persist(updated)
+    }
+
+    private func setAppleEnabled(_ enabled: Bool) {
+        var updated = model.settings
+        updated.appleModel.enabled = enabled
+        persist(updated)
+    }
+
+    private func setFunctionalChecks(_ enabled: Bool) {
+        var updated = model.settings
+        updated.appleModel.functionalChecksEnabled = enabled
+        persist(updated)
+    }
+
+    private func setAppleInterval(_ interval: TimeInterval) {
+        var updated = model.settings
+        updated.appleModel.checkIntervalSeconds = interval
         persist(updated)
     }
 
@@ -225,6 +246,9 @@ struct MonitorPreferencesView: View {
     let onAdd: () -> Void
     let onEdit: () -> Void
     let onRemove: () -> Void
+    let onSetAppleEnabled: (Bool) -> Void
+    let onSetFunctionalChecks: (Bool) -> Void
+    let onSetAppleInterval: (TimeInterval) -> Void
     let onSetAlerts: (Bool) -> Void
     let onResumeAlerts: () -> Void
     let onSetLogin: (Bool) -> Void
@@ -233,8 +257,10 @@ struct MonitorPreferencesView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 14) {
+            ScrollView {
+              VStack(alignment: .leading, spacing: 14) {
                 general
+                appleIntelligence
                 HStack {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Watched runners").font(.title2.weight(.semibold))
@@ -261,7 +287,8 @@ struct MonitorPreferencesView: View {
                         description: Text("Add an existing local or remote AI runner to begin monitoring."))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    List(model.settings.targets) { target in
+                    VStack(spacing: 0) {
+                      ForEach(model.settings.targets) { target in
                         Button {
                             onSelect(target.id)
                         } label: {
@@ -291,8 +318,14 @@ struct MonitorPreferencesView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .padding(.vertical, 8)
                         .accessibilityLabel("\(target.name), \(target.runnerKind.displayName), \(model.selectedID == target.id ? "selected" : "not selected")")
+                        if target.id != model.settings.targets.last?.id { Divider() }
+                      }
                     }
+                    .padding(.horizontal, 10)
+                    .background(Color.secondary.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
 
                 HStack {
@@ -305,8 +338,9 @@ struct MonitorPreferencesView: View {
                     .disabled(model.selectedTarget == nil)
                     Spacer()
                 }
+              }
+              .padding(20)
             }
-            .padding(20)
             Divider()
             HStack {
                 Text("Settings are stored inside Hearth Monitor's App Sandbox container.")
@@ -360,6 +394,50 @@ struct MonitorPreferencesView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+            }
+            .padding(6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var appleIntelligence: some View {
+        GroupBox("Apple Intelligence") {
+            VStack(alignment: .leading, spacing: 11) {
+                Toggle("Monitor Apple Intelligence availability", isOn: Binding(
+                    get: { model.settings.appleModel.enabled },
+                    set: { onSetAppleEnabled($0) }))
+                Text("Uses Apple's public Foundation Models availability state. On unsupported Macs, Local AI Runner monitoring remains available.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Divider()
+                Toggle("Run private functional health checks", isOn: Binding(
+                    get: { model.settings.appleModel.functionalChecksEnabled },
+                    set: { onSetFunctionalChecks($0) }))
+                    .disabled(!model.settings.appleModel.enabled)
+                Text("Generates one tiny fixed response on this Mac. No prompt or response is retained. Two failures are required before Hearth records or alerts on an incident.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Text("Functional check interval")
+                    Spacer()
+                    Picker("Functional check interval", selection: Binding(
+                        get: { model.settings.appleModel.checkIntervalSeconds },
+                        set: { onSetAppleInterval($0) })) {
+                        Text("15 minutes").tag(TimeInterval(900))
+                        Text("30 minutes").tag(TimeInterval(1_800))
+                        Text("1 hour").tag(TimeInterval(3_600))
+                    }
+                    .labelsHidden()
+                    .frame(width: 150)
+                }
+                .disabled(!model.settings.appleModel.enabled
+                          || !model.settings.appleModel.functionalChecksEnabled)
+                Label("Checks pause during sleep, Low Power Mode, and serious thermal pressure.",
+                      systemImage: "leaf")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             .padding(6)
             .frame(maxWidth: .infinity, alignment: .leading)

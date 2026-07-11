@@ -2,9 +2,15 @@
 
 import AppKit
 import Darwin
+import Dispatch
 
 if Array(CommandLine.arguments.dropFirst()) == ["--self-test-keychain"] {
     exit(MonitorKeychainSelfTest.run())
+}
+
+if Array(CommandLine.arguments.dropFirst()) == ["--self-test-apple-model"] {
+    Task { exit(await AppleModelSelfTest.run()) }
+    dispatchMain()
 }
 
 // Hearth Monitor is intentionally a different executable from full Hearth. The

@@ -18,7 +18,9 @@ on:
 
 jobs:
   ci:
-    runs-on: macos-15
+    # Foundation Models must compile against the public macOS 26 SDK. The
+    # package still targets macOS 14 and cross-builds universal runner mode.
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v5
 

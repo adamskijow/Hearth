@@ -51,15 +51,16 @@ Hearth now has two deliberately separate Mac products:
   GPU/driver wedge to a reboot when configured. Those powers require a Developer
   ID build outside App Sandbox.
 - **[Hearth Monitor](docs/hearth-monitor.md)** is the sandboxed, universal
-  menu-bar companion for the Mac App Store. It watches existing local or remote
-  runners, keeps inference-aware history and alerts, and never controls a process.
-  Its optional read-only connection can show whether a separately installed full
-  Hearth is providing managed recovery. Full Hearth remains intact and Monitor
-  works without it.
+  menu-bar companion for the Mac App Store. Its Apple Intelligence mode checks
+  whether the on-device system model is available and actually completes a tiny
+  private response. Its Local AI Runners mode watches Ollama, LM Studio, mlx_lm,
+  and Osaurus, keeps inference-aware history and alerts, and never controls a
+  process. An optional read-only connection can show whether a separately
+  installed full Hearth is providing managed recovery.
 
-The same one-token probe catches an inference/GPU wedge in both products. Full
-Hearth can recover it; Monitor reports it. Choose full Hearth for unattended
-recovery and Monitor for attached observation from any Mac.
+The runner probe catches an inference/GPU wedge in both products. Full Hearth can
+recover it; Monitor reports it. For Apple Intelligence, Monitor can recreate its
+own model session and verify recovery, but macOS owns the underlying service.
 
 ### Full Hearth
 

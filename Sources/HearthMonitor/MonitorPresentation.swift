@@ -62,6 +62,80 @@ enum MonitorPresentation {
     }
 }
 
+enum AppleModelPresentation {
+    static func title(_ snapshot: AppleModelHealthSnapshot) -> String {
+        switch snapshot.phase {
+        case .checking: return "Checking"
+        case .available: return "Available"
+        case .healthy: return "Healthy"
+        case .slow: return "Responding slowly"
+        case .verifying:
+            return snapshot.failure == .timedOut
+                ? "Verifying a possible stall" : "Verifying a functional issue"
+        case .down:
+            return snapshot.failure == .timedOut
+                ? "Not responding" : "Functional check failing"
+        case .unavailable:
+            switch snapshot.availability {
+            case .available: return "Unavailable"
+            case .unavailable(.unsupportedOS): return "Requires macOS 26"
+            case .unavailable(.deviceNotEligible): return "Mac not eligible"
+            case .unavailable(.appleIntelligenceNotEnabled): return "Apple Intelligence is off"
+            case .unavailable(.modelNotReady): return "Model not ready"
+            case .unavailable(.unsupportedLocale): return "Locale not supported"
+            case .unavailable(.frameworkUnavailable): return "Framework unavailable"
+            }
+        }
+    }
+
+    static func symbol(_ snapshot: AppleModelHealthSnapshot) -> String {
+        switch snapshot.phase {
+        case .healthy, .available: return "checkmark.circle.fill"
+        case .slow: return "gauge.with.dots.needle.67percent"
+        case .down: return "exclamationmark.circle.fill"
+        case .verifying: return "exclamationmark.triangle.fill"
+        case .unavailable: return "circle.slash"
+        case .checking: return "circle.dotted"
+        }
+    }
+
+    static func detail(_ snapshot: AppleModelHealthSnapshot) -> String {
+        if let deferredReason = snapshot.deferredReason { return deferredReason }
+        if let failure = snapshot.failure { return failure.plainDescription }
+        switch snapshot.phase {
+        case .checking: return "Reading the system model's public availability state."
+        case .available: return "The system model is available. Functional checks are off."
+        case .healthy:
+            if let latency = snapshot.lastLatencySeconds {
+                return String(format: "The private functional check completed in %.2f seconds.", latency)
+            }
+            return "The private functional check completed."
+        case .slow:
+            return "The model completed the check, but substantially slower than this Mac's recent baseline."
+        case .verifying:
+            return "One check did not finish. Hearth will not call this an incident until it can confirm the problem."
+        case .down:
+            return "Multiple functional checks failed. Hearth cannot restart Apple's system model service."
+        case .unavailable:
+            switch snapshot.availability {
+            case .available: return "The model is temporarily unavailable."
+            case .unavailable(.unsupportedOS):
+                return "Apple Foundation Models requires macOS 26 or later. Local AI runner monitoring still works."
+            case .unavailable(.deviceNotEligible):
+                return "This Mac is not eligible for Apple Intelligence. Local AI runner monitoring still works."
+            case .unavailable(.appleIntelligenceNotEnabled):
+                return "Turn on Apple Intelligence in System Settings to enable functional monitoring."
+            case .unavailable(.modelNotReady):
+                return "macOS reports that the model is downloading or otherwise not ready yet."
+            case .unavailable(.unsupportedLocale):
+                return "Apple's system model does not support the Mac's current language or locale."
+            case .unavailable(.frameworkUnavailable):
+                return "The public Foundation Models framework could not report a usable state."
+            }
+        }
+    }
+}
+
 enum MonitorDiagnosticsText {
     static func report(target: MonitorTarget,
                        snapshot: MonitorSnapshot?,

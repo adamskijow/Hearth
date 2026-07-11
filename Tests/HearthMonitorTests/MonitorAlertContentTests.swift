@@ -32,4 +32,18 @@ struct MonitorAlertContentTests {
         #expect(message.title == "GPU Mac recovered")
         #expect(message.body.contains("1m"))
     }
+
+    @Test("Apple alerts state the system-service recovery boundary")
+    func appleAlert() {
+        let incident = MonitorIncident(
+            targetID: AppleModelHealthSnapshot.incidentTargetID,
+            targetName: "Apple Intelligence",
+            startedAt: Date(),
+            lastObservedAt: Date(),
+            cause: "Two functional checks timed out.",
+            inferenceLevel: true)
+        let outage = MonitorAlertContent.outage(incident)
+        #expect(outage.title == "Apple Intelligence health check failed")
+        #expect(outage.body.contains("cannot restart Apple's system model service"))
+    }
 }

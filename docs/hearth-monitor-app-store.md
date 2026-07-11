@@ -5,11 +5,15 @@ This is the distribution checklist for the separate `com.hearth.HearthMonitor`
 product. It does not apply App Sandbox to full Hearth and must never replace the
 full product's Developer ID release.
 
+Use [the listing draft](hearth-monitor-app-store-listing.md) for the description,
+keywords, screenshot order, What's New text, and reviewer walkthrough.
+
 ## Product record
 
 - Name: **Hearth Monitor**
 - Bundle ID: `com.hearth.HearthMonitor` (explicit App ID)
 - Primary category: **Utilities**
+- Subtitle: **Health checks for local AI**
 - Minimum system: macOS 14
 - Architectures: universal `arm64` and `x86_64`
 - Version/build: `CFBundleShortVersionString` and `CFBundleVersion` in
@@ -19,9 +23,10 @@ full product's Developer ID release.
   `https://github.com/adamskijow/Hearth/blob/main/PRIVACY.md`
 - Support URL:
   `https://github.com/adamskijow/Hearth/issues`
-- App privacy response: **Data Not Collected**. Runner requests travel directly
-  between the user's Mac and addresses they configure; the developer receives
-  nothing.
+- App privacy response: **Data Not Collected**. The Apple Intelligence canary is
+  processed by the on-device system framework and immediately discarded. Runner
+  requests travel directly between the user's Mac and addresses they configure;
+  the developer receives nothing.
 - Export compliance: the app uses system TLS/Keychain and SHA-256 fingerprinting,
   not non-exempt encryption; `ITSAppUsesNonExemptEncryption` is `false`.
 
@@ -58,12 +63,20 @@ meaningful implementation proof but is not an uploadable App Store build.
 
 Adapt this text to the live review fixture and include every non-obvious feature:
 
-> Hearth Monitor is a menu-bar utility for AI runners already operated by the
-> user. It requires no account and does not require the separate full Hearth app.
-> It probes Ollama, LM Studio, mlx_lm, or Osaurus directly, shows multi-runner
-> health and incident history, and can optionally request one token to distinguish
-> working HTTP from wedged GPU/inference. It is intentionally attached-only and
-> never starts, stops, installs, updates, or restarts another process.
+> Hearth Monitor is a private menu-bar health monitor with two independent modes.
+> Apple Intelligence mode uses Apple's public Foundation Models framework to
+> report availability and, with explicit in-app consent, periodically request one
+> tiny fixed on-device response. The response is discarded; only status, timing,
+> and confirmed incidents remain locally. Two failures are required before an
+> incident. A timed-out request is retained and no second request is stacked
+> behind it. The app may recreate its own session but cannot restart Apple's
+> system model service.
+>
+> Local AI Runners mode requires no separate Hearth installation. It probes
+> user-operated Ollama, LM Studio, mlx_lm, or Osaurus endpoints, shows
+> multi-runner health and incident history, and can optionally request one token
+> to distinguish working HTTP from wedged GPU/inference. This mode is attached-
+> only and never starts, stops, installs, updates, or restarts another process.
 >
 > Notifications and Open at Login are off until the reviewer enables them.
 > Declining either does not block monitoring. The Local Network purpose string is
@@ -75,11 +88,13 @@ Adapt this text to the live review fixture and include every non-obvious feature
 > remains a separately distributed unsandboxed product because its process/GPU-
 > wedge recovery cannot exist inside App Sandbox.
 
-Before submission, provide App Review a live compatible HTTPS test endpoint or
-other concrete review resource and exact steps. Keep it available until review
-finishes. Do not submit placeholder credentials or ask the reviewer to install
-full Hearth. Screenshots must show configured live state, Details, History, and
-the optional inference distinction, not only onboarding.
+Apple Intelligence mode is independently reviewable on an eligible macOS 26
+review Mac with Apple Intelligence enabled and should be the first review path.
+Also provide a live compatible HTTPS runner fixture and exact secondary-mode
+steps; keep it available until review finishes. Do not submit placeholder
+credentials or ask the reviewer to install full Hearth. Screenshots must show
+Apple health, the two-mode onboarding, configured runner state, Details, History,
+and the optional inference distinction.
 
 ## Release gate
 
@@ -90,13 +105,18 @@ the optional inference distinction, not only onboarding.
 3. Package the ad-hoc signed app and run `scripts/audit-monitor-boundary.sh`.
 4. Run the signed app's `--self-test-keychain` outside any enclosing automation
    sandbox; it writes, reads, and deletes one random private item.
-5. Exercise a real compatible runner and an inference-only wedge through the
+5. On an eligible Mac, run the signed app's `--self-test-apple-model` and require
+   a completed real response. Exercise the injected timeout-containment test and
+   confirm a timed-out request prevents a second request from starting.
+6. Exercise a real compatible runner and an inference-only wedge through the
    signed app. Confirm the incident closes only after real inference succeeds.
-6. Verify VoiceOver labels, keyboard-only setup, light/dark appearance, denied
+7. Verify VoiceOver labels, keyboard-only setup, light/dark appearance, disabled
+   Apple Intelligence, model-not-ready, ineligible/old Mac, Low Power Mode,
+   thermal pause, denied
    Local Network and Notifications paths, Login Items approval, sleep/wake,
    network loss, and launch after reboot on the oldest and current supported
    macOS releases.
-7. Validate the distribution-signed `.pkg` before upload, then use TestFlight for
+8. Validate the distribution-signed `.pkg` before upload, then use TestFlight for
    the final signed build before submitting it for review.
 
 Official references: [App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/),

@@ -1,10 +1,19 @@
 <!-- SPDX-License-Identifier: MIT -->
 # Hearth Monitor
 
-Hearth Monitor is the sandboxed, attached-only companion to Hearth. It watches
-AI runners you already operate and can detect an inference engine or GPU that is
-wedged even while its HTTP API still responds. It never starts, stops, restarts,
-installs, updates, or changes a runner.
+Hearth Monitor is a private, sandboxed menu-bar health monitor for two kinds of
+local AI:
+
+- **Apple Intelligence**: zero-setup availability plus an optional tiny
+  functional response that proves Apple's on-device system model can complete a
+  request.
+- **Local AI Runners**: attached monitoring for Ollama, LM Studio, `mlx_lm`, and
+  Osaurus, including optional inference-level checks that catch a runner whose
+  HTTP API answers while generation is wedged.
+
+Both modes share confirmed incident history, notifications, diagnostics, and
+energy safeguards. Monitor never starts, stops, installs, updates, or changes a
+runner, and macOS does not let it restart Apple's private model service.
 
 The separate full **Hearth** product remains the choice when you need automatic
 runner restart, keep-awake behavior, and optional GPU/driver reboot recovery.
@@ -13,15 +22,45 @@ whether full Hearth is providing that recovery.
 
 ## Requirements
 
-- macOS 14 or later on Apple silicon or Intel. The universal Monitor app can
-  observe a remote GPU runner even when the Mac displaying its status is Intel.
-- A reachable Ollama, LM Studio, `mlx_lm`, or Osaurus server on this Mac, a
-  private network, or an HTTPS address you control.
+- macOS 14 or later on Apple silicon or Intel for Local AI Runner monitoring.
+- Apple Intelligence monitoring requires macOS 26 or later, an eligible Mac,
+  and Apple Intelligence enabled. Unsupported Macs still get the complete
+  runner mode.
+- Runner mode requires a reachable Ollama, LM Studio, `mlx_lm`, or Osaurus
+  server on this Mac, a private network, or an HTTPS address you control.
 - Local Network permission when macOS asks. Declining it does not expose any
   data, but local and LAN runners cannot be reached until permission is enabled
   in System Settings.
 
-## Set up a runner
+## Monitor Apple Intelligence
+
+On first launch, choose whether to enable private functional checks. Passive
+availability monitoring only reads the public Foundation Models state. A
+functional check asks the on-device model for one tiny fixed response, discards
+the response immediately, and stores only status and timing metadata.
+
+Scheduled functional checks default to 15 minutes apart. They pause while the
+Mac sleeps, in Low Power Mode, or under serious thermal pressure. Hearth requires
+two failed checks before recording an incident or notifying you. If a request
+times out, it is retained until it actually finishes and Hearth refuses to stack
+another request behind it.
+
+Apple status remains specific:
+
+- **Available:** the public framework is ready; functional checks are off.
+- **Healthy:** a functional response completed.
+- **Responding slowly:** it completed at least three times slower than this
+  Mac's recent baseline and took at least eight seconds. Slow is not an outage.
+- **Verifying a possible stall:** one functional check failed or timed out.
+- **Not responding:** the configured number of functional checks failed.
+- **Apple Intelligence is off / Model not ready / Mac not eligible:** an
+  availability condition, not a fabricated wedge.
+
+Hearth creates a fresh app session for each functional check. A successful fresh
+session can verify app-level recovery, but Hearth cannot kill or restart Apple's
+OS-owned service and never claims it did.
+
+## Set up a Local AI Runner
 
 1. Open Hearth Monitor. It appears in the menu bar rather than the Dock.
 2. Choose a compatible local candidate, or enter the runner type, host, and port.
@@ -48,8 +87,9 @@ requested check verifies real inference rather than only HTTP.
 - **Busy (verifying recovery):** the API is serving work after a confirmed
   inference failure, but Monitor has not yet observed successful inference.
 
-Use the runner submenu for its exact reason, last check, resident models, **Check
-Now**, and **Details**. The root icon summarizes all configured runners.
+Use the Apple Intelligence and runner submenus for exact reasons, last checks,
+timing or resident models, **Check Now**, and **Details**. The root icon
+summarizes both modes, with a confirmed failure taking priority.
 
 ## Alerts, history, and login
 
@@ -59,9 +99,10 @@ health checks and incident history continue, and an outage still active after th
 snooze can alert then. A recovery notification is sent only when its outage alert
 was delivered recently.
 
-History contains confirmed incidents rather than samples, is capped at 500, and
-stays on this Mac. Removing a down target records **monitoring stopped**, not a
-false recovery. **Open at Login** is also opt-in and uses macOS's Login Items API.
+History contains confirmed Apple or runner incidents rather than samples, is
+capped at 500, and stays on this Mac. Removing a down target records **monitoring
+stopped**, not a false recovery. **Open at Login** is also opt-in and uses
+macOS's Login Items API.
 
 ## Show full Hearth recovery status (optional)
 
@@ -93,9 +134,10 @@ are ephemeral, cookies and shared credentials are disabled, and response bodies
 are bounded.
 
 The app contains no analytics, ads, tracking, account, or third-party SDK and
-sends no data to the developer. Settings and history stay in its sandbox
-container; optional full Hearth credentials stay in Keychain. See the
-[privacy policy](../PRIVACY.md).
+sends no data to the developer. The Apple canary prompt and response are never
+persisted; only availability, timing, broad failure category, and incident state
+are retained. Settings and history stay in its sandbox container; optional full
+Hearth credentials stay in Keychain. See the [privacy policy](../PRIVACY.md).
 
 ## Troubleshooting and removal
 
@@ -104,6 +146,13 @@ container; optional full Hearth credentials stay in Keychain. See the
   so confirm the runner type.
 - **Connected, inference failed:** verify the model name and that it fits memory.
   This can also be the wedge Monitor is designed to catch.
+- **Apple Intelligence is off:** enable it in System Settings. This is an
+  availability state and does not create a timeout incident.
+- **Model not ready:** let macOS finish downloading or preparing its model, then
+  use **Check Now**. Hearth does not repeatedly generate while assets are absent.
+- **Persistent Apple timeout:** Hearth has already avoided overlapping canaries
+  and retried only after the prior request finished. macOS owns further recovery;
+  save the diagnostic report before rebooting or updating the system.
 - **HTTP warning:** use HTTPS unless the endpoint is loopback or carried by an
   encrypted private overlay such as Tailscale.
 - **Full Hearth token rejected:** create a fresh status-only token and test the

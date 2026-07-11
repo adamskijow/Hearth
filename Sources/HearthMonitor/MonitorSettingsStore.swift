@@ -63,6 +63,9 @@ struct MonitorSettingsStore: MonitorSettingsPersisting, Sendable {
             if let issue = settings.targets.lazy.compactMap({ $0.validationIssues.first }).first {
                 throw StoreError.invalidTarget("A saved runner is invalid: \(issue)")
             }
+            if let issue = settings.appleModel.validationIssues.first {
+                throw StoreError.invalidTarget("Apple Intelligence monitoring is invalid: \(issue)")
+            }
             return MonitorSettingsLoadResult(settings: settings, problem: nil)
         } catch {
             return MonitorSettingsLoadResult(
@@ -76,6 +79,9 @@ struct MonitorSettingsStore: MonitorSettingsPersisting, Sendable {
             throw StoreError.invalidTarget("Saved runners contain duplicate identities.")
         }
         if let issue = settings.targets.lazy.compactMap({ $0.validationIssues.first }).first {
+            throw StoreError.invalidTarget(issue)
+        }
+        if let issue = settings.appleModel.validationIssues.first {
             throw StoreError.invalidTarget(issue)
         }
         var current = settings

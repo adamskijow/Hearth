@@ -15,7 +15,11 @@ actor AppleFoundationModelProbe: AppleModelProbing {
     typealias Operation = @Sendable () async -> AppleModelFunctionalResult
 
     private let operation: Operation
-    private var inFlight: (id: UUID, task: Task<AppleModelFunctionalResult, Never>)?
+    private var inFlight: (
+        id: UUID,
+        task: Task<AppleModelFunctionalResult, Never>,
+        state: AppleModelProbeOperationState
+    )?
 
     init(operation: Operation? = nil) {
         self.operation = operation ?? { await Self.performSystemCanary() }
@@ -42,11 +46,19 @@ actor AppleFoundationModelProbe: AppleModelProbing {
     }
 
     func runFunctionalCheck(timeout: TimeInterval) async -> AppleModelFunctionalResult {
-        guard inFlight == nil else { return .requestStillRunning }
+        if let current = inFlight {
+            guard current.state.isCompleted else { return .requestStillRunning }
+            inFlight = nil
+        }
         let id = UUID()
         let operation = self.operation
-        let task = Task { await operation() }
-        inFlight = (id, task)
+        let state = AppleModelProbeOperationState()
+        let task = Task {
+            let result = await operation()
+            state.markCompleted()
+            return result
+        }
+        inFlight = (id, task, state)
         Task { [weak self] in
             _ = await task.value
             await self?.finished(id: id)
@@ -128,6 +140,17 @@ actor AppleFoundationModelProbe: AppleModelProbing {
         }
     }
 #endif
+}
+
+private final class AppleModelProbeOperationState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var completed = false
+
+    var isCompleted: Bool { lock.withLock { completed } }
+
+    func markCompleted() {
+        lock.withLock { completed = true }
+    }
 }
 
 private final class AppleModelProbeRace: @unchecked Sendable {

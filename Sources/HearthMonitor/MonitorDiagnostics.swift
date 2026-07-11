@@ -336,25 +336,25 @@ private struct RunnerDetails: View {
 
     private var deepProbeText: String {
         switch snapshot.deepProbeLastSucceeded {
-        case true: return "Last inference check passed"
-        case false: return "Last inference check failed"
-        case nil: return "Configured; waiting for its first run"
+        case .some(true): return "Last inference check passed"
+        case .some(false): return "Last inference check failed"
+        case .none: return "Configured; waiting for its first run"
         }
     }
 
     private var deepProbeSymbol: String {
         switch snapshot.deepProbeLastSucceeded {
-        case true: return "checkmark.circle.fill"
-        case false: return "xmark.circle.fill"
-        case nil: return "circle.dotted"
+        case .some(true): return "checkmark.circle.fill"
+        case .some(false): return "xmark.circle.fill"
+        case .none: return "circle.dotted"
         }
     }
 
     private var deepProbeColor: Color {
         switch snapshot.deepProbeLastSucceeded {
-        case true: return .green
-        case false: return .red
-        case nil: return .secondary
+        case .some(true): return .green
+        case .some(false): return .red
+        case .none: return .secondary
         }
     }
 

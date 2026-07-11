@@ -81,9 +81,9 @@ enum MonitorDiagnosticsText {
             if snapshot.deepProbeConfigured {
                 let deepResult: String
                 switch snapshot.deepProbeLastSucceeded {
-                case true: deepResult = "passed"
-                case false: deepResult = "failed"
-                case nil: deepResult = "not completed"
+                case .some(true): deepResult = "passed"
+                case .some(false): deepResult = "failed"
+                case .none: deepResult = "not completed"
                 }
                 lines.append("Deep probe result: \(deepResult)")
                 lines.append("Deep probe at: \(snapshot.deepProbeLastAt?.formatted(.iso8601) ?? "never")")

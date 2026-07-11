@@ -373,9 +373,9 @@ struct FullHearthPairingView: View {
 
     private func recoveryText(_ status: FullHearthStatus) -> String {
         switch status.isManaged {
-        case true: return "Managed recovery is active"
-        case false: return "Full Hearth is attached-only"
-        case nil: return "Recovery mode is not reported by this version"
+        case .some(true): return "Managed recovery is active"
+        case .some(false): return "Full Hearth is attached-only"
+        case .none: return "Recovery mode is not reported by this version"
         }
     }
 
@@ -385,11 +385,11 @@ struct FullHearthPairingView: View {
 
     private func rebootEscalationText(_ status: FullHearthStatus) -> String {
         switch status.isManaged {
-        case true:
+        case .some(true):
             return "GPU/driver reboot escalation is configured in full Hearth."
-        case false:
+        case .some(false):
             return "GPU/driver reboot escalation is configured, but inactive while full Hearth is attached-only."
-        case nil:
+        case .none:
             return "GPU/driver reboot escalation is configured; this full Hearth version does not report whether recovery is active."
         }
     }

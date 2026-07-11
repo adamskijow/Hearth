@@ -239,9 +239,9 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
 
     private func deepProbeMenuText(_ snapshot: MonitorSnapshot) -> String {
         switch snapshot.deepProbeLastSucceeded {
-        case true: return "Inference check passed \(MonitorPresentation.relative(snapshot.deepProbeLastAt))"
-        case false: return "Inference check failed \(MonitorPresentation.relative(snapshot.deepProbeLastAt))"
-        case nil: return "Inference check waiting for first run"
+        case .some(true): return "Inference check passed \(MonitorPresentation.relative(snapshot.deepProbeLastAt))"
+        case .some(false): return "Inference check failed \(MonitorPresentation.relative(snapshot.deepProbeLastAt))"
+        case .none: return "Inference check waiting for first run"
         }
     }
 

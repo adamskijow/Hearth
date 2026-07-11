@@ -16,7 +16,42 @@ struct MonitorSettingsStoreTests {
     func missingFile() {
         let result = MonitorSettingsStore(directoryURL: scratch()).load()
         #expect(result.settings.targets.isEmpty)
+        #expect(result.settings.appleModel.enabled)
+        #expect(!result.settings.appleModel.functionalChecksEnabled)
         #expect(result.problem == nil)
+    }
+
+    @Test("Version one settings migrate without losing runner configuration")
+    func versionOneMigration() throws {
+        let directory = scratch()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let store = MonitorSettingsStore(directoryURL: directory)
+        let original = Data(#"{"schemaVersion":1,"targets":[],"alertsEnabled":true}"#.utf8)
+        try original.write(to: store.fileURL)
+
+        let loaded = store.load()
+        #expect(loaded.problem == nil)
+        #expect(loaded.settings.alertsEnabled)
+        #expect(loaded.settings.appleModel.enabled)
+        #expect(!loaded.settings.appleModel.functionalChecksEnabled)
+        #expect(!loaded.settings.onboardingCompleted)
+    }
+
+    @Test("Existing configured users are not sent through first-run onboarding again")
+    func configuredVersionOneMigration() throws {
+        let directory = scratch()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let store = MonitorSettingsStore(directoryURL: directory)
+        let original = Data(#"{"schemaVersion":1,"targets":[{"name":"Existing Ollama"}]}"#.utf8)
+        try original.write(to: store.fileURL)
+
+        let loaded = store.load()
+        #expect(loaded.problem == nil)
+        #expect(loaded.settings.targets.first?.name == "Existing Ollama")
+        #expect(loaded.settings.onboardingCompleted)
+        #expect(!loaded.settings.appleModel.functionalChecksEnabled)
     }
 
     @Test("Settings save atomically and reload")

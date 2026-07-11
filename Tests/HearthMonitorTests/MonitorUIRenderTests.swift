@@ -44,16 +44,84 @@ struct MonitorUIRenderTests {
             onAdd: {},
             onEdit: {},
             onRemove: {},
+            onSetAppleEnabled: { _ in },
+            onSetFunctionalChecks: { _ in },
+            onSetAppleInterval: { _ in },
             onSetAlerts: { _ in },
             onResumeAlerts: {},
             onSetLogin: { _ in },
             onDone: {})
-            .frame(width: 620, height: 640)
+            .frame(width: 640, height: 720)
             .background(Color(nsColor: .windowBackgroundColor))
-        let image = try render(view, size: NSSize(width: 620, height: 640))
-        #expect(image.size.width == 620)
-        #expect(image.size.height == 640)
+        let image = try render(view, size: NSSize(width: 640, height: 720))
+        #expect(image.size.width == 640)
+        #expect(image.size.height == 720)
         try writeIfRequested(image, suffix: "settings")
+    }
+
+    @Test("Two-mode welcome and Apple health details render")
+    func appleModelWindowsRender() throws {
+        let welcome = MonitorWelcomeView(onContinue: { _ in nil }, onAddRunner: { _ in nil })
+            .frame(width: 640, height: 650)
+            .background(Color(nsColor: .windowBackgroundColor))
+        let welcomeImage = try render(welcome, size: NSSize(width: 640, height: 650))
+        #expect(welcomeImage.size == NSSize(width: 640, height: 650))
+        try writeIfRequested(welcomeImage, suffix: "welcome-two-mode")
+        let darkWelcome = MonitorWelcomeView(
+            onContinue: { _ in nil }, onAddRunner: { _ in nil })
+            .frame(width: 640, height: 650)
+            .background(Color(nsColor: .windowBackgroundColor))
+            .preferredColorScheme(.dark)
+        let darkWelcomeImage = try render(darkWelcome, size: NSSize(width: 640, height: 650))
+        #expect(darkWelcomeImage.size == NSSize(width: 640, height: 650))
+        try writeIfRequested(darkWelcomeImage, suffix: "welcome-two-mode-dark")
+        let runnerOnlyWelcome = MonitorWelcomeView(
+            appleAvailability: .unavailable(.deviceNotEligible),
+            onContinue: { _ in nil },
+            onAddRunner: { _ in nil })
+            .frame(width: 640, height: 650)
+            .background(Color(nsColor: .windowBackgroundColor))
+        let runnerOnlyImage = try render(runnerOnlyWelcome, size: NSSize(width: 640, height: 650))
+        #expect(runnerOnlyImage.size == NSSize(width: 640, height: 650))
+        #expect(try darkPixelFraction(runnerOnlyImage) < 0.20)
+        try writeIfRequested(runnerOnlyImage, suffix: "welcome-runner-only")
+
+        var snapshot = AppleModelHealthSnapshot()
+        snapshot.phase = .healthy
+        snapshot.availability = .available
+        snapshot.checkedAt = Date()
+        snapshot.functionalCheckedAt = Date()
+        snapshot.functionalSucceededAt = Date()
+        snapshot.lastLatencySeconds = 1.2
+        snapshot.baselineLatencySeconds = 1.1
+        snapshot.latencySamples = [1.0, 1.1, 1.2]
+        let details = AppleModelDetailsView(
+            model: AppleModelDetailsModel(
+                snapshot: snapshot,
+                settings: AppleModelMonitorSettings(functionalChecksEnabled: true)),
+            onCopy: {},
+            onCheck: {},
+            onOpenSettings: {},
+            onDone: {})
+            .frame(width: 640, height: 700)
+            .background(Color(nsColor: .windowBackgroundColor))
+        let detailsImage = try render(details, size: NSSize(width: 640, height: 700))
+        #expect(detailsImage.size == NSSize(width: 640, height: 700))
+        try writeIfRequested(detailsImage, suffix: "apple-intelligence-details")
+        let darkDetails = AppleModelDetailsView(
+            model: AppleModelDetailsModel(
+                snapshot: snapshot,
+                settings: AppleModelMonitorSettings(functionalChecksEnabled: true)),
+            onCopy: {},
+            onCheck: {},
+            onOpenSettings: {},
+            onDone: {})
+            .frame(width: 640, height: 700)
+            .background(Color(nsColor: .windowBackgroundColor))
+            .preferredColorScheme(.dark)
+        let darkDetailsImage = try render(darkDetails, size: NSSize(width: 640, height: 700))
+        #expect(darkDetailsImage.size == NSSize(width: 640, height: 700))
+        try writeIfRequested(darkDetailsImage, suffix: "apple-intelligence-details-dark")
     }
 
     @Test("History and live details render at release sizes")
@@ -133,7 +201,34 @@ struct MonitorUIRenderTests {
               let png = bitmap.representation(using: .png, properties: [:]) else { return }
         let url = URL(fileURLWithPath: directory, isDirectory: true)
             .appendingPathComponent("hearth-monitor-\(suffix).png")
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try png.write(to: url, options: .atomic)
+    }
+
+    /// A prior offscreen AppKit capture emitted giant black rectangles while the
+    /// size-only smoke test stayed green. Sample the light onboarding render so
+    /// that failure shape becomes mechanically visible without snapshot tooling.
+    private func darkPixelFraction(_ image: NSImage) throws -> Double {
+        let tiff = try #require(image.tiffRepresentation)
+        let bitmap = try #require(NSBitmapImageRep(data: tiff))
+        var dark = 0
+        var sampled = 0
+        for y in stride(from: 0, to: bitmap.pixelsHigh, by: 4) {
+            for x in stride(from: 0, to: bitmap.pixelsWide, by: 4) {
+                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
+                    continue
+                }
+                sampled += 1
+                if color.alphaComponent > 0.8
+                    && color.redComponent < 0.08
+                    && color.greenComponent < 0.08
+                    && color.blueComponent < 0.08 {
+                    dark += 1
+                }
+            }
+        }
+        return sampled == 0 ? 1 : Double(dark) / Double(sampled)
     }
 
     private func render<Content: View>(_ view: Content, size: NSSize) throws -> NSImage {

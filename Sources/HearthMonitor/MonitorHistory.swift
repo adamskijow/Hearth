@@ -107,7 +107,7 @@ struct MonitorHistoryView: View {
                     ContentUnavailableView(
                         "No incidents",
                         systemImage: "checkmark.shield",
-                        description: Text("Confirmed runner outages will appear here."))
+                        description: Text("Confirmed Apple Intelligence or runner incidents will appear here."))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List(model.ledger.incidents) { incident in
@@ -142,7 +142,7 @@ struct MonitorHistoryView: View {
             Button("Cancel", role: .cancel) {}
             Button("Reset History", role: .destructive, action: onReset)
         } message: {
-            Text("This replaces the unreadable history file with an empty one. Runner settings are not affected.")
+            Text("This replaces the unreadable history file with an empty one. Monitoring settings are not affected.")
         }
     }
 }

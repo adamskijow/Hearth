@@ -6,24 +6,30 @@ import Foundation
 /// only endpoints and probe policy: no executable paths, process state, or
 /// privilege material can cross the App Store product boundary.
 public struct MonitorSettings: Codable, Sendable, Equatable {
-    public static let currentSchemaVersion = 1
+    public static let currentSchemaVersion = 2
 
     public var schemaVersion: Int
     public var targets: [MonitorTarget]
     public var selectedTargetID: UUID?
     public var alertsEnabled: Bool
     public var alertsSnoozedUntil: Date?
+    public var appleModel: AppleModelMonitorSettings
+    public var onboardingCompleted: Bool
 
     public init(schemaVersion: Int = MonitorSettings.currentSchemaVersion,
                 targets: [MonitorTarget] = [],
                 selectedTargetID: UUID? = nil,
                 alertsEnabled: Bool = false,
-                alertsSnoozedUntil: Date? = nil) {
+                alertsSnoozedUntil: Date? = nil,
+                appleModel: AppleModelMonitorSettings = AppleModelMonitorSettings(),
+                onboardingCompleted: Bool = false) {
         self.schemaVersion = schemaVersion
         self.targets = targets
         self.selectedTargetID = selectedTargetID
         self.alertsEnabled = alertsEnabled
         self.alertsSnoozedUntil = alertsSnoozedUntil
+        self.appleModel = appleModel
+        self.onboardingCompleted = onboardingCompleted
         normalizeSelection()
     }
 
@@ -61,7 +67,8 @@ public struct MonitorSettings: Codable, Sendable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, targets, selectedTargetID, alertsEnabled, alertsSnoozedUntil
+        case schemaVersion, targets, selectedTargetID, alertsEnabled, alertsSnoozedUntil, appleModel
+        case onboardingCompleted
     }
 
     public init(from decoder: Decoder) throws {
@@ -71,6 +78,10 @@ public struct MonitorSettings: Codable, Sendable, Equatable {
         selectedTargetID = try container.decodeIfPresent(UUID.self, forKey: .selectedTargetID)
         alertsEnabled = try container.decodeIfPresent(Bool.self, forKey: .alertsEnabled) ?? false
         alertsSnoozedUntil = try container.decodeIfPresent(Date.self, forKey: .alertsSnoozedUntil)
+        appleModel = try container.decodeIfPresent(
+            AppleModelMonitorSettings.self, forKey: .appleModel) ?? AppleModelMonitorSettings()
+        onboardingCompleted = try container.decodeIfPresent(
+            Bool.self, forKey: .onboardingCompleted) ?? !targets.isEmpty
         normalizeSelection()
     }
 }

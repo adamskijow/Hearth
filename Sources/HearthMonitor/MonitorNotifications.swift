@@ -17,7 +17,13 @@ struct MonitorAlertMessage: Sendable, Equatable {
 
 enum MonitorAlertContent {
     static func outage(_ incident: MonitorIncident) -> MonitorAlertMessage {
-        MonitorAlertMessage(
+        if incident.targetID == AppleModelHealthSnapshot.incidentTargetID {
+            return MonitorAlertMessage(
+                title: "Apple Intelligence health check failed",
+                body: incident.cause
+                    + " Hearth recreated its app session, but cannot restart Apple's system model service.")
+        }
+        return MonitorAlertMessage(
             title: incident.inferenceLevel
                 ? "\(incident.targetName) inference is wedged"
                 : "\(incident.targetName) is down",
@@ -25,7 +31,12 @@ enum MonitorAlertContent {
     }
 
     static func recovery(_ incident: MonitorIncident) -> MonitorAlertMessage {
-        MonitorAlertMessage(
+        if incident.targetID == AppleModelHealthSnapshot.incidentTargetID {
+            return MonitorAlertMessage(
+                title: "Apple Intelligence is responding again",
+                body: "A fresh Hearth session completed the private functional check after \(MonitorPresentation.duration(incident.duration)).")
+        }
+        return MonitorAlertMessage(
             title: "\(incident.targetName) recovered",
             body: "The runner is serving again after \(MonitorPresentation.duration(incident.duration)).")
     }

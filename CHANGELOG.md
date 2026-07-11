@@ -7,6 +7,31 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Added
+
+- A first-class **Apple Intelligence** mode in Hearth Monitor. On macOS 26 and
+  eligible hardware it reads the public system-model availability state and can
+  run an opt-in, tiny on-device functional canary every 15 minutes. It records a
+  per-Mac latency baseline, distinguishes slow completion from failure, requires
+  two failed checks before an incident, and verifies recovery with a fresh app
+  session without claiming control of Apple's model service.
+- Two-mode onboarding and details: Apple Intelligence works without endpoint
+  setup, while the original Ollama, LM Studio, mlx_lm, and Osaurus monitoring is
+  retained as **Local AI Runners**, including optional Full Hearth recovery
+  status. Both modes share local alerts, bounded history, and diagnostics.
+- A signed App Sandbox Foundation Models self-test and an injectable timeout gate
+  proving Hearth does not stack model requests behind one that timed out.
+
+### Changed
+
+- Functional Apple model checks pause during sleep, Low Power Mode, and serious
+  thermal pressure. Rate limiting, model download/not-ready, disabled Apple
+  Intelligence, unsupported hardware, and persistent timeouts remain distinct
+  user-facing states.
+- Hosted CI and release builds use the macOS 26 runner so the shipping binary is
+  compiled against the public Foundation Models SDK while remaining a universal
+  macOS 14+ app for Local AI Runner monitoring.
+
 ## [1.3.0] - 2026-07-11
 
 The two-product release: full Hearth keeps its unsandboxed managed runner and

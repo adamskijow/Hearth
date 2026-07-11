@@ -491,3 +491,120 @@ is active without weakening the Store boundary.
   live compatible HTTPS fixture; and manually verify VoiceOver, notification
   authorization, login-item behavior, and the installed receipt build on a clean
   macOS account. These external checks are not represented as completed.
+
+## Gate 7: Apple Intelligence as a first-class mode
+
+### Implementation
+
+- Added a separate `AppleModelHealthEngine` and narrow `AppleModelProbing`
+  boundary. Apple Foundation Models is not modeled as an HTTP runner and cannot
+  accidentally inherit endpoint, process, or Full Hearth recovery behavior.
+- Existing version-one settings migrate to schema two with Apple availability
+  monitoring enabled and functional generation disabled until the user makes an
+  explicit choice. Existing runner addresses, inference models, alerts, and Full
+  Hearth pairings are unchanged.
+- The Store product now presents two peers: **Apple Intelligence** and **Local AI
+  Runners**. Ollama, LM Studio, mlx_lm, Osaurus, and the status-only Full Hearth
+  bridge remain present rather than becoming an advanced or deprecated path.
+
+### User-experience and value audit
+
+- The earlier runner-first onboarding required users to install or understand a
+  server before seeing value. It was replaced with a two-mode welcome that makes
+  Apple Intelligence useful immediately while offering runner setup in the same
+  decision. This materially strengthens the App Store listing without reducing
+  the original attached-monitoring value.
+- Unsupported OS/hardware, Apple Intelligence disabled, and model-not-ready are
+  named availability conditions. They do not appear as wedges, do not create
+  incidents, and explicitly point users back to runner mode where applicable.
+- The details view says what was measured, when, the recent local baseline, what
+  remains on-device, and the exact recovery boundary. No UI claims GPU/Neural
+  Engine utilization because the public framework does not provide it.
+
+### Feature-need and boundary audit
+
+- Availability-only monitoring is cheap and on by default. Functional checks are
+  separately consented to, default to 15 minutes, and retain only timing and
+  broad error state. Chat, generated-content history, benchmarks, token-rate
+  claims, model selection, and private service inspection were excluded because
+  they do not improve the health-monitoring promise.
+- Foundation Models remains isolated in one sandbox-target adapter. The shared
+  core has no framework dependency, and full Hearth's process/reboot recovery
+  targets were not modified.
+
+## Gate 8: functional canary, timeout containment, and energy
+
+### Reliability audit
+
+- One failed canary enters **verifying**; at least two failures are required for
+  **not responding**, history, or an alert. Rate limiting is a neutral deferral.
+  Slow completion is measured against the Mac's own bounded median baseline and
+  remains a serving state.
+- Each canary uses a new `LanguageModelSession`, a fixed four-token maximum, and
+  a fixed response request. Generated text is checked only for non-emptiness and
+  discarded. A successful shallow availability state can never close a confirmed
+  functional incident; another completed canary is required.
+- App-level timeout does not assume cancellation stops Apple's OS work. The
+  adapter retains the in-flight task, reports the timeout once, and returns
+  `requestStillRunning` without starting another canary until the first task
+  really finishes. An injected delayed-operation test covers this invariant.
+
+### Energy and privacy audit
+
+- Functional generation is at least five minutes apart and defaults to fifteen.
+  The scheduler pauses it during sleep, Low Power Mode, and serious or critical
+  thermal pressure. Passive public availability remains legible while paused.
+- Prompt and response are never placed in settings, history, copied diagnostics,
+  notifications, or runner requests. The privacy policy and no-collection Store
+  answer now describe Apple checks specifically.
+
+### Runtime evidence
+
+- The universal release product compiled both `arm64` and `x86_64` slices against
+  Xcode 26.6. The ad-hoc signed bundle retained only App Sandbox and outbound
+  network-client entitlements and passed the existing mechanical boundary audit.
+- On an eligible macOS 26 Mac with Apple Intelligence enabled, the final rebuilt,
+  signed sandbox `--self-test-apple-model` repeatedly completed real Foundation
+  Models responses, most recently in 0.77 seconds. The final Keychain
+  write/read/delete self-test also passed. This is functional evidence, not only
+  API availability.
+
+## Gate 9: two-mode presentation and release readiness
+
+### User-experience audit
+
+- The root menu gives confirmed Apple or runner failures priority, then keeps an
+  Apple Intelligence submenu and a clearly labeled Local AI Runners section.
+  Check All intentionally checks both. Apple details expose availability, last
+  functional completion, baseline, sample count, privacy, and recovery limits.
+- Adding Apple controls made the old fixed-height Settings layout too dense. The
+  content was changed to a scrolling layout and runner rows were converted to a
+  bounded native stack, preserving keyboard and small-screen access.
+- Light and dark renders of the two-mode welcome and Apple details were inspected
+  at release size. A flaky offscreen capture once produced large black regions
+  while the size-only test remained green; the render gate now creates its output
+  directory and rejects an implausible dark-pixel area in the light compatibility
+  screen, closing that false-green path.
+- Alert wording is source-specific: runner alerts explain attached-only process
+  control, while Apple alerts explain that Hearth recreated its app session but
+  cannot restart the system model service. Recovery notifications require an
+  actual fresh functional completion.
+
+### Release audit
+
+- Monitor version advanced to 0.2.0 build 2. Hosted CI and release workflows now
+  use GitHub's macOS 26 image so a green shipping build proves the Foundation
+  Models adapter compiled; macOS 15 CI could otherwise silently compile only the
+  fallback path.
+- App Review notes lead with the independently reviewable Apple mode and retain a
+  live HTTPS fixture as a secondary runner-mode proof. The release gate now
+  requires the signed Apple self-test, timeout containment, both UI modes, and
+  disabled/not-ready/ineligible state review.
+- The complete local gate passes 454 tests in 76 suites, debug and release builds,
+  universal Store packaging, Foundation Models weak-link inspection, App Sandbox
+  capability audit, and source/whitespace lints. Full Hearth's process, restart,
+  and GPU-wedge recovery suites are included in that same run.
+- Remaining external gates are unchanged in kind: App Store distribution
+  certificates/profile, TestFlight receipt build, reviewer fixture, VoiceOver and
+  clean-account checks, and App Review itself. They must not be represented as
+  passed until performed on the distribution build.

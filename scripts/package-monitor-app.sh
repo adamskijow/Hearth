@@ -75,4 +75,20 @@ if [[ "${HEARTH_MONITOR_KEYCHAIN_SELF_TEST:-0}" == "1" ]]; then
   "$APP/Contents/MacOS/HearthMonitor" --self-test-keychain
 fi
 
+# A signed sandbox functional gate for the real public Foundation Models API.
+# Exit 20 means the machine/OS/account is not eligible and is only accepted when
+# the caller explicitly allows an availability-only build environment.
+if [[ "${HEARTH_MONITOR_APPLE_MODEL_SELF_TEST:-0}" == "1" ]]; then
+  set +e
+  "$APP/Contents/MacOS/HearthMonitor" --self-test-apple-model
+  APPLE_MODEL_RESULT=$?
+  set -e
+  if [[ "$APPLE_MODEL_RESULT" == "20" \
+     && "${HEARTH_MONITOR_ALLOW_UNAVAILABLE_APPLE_MODEL:-0}" == "1" ]]; then
+    echo "Apple model unavailable on this build host; signed availability path passed."
+  elif [[ "$APPLE_MODEL_RESULT" != "0" ]]; then
+    exit "$APPLE_MODEL_RESULT"
+  fi
+fi
+
 echo "Built sandboxed app: $APP"

@@ -131,6 +131,55 @@ public struct MonitorIncidentLedger: Codable, Sendable, Equatable {
         return .none
     }
 
+    /// Apple Foundation Models has no runner endpoint, but confirmed functional
+    /// timeouts belong in the same local, bounded incident history and alert
+    /// pipeline. Availability states such as disabled or downloading are kept as
+    /// actionable status, not mislabeled as wedges.
+    @discardableResult
+    public mutating func observeAppleModel(
+        snapshot: AppleModelHealthSnapshot,
+        at observedAt: Date? = nil
+    ) -> MonitorIncidentEvent {
+        let targetID = AppleModelHealthSnapshot.incidentTargetID
+        let targetName = "Apple Intelligence"
+        let now = observedAt ?? snapshot.functionalCheckedAt ?? snapshot.checkedAt ?? Date()
+        if snapshot.phase == .down {
+            let cause = snapshot.failure?.plainDescription
+                ?? "Apple Intelligence did not complete the functional check."
+            if let index = incidents.firstIndex(where: { $0.targetID == targetID && $0.endedAt == nil }) {
+                var changed = false
+                if incidents[index].cause != cause {
+                    incidents[index].cause = cause
+                    changed = true
+                }
+                if changed || now.timeIntervalSince(incidents[index].lastObservedAt) >= 60 {
+                    incidents[index].lastObservedAt = now
+                    changed = true
+                }
+                return changed ? .updated(incidents[index].id) : .none
+            }
+            let incident = MonitorIncident(
+                targetID: targetID,
+                targetName: targetName,
+                startedAt: snapshot.changedAt,
+                lastObservedAt: now,
+                cause: cause,
+                inferenceLevel: true)
+            incidents.insert(incident, at: 0)
+            prune()
+            return .opened(incident.id)
+        }
+
+        if snapshot.isFunctionallyServing,
+           let index = incidents.firstIndex(where: { $0.targetID == targetID && $0.endedAt == nil }) {
+            incidents[index].lastObservedAt = now
+            incidents[index].endedAt = now
+            incidents[index].resolution = .recovered
+            return .recovered(incidents[index].id)
+        }
+        return .none
+    }
+
     @discardableResult
     public mutating func stopMonitoring(targetID: UUID, at now: Date = Date()) -> MonitorIncidentEvent {
         guard let index = incidents.firstIndex(where: { $0.targetID == targetID && $0.endedAt == nil }) else {

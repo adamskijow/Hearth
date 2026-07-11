@@ -35,6 +35,11 @@ fi
 
 test -x "$APP/Contents/MacOS/HearthMonitor"
 lipo "$APP/Contents/MacOS/HearthMonitor" -verify_arch arm64 x86_64
+if ! otool -L "$APP/Contents/MacOS/HearthMonitor" \
+  | rg -q 'FoundationModels\.framework.*weak'; then
+  echo "Hearth Monitor boundary audit failed: shipping binary lacks weak-linked Foundation Models."
+  exit 1
+fi
 test "$(plutil -extract CFBundleIdentifier raw "$APP/Contents/Info.plist")" = \
   "com.hearth.HearthMonitor"
 test "$(plutil -extract LSApplicationCategoryType raw "$APP/Contents/Info.plist")" = \

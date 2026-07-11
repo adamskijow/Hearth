@@ -473,6 +473,10 @@ is active without weakening the Store boundary.
   3.2 empty-array failures in the test and CI harnesses. The scripts now select
   the matching installed Xcode toolchain when needed, isolate build caches, and
   avoid optional-array expansion while preserving hosted SwiftPM sandboxing.
+- Hosted Xcode 16.4 exposed missing `Sendable` annotations on its older
+  UserNotifications SDK. The notifier remains main-actor isolated and imports
+  that framework with `@preconcurrency`, preserving the same runtime behavior
+  while compiling against both the oldest hosted and current SDK metadata.
 - The staged release audit caught trailing whitespace in the new entitlement
   file and project-forbidden punctuation in previously untracked UI strings and
   docs. CI now checks working-tree, staged, and committed whitespace and includes

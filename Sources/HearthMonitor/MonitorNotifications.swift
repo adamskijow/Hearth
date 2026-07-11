@@ -2,7 +2,7 @@
 
 import Foundation
 import HearthMonitorCore
-import UserNotifications
+@preconcurrency import UserNotifications
 
 enum MonitorNotificationPermission: Sendable, Equatable {
     case notDetermined

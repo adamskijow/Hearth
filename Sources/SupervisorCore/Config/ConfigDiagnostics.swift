@@ -161,6 +161,25 @@ public enum ConfigDiagnostics {
                     issues.append(.init(.warning, "Named control token \"\(name)\" is the placeholder or shorter than 16 characters; every token is a full start/stop/restart key, so use a long, unguessable secret."))
                 }
             }
+            for (name, secret) in config.controlStatusTokens {
+                if name.lowercased() == "default" {
+                    issues.append(.init(.warning, "controlStatusTokens has an entry named \"default\", which is easily confused with the primary full-control token; use a caller name such as hearth-monitor."))
+                }
+                if config.controlTokens[name] != nil {
+                    issues.append(.init(.warning, "Token name \"\(name)\" exists in both controlTokens and controlStatusTokens; rename one so its authority is clear."))
+                }
+                if config.controlToken == secret || config.controlTokens.values.contains(secret) {
+                    issues.append(.init(.error, "Status-only token \"\(name)\" reuses a full-control secret, so it is not actually least privilege. Generate a different secret."))
+                }
+                if secret.localizedCaseInsensitiveContains("CHANGE-ME") || secret.count < 16 {
+                    issues.append(.init(.warning, "Status-only token \"\(name)\" is the placeholder or shorter than 16 characters; use a long, unguessable secret."))
+                }
+            }
+            for group in Dictionary(grouping: config.controlStatusTokens, by: { $0.value }).values
+                where group.count > 1 {
+                let names = group.map(\.key).sorted().joined(separator: "\", \"")
+                issues.append(.init(.warning, "Status-only tokens \"\(names)\" reuse one secret; generate a unique token per caller so either can be revoked independently."))
+            }
             if !isValidPort(config.controlPort) {
                 issues.append(.init(.error, "Control port \(config.controlPort) is out of range (1-65535)."))
             }

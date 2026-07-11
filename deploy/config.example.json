@@ -20,5 +20,6 @@
   "controlHost": "127.0.0.1",
   "controlPort": 11435,
   "controlToken": "CHANGE-ME-to-a-long-random-secret",
+  "controlStatusTokens": {},
   "runnerUser": "CHANGE-ME-to-your-mac-user"
 }

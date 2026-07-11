@@ -15,13 +15,23 @@ curl -X POST -H "Authorization: Bearer $TOKEN" http://HOST:11435/stop
 curl -X POST -H "Authorization: Bearer $TOKEN" http://HOST:11435/start
 ```
 
+For a dashboard or the sandboxed Hearth Monitor companion, create a named
+**Status-only token** in Hearth Settings (or add it under `controlStatusTokens`)
+and use that instead. It can read `/status` and `/metrics`, but `POST /start`,
+`/stop`, and `/restart` return HTTP 403. Do not reuse a full-control token's
+secret as a status token; `hearth doctor` flags that because it defeats the
+scope. Current `/status` responses include `credentialAccess` so clients can
+verify that the credential is actually `statusOnly`.
+
 `/status` returns a compact JSON document. The exact keys, for anything that
 parses it: `phase` (string), `busy` (bool: the runner answered 503, a full
 queue, on the last probe), `models` (array of strings), `uptimeSeconds`
 (number or absent), `restartCount` (number), `consecutiveFailures` (number),
 `lastRestartReason` (string or absent), `lastDownCategory` (string or absent;
 one of `wedged`, `crash`, `oom`, `signal`, `clean-exit`, `unknown`),
-`deepProbeConfigured` (bool), `thermal` (string or absent),
+`deepProbeConfigured` (bool), `mode` (`managed` or `attached`),
+`rebootOnWedge` (bool), `credentialAccess` (`control` or `statusOnly`),
+`thermal` (string or absent),
 `memoryUsedPercent` (number or absent), `runnerResidentBytes` (number or
 absent), and, when the metrics proxy is enabled, `tokensPerSecond` and
 `generationTokensTotal`. `recentEvents` is an optional bounded array of Hearth's
@@ -39,7 +49,8 @@ Opening the control URL in a browser (`http://HOST:11435/`) serves a small statu
 page for phones: paste your token once (it is stored in that browser only, never in
 the URL) and it polls `/status`, shows the phase, uptime, metrics, and recent
 activity, and provides Start, Stop, and Restart buttons. Stop and Restart require
-confirmation. The page itself is unauthenticated but reveals nothing; status and
+confirmation. With a status-only token the page shows status but hides those
+buttons. The page itself is unauthenticated but reveals nothing; status and
 control requests carry the token in their authorization header. Use Forget Token
 before leaving a shared phone or browser.
 
@@ -124,6 +135,11 @@ When the control endpoint is shared, give each caller its own named token
 then logged with the token's name, for example `Control: restart requested by
 token "phone-kitchen"`, so the event history shows who acted, not just what
 happened. The unnamed `controlToken` still works and is recorded as `default`.
+
+Read-only callers belong in `controlStatusTokens`. They are named and independently
+revocable like control tokens, but never authorize a process command. Hearth
+Monitor recommends a token named `hearth-monitor` and keeps it in that app's
+private Keychain group rather than its JSON settings.
 
 `hearth doctor` is a preflight check. It validates the config (port ranges, an
 unknown runner or mode, a control endpoint with no token, a control port that

@@ -17,6 +17,21 @@ set -uo pipefail
 
 cd "$(dirname "$0")/.."
 
+SWIFT_FLAGS=()
+if [ "$(xcode-select -p 2>/dev/null || true)" = "/Library/Developer/CommandLineTools" ] \
+   && [ -d "/Applications/Xcode.app/Contents/Developer" ]; then
+  export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
+  export CLANG_MODULE_CACHE_PATH="${TMPDIR:-/tmp}/hearth-ci-clang-cache"
+  export SWIFTPM_MODULECACHE_OVERRIDE="${TMPDIR:-/tmp}/hearth-ci-swiftpm-cache"
+  SWIFT_FLAGS+=(--disable-sandbox)
+elif [ "$(xcode-select -p 2>/dev/null || true)" = "/Library/Developer/CommandLineTools" ] \
+   && [ -d "/Library/Developer/CommandLineTools/SDKs/MacOSX15.4.sdk" ]; then
+  export SDKROOT="/Library/Developer/CommandLineTools/SDKs/MacOSX15.4.sdk"
+  export CLANG_MODULE_CACHE_PATH="${TMPDIR:-/tmp}/hearth-ci-clang-cache"
+  export SWIFTPM_MODULECACHE_OVERRIDE="${TMPDIR:-/tmp}/hearth-ci-swiftpm-cache"
+  SWIFT_FLAGS+=(--disable-sandbox)
+fi
+
 SMOKE=0; REAL=0
 for arg in "$@"; do
   case "$arg" in
@@ -35,19 +50,35 @@ bad()     { echo "  FAIL: $1"; FAIL=1; }
 die()     { echo "  FAIL: $1"; exit 1; }
 
 section "Build (debug)"
-swift build && ok || die "debug build failed"
+swift build "${SWIFT_FLAGS[@]}" && ok || die "debug build failed"
 
 section "Build (release)"
-swift build -c release && ok || die "release build failed"
+swift build "${SWIFT_FLAGS[@]}" -c release && ok || die "release build failed"
+
+section "Hearth Monitor App Store boundary"
+if ./scripts/package-monitor-app.sh && ./scripts/audit-monitor-boundary.sh; then
+  ok
+else
+  die "Hearth Monitor sandbox package or boundary audit failed"
+fi
 
 section "Unit tests"
 ./scripts/test.sh && ok || bad "unit tests failed"
+
+section "Lint: whitespace"
+if git diff --check \
+   && git diff --cached --check \
+   && git diff-tree --check --no-commit-id -r HEAD; then
+  ok
+else
+  bad "whitespace errors found"
+fi
 
 section "Lint: no em dashes (project rule: none in code, comments, docs, commits)"
 # Build the em dash byte sequence with printf so this script contains no literal
 # em dash to trip its own check. git grep returns 0 when it finds a match.
 EMDASH="$(printf '\xe2\x80\x94')"
-if MATCHES="$(git grep -nI -F -e "$EMDASH" -- . ':!assets/*.png' ':!assets/*.icns' 2>/dev/null)"; then
+if MATCHES="$(git grep --untracked -nI -F -e "$EMDASH" -- . ':!assets/*.png' ':!assets/*.icns' 2>/dev/null)"; then
   echo "$MATCHES"
   bad "em dash found"
 else

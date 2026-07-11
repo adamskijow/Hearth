@@ -92,6 +92,34 @@ struct ConfigDiagnosticsTests {
         #expect(errors(ok).isEmpty)
     }
 
+    @Test func statusTokensAreLeastPrivilegeAndUnique() {
+        let strong = "this-is-a-long-primary-token"
+        let reused = HearthConfig(
+            controlEnabled: true,
+            controlToken: strong,
+            controlTokens: ["phone": "shared-long-secret-value"],
+            controlStatusTokens: ["monitor": "shared-long-secret-value"])
+        #expect(errors(reused).contains(where: { $0.message.contains("not actually least privilege") }))
+
+        let clean = HearthConfig(
+            controlEnabled: true,
+            controlToken: strong,
+            controlStatusTokens: ["hearth-monitor": "separate-read-only-long-token"])
+        #expect(!messages(clean).contains(where: { $0.contains("Status-only token") }))
+        #expect(clean.namedStatusTokens.first?.access == .statusOnly)
+
+        let duplicatedReadOnly = HearthConfig(
+            controlEnabled: true,
+            controlToken: strong,
+            controlStatusTokens: [
+                "monitor-a": "duplicated-read-only-secret",
+                "monitor-b": "duplicated-read-only-secret",
+            ])
+        #expect(messages(duplicatedReadOnly).contains(where: {
+            $0.contains("revoked independently") && $0.contains("monitor-a") && $0.contains("monitor-b")
+        }))
+    }
+
     @Test func controlAndRunnerPortsMustDiffer() {
         let c = HearthConfig(port: 11434, controlEnabled: true, controlPort: 11434, controlToken: "secret")
         #expect(errors(c).contains { $0.message.contains("both 11434") })

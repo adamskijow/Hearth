@@ -112,6 +112,10 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     /// with the token's name. The unnamed `controlToken` still works and audits
     /// as "default". Any of these also authorizes.
     public var controlTokens: [String: String]
+    /// Named read-only bearer tokens. They authorize `/status` and `/metrics`
+    /// but receive HTTP 403 for start, stop, or restart. Intended for dashboards
+    /// and the sandboxed Hearth Monitor companion.
+    public var controlStatusTokens: [String: String]
 
     // Opt-in tokens-per-second tap: a transparent relay in front of the runner.
     // Clients point at metricsProxyPort instead of the runner port; bytes pass
@@ -205,6 +209,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 controlPort: Int = 11435,
                 controlToken: String? = nil,
                 controlTokens: [String: String] = [:],
+                controlStatusTokens: [String: String] = [:],
                 metricsProxyEnabled: Bool = false,
                 metricsProxyPort: Int = 11436,
                 drainSeconds: Double = 0,
@@ -263,6 +268,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.controlPort = controlPort
         self.controlToken = controlToken
         self.controlTokens = controlTokens
+        self.controlStatusTokens = controlStatusTokens
         self.metricsProxyEnabled = metricsProxyEnabled
         self.metricsProxyPort = metricsProxyPort
         self.drainSeconds = drainSeconds
@@ -346,6 +352,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         controlPort = try value(.controlPort, defaults.controlPort)
         controlToken = try c.decodeIfPresent(String.self, forKey: .controlToken)
         controlTokens = try value(.controlTokens, defaults.controlTokens)
+        controlStatusTokens = try value(.controlStatusTokens, defaults.controlStatusTokens)
         metricsProxyEnabled = try value(.metricsProxyEnabled, defaults.metricsProxyEnabled)
         metricsProxyPort = try value(.metricsProxyPort, defaults.metricsProxyPort)
         drainSeconds = try value(.drainSeconds, defaults.drainSeconds)
@@ -443,6 +450,17 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         controlTokens
             .sorted { $0.key < $1.key }
             .map { ControlToken(name: $0.key, secret: $0.value) }
+    }
+
+    /// Stable, sorted read-only credentials for status/metrics clients.
+    public var namedStatusTokens: [ControlToken] {
+        controlStatusTokens
+            .sorted { $0.key < $1.key }
+            .map { ControlToken(name: $0.key, secret: $0.value, access: .statusOnly) }
+    }
+
+    public var controlEndpointTokens: [ControlToken] {
+        namedControlTokens + namedStatusTokens
     }
 
     /// The runner kind these settings select, resolving the `runner` aliases once.

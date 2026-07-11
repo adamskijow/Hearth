@@ -19,6 +19,7 @@ struct ConfigReloadImpactTests {
         changed.controlEnabled = true
         changed.controlToken = "a-long-random-control-token"
         changed.controlTokens = ["phone": "another-long-random-token"]
+        changed.controlStatusTokens = ["hearth-monitor": "read-only-long-random-token"]
         #expect(ConfigReloadImpact.between(original, changed) == .live)
     }
 

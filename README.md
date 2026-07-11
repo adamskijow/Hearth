@@ -44,6 +44,25 @@ and throws away the Metal GPU. The full story, with a live GPU-crash recovery, i
 
 ## Getting started
 
+Hearth now has two deliberately separate Mac products:
+
+- **Hearth** is the full recovery supervisor documented on this page. It starts
+  and restarts runners, keeps the serving Mac awake, and can escalate a persistent
+  GPU/driver wedge to a reboot when configured. Those powers require a Developer
+  ID build outside App Sandbox.
+- **[Hearth Monitor](docs/hearth-monitor.md)** is the sandboxed, universal
+  menu-bar companion for the Mac App Store. It watches existing local or remote
+  runners, keeps inference-aware history and alerts, and never controls a process.
+  Its optional read-only connection can show whether a separately installed full
+  Hearth is providing managed recovery. Full Hearth remains intact and Monitor
+  works without it.
+
+The same one-token probe catches an inference/GPU wedge in both products. Full
+Hearth can recover it; Monitor reports it. Choose full Hearth for unattended
+recovery and Monitor for attached observation from any Mac.
+
+### Full Hearth
+
 If you already run Ollama on this Mac:
 
 ```
@@ -79,11 +98,16 @@ with a full example, is in the [configuration reference](docs/configuration.md).
 
 ## Security
 
-Hearth runs unsandboxed (supervising another process is exactly what the App Sandbox
-forbids) as a Developer ID signed and notarized build, and sends only short status
-text to notifiers, never prompts or model content. The runner stays on `127.0.0.1`
-by default; do not expose it raw, since it has no authentication of its own. Exposure
-and reverse-proxy setup are in the [reverse-proxy guide](docs/reverse-proxy.md).
+Full Hearth runs unsandboxed (supervising another process is exactly what the App
+Sandbox forbids) as a Developer ID signed and notarized build, and sends only
+short status text to notifiers, never prompts or model content. The separate
+Hearth Monitor has only App Sandbox and outbound network-client entitlements,
+stores an optional status credential in Keychain, and contains no analytics or
+tracking. See the [privacy policy](PRIVACY.md).
+
+The runner stays on `127.0.0.1` by default; do not expose it raw, since it has no
+authentication of its own. Exposure and reverse-proxy setup are in the
+[reverse-proxy guide](docs/reverse-proxy.md).
 
 ## Docs and links
 
@@ -93,6 +117,7 @@ and reverse-proxy setup are in the [reverse-proxy guide](docs/reverse-proxy.md).
 - **[Configuration](docs/configuration.md)**: every config key and default
 - **[Ollama setup](docs/ollama.md)**, **[Remote control](docs/remote-control.md)**, **[Running headless](docs/running-headless.md)**
 - **[Integrating](docs/integrating.md)**, **[Reverse proxy](docs/reverse-proxy.md)**, **[Stability](docs/stability.md)**, **[Limitations](docs/limitations.md)**, **[Development](docs/development.md)**
+- **[Hearth Monitor guide](docs/hearth-monitor.md)** and **[Mac App Store release checklist](docs/hearth-monitor-app-store.md)**
 
 Contributions are welcome: run `make test` before sending a change, and see the
 [development guide](docs/development.md). Released under the MIT License; see

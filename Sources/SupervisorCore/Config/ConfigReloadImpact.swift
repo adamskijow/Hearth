@@ -43,5 +43,6 @@ private extension HearthConfig {
         controlPort = other.controlPort
         controlToken = other.controlToken
         controlTokens = other.controlTokens
+        controlStatusTokens = other.controlStatusTokens
     }
 }

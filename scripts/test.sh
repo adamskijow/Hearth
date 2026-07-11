@@ -14,7 +14,24 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-DEV="$(xcode-select -p)"
+SELECTED_DEV="$(xcode-select -p)"
+SWIFT_ARGS=(--disable-sandbox)
+
+# A partial Command Line Tools update can leave a 6.3.3 compiler beside SDK
+# interfaces emitted by 6.3.2. Prefer the matching full Xcode installation when
+# that split is detected by layout, and isolate its caches from both the CLT
+# build and managed automation sandboxes. Normal Xcode-selected development and
+# hosted CI keep their configured toolchain and .build directory.
+if [ "$SELECTED_DEV" = "/Library/Developer/CommandLineTools" ] \
+   && [ -d "/Applications/Xcode.app/Contents/Developer" ]; then
+  export DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
+  export CLANG_MODULE_CACHE_PATH="${TMPDIR:-/tmp}/hearth-test-clang-cache"
+  export SWIFTPM_MODULECACHE_OVERRIDE="${TMPDIR:-/tmp}/hearth-test-swiftpm-cache"
+  SWIFT_ARGS+=(--scratch-path "${TMPDIR:-/tmp}/hearth-xcode-tests")
+  DEV="$DEVELOPER_DIR"
+else
+  DEV="$SELECTED_DEV"
+fi
 
 # Command Line Tools layout.
 FWDIR="$DEV/Library/Developer/Frameworks"
@@ -32,7 +49,7 @@ if [ ! -d "$FWDIR/Testing.framework" ]; then
   exec swift test "$@"
 fi
 
-exec swift test --disable-xctest --enable-swift-testing \
+exec swift test "${SWIFT_ARGS[@]}" --disable-xctest --enable-swift-testing \
   -Xswiftc -F -Xswiftc "$FWDIR" \
   -Xlinker -F -Xlinker "$FWDIR" \
   -Xlinker -rpath -Xlinker "$FWDIR" \

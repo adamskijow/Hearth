@@ -78,8 +78,10 @@ public enum ControlStatusPage {
           if (s.memoryUsedPercent != null) h += row('memory', s.memoryUsedPercent + '%');
           if (s.thermal) h += row('thermal', s.thermal);
           if (s.deepProbeConfigured) h += row('deep probe', 'on');
+          if (s.credentialAccess === 'statusOnly') h += row('access', 'status only');
           document.getElementById('status').innerHTML = h;
-          document.getElementById('actions').hidden = false;
+          const canControl = s.credentialAccess !== 'statusOnly';
+          document.getElementById('actions').hidden = !canControl;
           document.getElementById('start').disabled = s.phase !== 'stopped';
           document.getElementById('stop').disabled = s.phase === 'stopped';
           document.getElementById('restart').disabled = s.phase === 'stopped';

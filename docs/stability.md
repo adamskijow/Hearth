@@ -37,19 +37,20 @@ call the control API's `/status`, not parse CLI output.
 
 ## Control API
 
-`GET /status` field names are stable and additive-only: `phase`, `runner`,
+`GET /status` field names are stable and additive-only: `phase`, `runner`, `mode`,
 `busy`, `models`, `uptimeSeconds`, `restartCount`, `consecutiveFailures`,
 `lastRestartReason`, `lastDownCategory`, `lastRestartCategory`,
 `oversizedModels`, `deepProbeConfigured`, `thermal`, `memoryUsedPercent`,
 `runnerResidentBytes`, `tokensPerSecond`, `generationTokensTotal`,
-`recentEvents`. Optional fields may be absent (a field whose source is
+`recentEvents`, `rebootOnWedge`, `credentialAccess`. Optional fields may be absent (a field whose source is
 off, such as throughput without the metrics proxy); present fields keep their
 names and types. New fields may be added in minor releases, so consumers should
 ignore keys they do not know.
 
 The routes (`GET /healthz`, `GET /status`, `GET /metrics`, `POST /start`,
 `POST /stop`, `POST /restart`), their authentication (bearer token, all tokens
-checked in constant time), and their status codes are stable.
+checked in constant time), and their status codes are stable. A status-only
+credential may read `/status` and `/metrics`; process commands return 403.
 
 Prometheus metric names (the `hearth_` family) and their label names are stable
 and additive-only.

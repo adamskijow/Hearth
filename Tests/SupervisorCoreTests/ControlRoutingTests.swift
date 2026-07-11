@@ -13,6 +13,43 @@ struct ControlRoutingTests {
 
     private func bearer(_ value: String) -> String { "Bearer \(value)" }
 
+    @Test func statusOnlyTokenReadsButCannotControl() {
+        let readOnly = ControlToken(
+            name: "hearth-monitor",
+            secret: "read-only-secret",
+            access: .statusOnly)
+        let status = ControlRouting.handle(
+            method: "GET", path: "/status",
+            authorization: bearer(readOnly.secret),
+            token: token, namedTokens: [readOnly],
+            state: state, now: now)
+        guard case .status(let data) = status else {
+            Issue.record("status-only credential should read status")
+            return
+        }
+        let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        #expect(object?["credentialAccess"] as? String == "statusOnly")
+        #expect(ControlRouting.earlyOutcome(
+            method: "POST", path: "/restart",
+            authorization: bearer(readOnly.secret),
+            token: token, namedTokens: [readOnly]) == .forbidden)
+        #expect(ControlRouting.authorization(
+            bearer(readOnly.secret), token: token, namedTokens: [readOnly])
+            == ControlAuthorization(name: "hearth-monitor", access: .statusOnly))
+    }
+
+    @Test func duplicateSecretNeverDowngradesFullControl() {
+        let duplicate = "same-secret"
+        let tokens = [
+            ControlToken(name: "full", secret: duplicate),
+            ControlToken(name: "read", secret: duplicate, access: .statusOnly),
+        ]
+        #expect(ControlRouting.earlyOutcome(
+            method: "POST", path: "/restart",
+            authorization: bearer(duplicate), token: token,
+            namedTokens: tokens) == .perform(.restart))
+    }
+
     @Test func routesKnownMethodsAndPaths() {
         #expect(ControlRouting.command(method: "GET", path: "/status") == .status)
         // GET / is the browser status page, handled before command(), not a command.
@@ -46,6 +83,7 @@ struct ControlRoutingTests {
         #expect(body.contains("esc(v)"))
         #expect(body.contains("id=\"restart\""))
         #expect(body.contains("fetch('/' + name"))
+        #expect(body.contains("credentialAccess !== 'statusOnly'"))
         #expect(body.contains("confirm("))
         // /status without a token is still rejected.
         let status = ControlRouting.handle(
@@ -69,19 +107,24 @@ struct ControlRoutingTests {
         let tokens = TokenMetricsStore.Snapshot(
             generationRequests: 1, generationTokensTotal: 10, lastTokensPerSecond: 5)
         let data = ControlRouting.statusJSON(
-            full, now: now, runnerKind: "ollama", metrics: metrics, tokens: tokens,
-            recentEvents: ["2026-07-09 12:00:00  Recovered"])
+            full, now: now, runnerKind: "ollama", mode: "managed", rebootOnWedge: true,
+            metrics: metrics, tokens: tokens,
+            recentEvents: ["2026-07-09 12:00:00  Recovered"],
+            credentialAccess: .statusOnly)
         let object = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         #expect(Set(object.keys) == [
-            "phase", "runner", "busy", "models", "uptimeSeconds", "restartCount",
+            "phase", "runner", "mode", "rebootOnWedge", "busy", "models", "uptimeSeconds", "restartCount",
             "consecutiveFailures", "lastRestartReason", "lastDownCategory",
             "lastRestartCategory", "oversizedModels", "deepProbeConfigured", "thermal",
             "memoryUsedPercent", "runnerResidentBytes", "tokensPerSecond", "generationTokensTotal",
-            "recentEvents",
+            "recentEvents", "credentialAccess",
         ])
         #expect(object["runner"] as? String == "ollama")
+        #expect(object["mode"] as? String == "managed")
+        #expect(object["rebootOnWedge"] as? Bool == true)
         #expect(object["lastRestartCategory"] as? String == "crash")
         #expect(object["oversizedModels"] as? [String] == ["big:70b"])
+        #expect(object["credentialAccess"] as? String == "statusOnly")
         // Absent, not empty, when no model is flagged.
         let clean = ControlRouting.statusJSON(SupervisorState(phase: .healthy), now: now, runnerKind: "ollama")
         let cleanObject = try #require(try JSONSerialization.jsonObject(with: clean) as? [String: Any])

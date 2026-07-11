@@ -134,6 +134,7 @@ See [ollama.md](ollama.md) for the full Ollama setup guide, including deep probe
 | `controlPort` | int | `11435` | Control endpoint port. Must differ from `port`. |
 | `controlToken` | string or null | `null` | Required bearer token on every control request. The endpoint refuses to start without one. Audits as `default`. |
 | `controlTokens` | object | `{}` | Additional named control tokens (`{"phone-kitchen": "a-long-secret", "laptop": "another-secret"}`), so a shared endpoint records whose request each start/stop/restart was: the action is logged to the event log (`hearth events`) with the token's name. Any of these also authorizes. Each is a full control key, so use long, unguessable secrets. |
+| `controlStatusTokens` | object | `{}` | Named least-privilege tokens for dashboards and Hearth Monitor (`{"hearth-monitor": "a-different-long-secret"}`). They authorize `GET /status` and `GET /metrics`; start, stop, and restart return HTTP 403. Never reuse a full-control secret here. |
 
 See [reverse-proxy.md](reverse-proxy.md) for exposing the runner or the control
 endpoint with TLS.

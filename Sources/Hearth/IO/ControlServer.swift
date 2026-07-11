@@ -25,6 +25,8 @@ final class ControlServer: @unchecked Sendable {
     private let token: String
     private let namedTokens: [ControlToken]
     private let runnerKind: String
+    private let mode: String
+    private let rebootOnWedge: Bool
     private let coordinator: SupervisionCoordinator
     private let metrics: MetricsProviding?
     private let tokenMetrics: TokenMetricsStore?
@@ -41,6 +43,8 @@ final class ControlServer: @unchecked Sendable {
     init?(host: String, port: Int, token: String, coordinator: SupervisionCoordinator,
           namedTokens: [ControlToken] = [],
           runnerKind: String = "unknown",
+          mode: String = "managed",
+          rebootOnWedge: Bool = false,
           metrics: MetricsProviding? = nil, tokenMetrics: TokenMetricsStore? = nil,
           onControlAction: (@Sendable (ControlCommand, String) -> Void)? = nil) {
         guard !token.isEmpty,
@@ -66,6 +70,8 @@ final class ControlServer: @unchecked Sendable {
         self.token = token
         self.namedTokens = namedTokens
         self.runnerKind = runnerKind
+        self.mode = mode
+        self.rebootOnWedge = rebootOnWedge
         self.coordinator = coordinator
         self.metrics = metrics
         self.tokenMetrics = tokenMetrics
@@ -118,6 +124,8 @@ final class ControlServer: @unchecked Sendable {
         let token = self.token
         let namedTokens = self.namedTokens
         let runnerKind = self.runnerKind
+        let mode = self.mode
+        let rebootOnWedge = self.rebootOnWedge
         let coordinator = self.coordinator
         let metrics = self.metrics
         Task { [weak self] in
@@ -141,6 +149,8 @@ final class ControlServer: @unchecked Sendable {
                     state: state,
                     now: Date(),
                     runnerKind: runnerKind,
+                    mode: mode,
+                    rebootOnWedge: rebootOnWedge,
                     metrics: metrics?.sample(),
                     tokens: self?.tokenMetrics?.snapshot(),
                     recentEvents: EventLogStore.recent(10)
@@ -154,6 +164,9 @@ final class ControlServer: @unchecked Sendable {
             case .unauthorized:
                 status = 401
                 body = Self.errorJSON("unauthorized")
+            case .forbidden:
+                status = 403
+                body = Self.errorJSON("status-only token cannot perform commands")
             case .notFound:
                 status = 404
                 body = Self.errorJSON("not found")
@@ -213,7 +226,9 @@ final class ControlServer: @unchecked Sendable {
         case 200: return "OK"
         case 202: return "Accepted"
         case 401: return "Unauthorized"
+        case 403: return "Forbidden"
         case 404: return "Not Found"
+        case 503: return "Service Unavailable"
         default: return "OK"
         }
     }

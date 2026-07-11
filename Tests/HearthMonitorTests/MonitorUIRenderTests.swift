@@ -18,7 +18,7 @@ struct MonitorUIRenderTests {
         let view = MonitorTargetEditorView(model: model, onSave: { _ in }, onCancel: {})
             .frame(width: 620, height: 720)
             .background(Color(nsColor: .windowBackgroundColor))
-        let image = try render(view, size: NSSize(width: 620, height: 720))
+        let image = try renderLight(view, size: NSSize(width: 620, height: 720))
         #expect(image.size.width == 620)
         #expect(image.size.height == 720)
         try writeIfRequested(image, suffix: "onboarding")
@@ -35,36 +35,40 @@ struct MonitorUIRenderTests {
     @Test("Settings renders both configured and empty states")
     func settingsRenders() throws {
         let target = MonitorTarget(name: "Local GPU", probeModel: "qwen:small")
-        let model = MonitorPreferencesModel(
+        let configuredModel = MonitorPreferencesModel(
             settings: MonitorSettings(targets: [target]),
             problem: nil)
-        let view = MonitorPreferencesView(
-            model: model,
-            onSelect: { _ in },
-            onAdd: {},
-            onEdit: {},
-            onRemove: {},
-            onSetAppleEnabled: { _ in },
-            onSetFunctionalChecks: { _ in },
-            onSetAppleInterval: { _ in },
-            onSetAlerts: { _ in },
-            onResumeAlerts: {},
-            onSetLogin: { _ in },
-            onDone: {})
+        let configured = preferencesView(configuredModel)
             .frame(width: 640, height: 720)
             .background(Color(nsColor: .windowBackgroundColor))
-        let image = try render(view, size: NSSize(width: 640, height: 720))
-        #expect(image.size.width == 640)
-        #expect(image.size.height == 720)
-        try writeIfRequested(image, suffix: "settings")
+        let configuredImage = try renderLight(configured, size: NSSize(width: 640, height: 720))
+        #expect(configuredImage.size == NSSize(width: 640, height: 720))
+        try writeIfRequested(configuredImage, suffix: "settings")
+
+        let emptyModel = MonitorPreferencesModel(settings: MonitorSettings(), problem: nil)
+        let empty = preferencesView(emptyModel)
+            .frame(width: 640, height: 720)
+            .background(Color(nsColor: .windowBackgroundColor))
+        let emptyImage = try renderLight(empty, size: NSSize(width: 640, height: 720))
+        #expect(emptyImage.size == NSSize(width: 640, height: 720))
+        #expect(try lightCaptureDefectFraction(emptyImage) < 0.20)
+        try writeIfRequested(emptyImage, suffix: "settings-empty")
+
+        let dark = preferencesView(configuredModel)
+            .frame(width: 640, height: 720)
+            .background(Color(nsColor: .windowBackgroundColor))
+            .preferredColorScheme(.dark)
+        let darkImage = try render(dark, size: NSSize(width: 640, height: 720))
+        #expect(darkImage.size == NSSize(width: 640, height: 720))
+        try writeIfRequested(darkImage, suffix: "settings-dark")
     }
 
     @Test("Two-mode welcome and Apple health details render")
-    func appleModelWindowsRender() throws {
+    func appleModelWindowsRender() async throws {
         let welcome = MonitorWelcomeView(onContinue: { _ in nil }, onAddRunner: { _ in nil })
             .frame(width: 640, height: 650)
             .background(Color(nsColor: .windowBackgroundColor))
-        let welcomeImage = try render(welcome, size: NSSize(width: 640, height: 650))
+        let welcomeImage = try renderLight(welcome, size: NSSize(width: 640, height: 650))
         #expect(welcomeImage.size == NSSize(width: 640, height: 650))
         try writeIfRequested(welcomeImage, suffix: "welcome-two-mode")
         let darkWelcome = MonitorWelcomeView(
@@ -81,9 +85,9 @@ struct MonitorUIRenderTests {
             onAddRunner: { _ in nil })
             .frame(width: 640, height: 650)
             .background(Color(nsColor: .windowBackgroundColor))
-        let runnerOnlyImage = try render(runnerOnlyWelcome, size: NSSize(width: 640, height: 650))
+        let runnerOnlyImage = try renderLight(runnerOnlyWelcome, size: NSSize(width: 640, height: 650))
         #expect(runnerOnlyImage.size == NSSize(width: 640, height: 650))
-        #expect(try darkPixelFraction(runnerOnlyImage) < 0.20)
+        #expect(try lightCaptureDefectFraction(runnerOnlyImage) < 0.20)
         try writeIfRequested(runnerOnlyImage, suffix: "welcome-runner-only")
 
         var snapshot = AppleModelHealthSnapshot()
@@ -106,9 +110,23 @@ struct MonitorUIRenderTests {
             onDone: {})
             .frame(width: 640, height: 700)
             .background(Color(nsColor: .windowBackgroundColor))
-        let detailsImage = try render(details, size: NSSize(width: 640, height: 700))
+        let detailsImage = try renderLight(details, size: NSSize(width: 640, height: 700))
         #expect(detailsImage.size == NSSize(width: 640, height: 700))
         try writeIfRequested(detailsImage, suffix: "apple-intelligence-details")
+        let narrowDetails = AppleModelDetailsView(
+            model: AppleModelDetailsModel(
+                snapshot: snapshot,
+                settings: AppleModelMonitorSettings(functionalChecksEnabled: true)),
+            onCopy: {},
+            onCheck: {},
+            onOpenLab: {},
+            onOpenSettings: {},
+            onDone: {})
+            .frame(width: 560, height: 700)
+            .background(Color(nsColor: .windowBackgroundColor))
+        let narrowDetailsImage = try renderLight(narrowDetails, size: NSSize(width: 560, height: 700))
+        #expect(narrowDetailsImage.size == NSSize(width: 560, height: 700))
+        try writeIfRequested(narrowDetailsImage, suffix: "apple-intelligence-details-narrow")
         let darkDetails = AppleModelDetailsView(
             model: AppleModelDetailsModel(
                 snapshot: snapshot,
@@ -131,16 +149,78 @@ struct MonitorUIRenderTests {
         let lab = AppleModelLabView(model: labModel, onCopy: {}, onDone: {})
             .frame(width: 720, height: 780)
             .background(Color(nsColor: .windowBackgroundColor))
-        var labImage = try render(lab, size: NSSize(width: 720, height: 780))
-        if try darkPixelFraction(labImage) >= 0.20 {
-            // TextEditor-backed SwiftUI views can occasionally snapshot before
-            // AppKit finishes its first layout pass on a headless test host.
-            // Retry once, then keep the dark-area assertion as the real gate.
-            labImage = try render(lab, size: NSSize(width: 720, height: 780))
-        }
+        let labImage = try renderLight(lab, size: NSSize(width: 720, height: 780))
         #expect(labImage.size == NSSize(width: 720, height: 780))
-        #expect(try darkPixelFraction(labImage) < 0.20)
+        #expect(try lightCaptureDefectFraction(labImage) < 0.20)
         try writeIfRequested(labImage, suffix: "apple-intelligence-model-lab")
+
+        let darkLab = AppleModelLabView(model: labModel, onCopy: {}, onDone: {})
+            .frame(width: 720, height: 780)
+            .background(Color(nsColor: .windowBackgroundColor))
+            .preferredColorScheme(.dark)
+        let darkLabImage = try render(darkLab, size: NSSize(width: 720, height: 780))
+        #expect(darkLabImage.size == NSSize(width: 720, height: 780))
+        try writeIfRequested(darkLabImage, suffix: "apple-intelligence-model-lab-dark")
+
+        let unavailableModel = AppleModelLabModel(
+            runner: RenderModelLabRunner(),
+            availability: .unavailable(.appleIntelligenceNotEnabled))
+        let unavailableLab = AppleModelLabView(model: unavailableModel, onCopy: {}, onDone: {})
+            .frame(width: 720, height: 780)
+            .background(Color(nsColor: .windowBackgroundColor))
+        let unavailableImage = try renderLight(unavailableLab, size: NSSize(width: 720, height: 780))
+        #expect(unavailableImage.size == NSSize(width: 720, height: 780))
+        try writeIfRequested(unavailableImage, suffix: "apple-intelligence-model-lab-unavailable")
+
+        let completedModel = AppleModelLabModel(
+            runner: RenderModelLabRunner(), availability: .available)
+        completedModel.run()
+        await waitForIdle(completedModel)
+        let completedLab = AppleModelLabView(model: completedModel, onCopy: {}, onDone: {})
+            .frame(width: 720, height: 780)
+            .background(Color(nsColor: .windowBackgroundColor))
+        let completedImage = try renderLight(completedLab, size: NSSize(width: 720, height: 780))
+        #expect(completedImage.size == NSSize(width: 720, height: 780))
+        try writeIfRequested(completedImage, suffix: "apple-intelligence-model-lab-completed")
+
+        let failedModel = AppleModelLabModel(
+            runner: RenderModelLabRunner(result: .failed("The private model could not finish this request.")),
+            availability: .available)
+        failedModel.run()
+        await waitForIdle(failedModel)
+        let failedLab = AppleModelLabView(model: failedModel, onCopy: {}, onDone: {})
+            .frame(width: 720, height: 780)
+            .background(Color(nsColor: .windowBackgroundColor))
+        let failedImage = try renderLight(failedLab, size: NSSize(width: 720, height: 780))
+        #expect(failedImage.size == NSSize(width: 720, height: 780))
+        try writeIfRequested(failedImage, suffix: "apple-intelligence-model-lab-failed")
+
+        let controlledRunner = RenderControlledModelLabRunner()
+        let runningModel = AppleModelLabModel(runner: controlledRunner, availability: .available)
+        runningModel.run()
+        let runningLab = AppleModelLabView(model: runningModel, onCopy: {}, onDone: {})
+            .frame(width: 720, height: 780)
+            .background(Color(nsColor: .windowBackgroundColor))
+        let runningImage = try renderLight(runningLab, size: NSSize(width: 720, height: 780))
+        #expect(runningImage.size == NSSize(width: 720, height: 780))
+        try writeIfRequested(runningImage, suffix: "apple-intelligence-model-lab-running")
+
+        runningModel.stop()
+        let stoppingLab = AppleModelLabView(model: runningModel, onCopy: {}, onDone: {})
+            .frame(width: 720, height: 780)
+            .background(Color(nsColor: .windowBackgroundColor))
+        let stoppingImage = try renderLight(stoppingLab, size: NSSize(width: 720, height: 780))
+        #expect(stoppingImage.size == NSSize(width: 720, height: 780))
+        try writeIfRequested(stoppingImage, suffix: "apple-intelligence-model-lab-stopping")
+        await controlledRunner.finish(.stopped)
+        await waitForIdle(runningModel)
+
+        let stoppedLab = AppleModelLabView(model: runningModel, onCopy: {}, onDone: {})
+            .frame(width: 720, height: 780)
+            .background(Color(nsColor: .windowBackgroundColor))
+        let stoppedImage = try renderLight(stoppedLab, size: NSSize(width: 720, height: 780))
+        #expect(stoppedImage.size == NSSize(width: 720, height: 780))
+        try writeIfRequested(stoppedImage, suffix: "apple-intelligence-model-lab-stopped")
     }
 
     @Test("History and live details render at release sizes")
@@ -164,9 +244,21 @@ struct MonitorUIRenderTests {
             onDone: {})
             .frame(width: 680, height: 560)
             .background(Color(nsColor: .windowBackgroundColor))
-        let historyImage = try render(history, size: NSSize(width: 680, height: 560))
+        let historyImage = try renderLight(history, size: NSSize(width: 680, height: 560))
         #expect(historyImage.size == NSSize(width: 680, height: 560))
         try writeIfRequested(historyImage, suffix: "history")
+        let darkHistory = MonitorHistoryView(
+            model: historyModel,
+            onCopy: {},
+            onClearResolved: {},
+            onReset: {},
+            onDone: {})
+            .frame(width: 680, height: 560)
+            .background(Color(nsColor: .windowBackgroundColor))
+            .preferredColorScheme(.dark)
+        let darkHistoryImage = try render(darkHistory, size: NSSize(width: 680, height: 560))
+        #expect(darkHistoryImage.size == NSSize(width: 680, height: 560))
+        try writeIfRequested(darkHistoryImage, suffix: "history-dark")
 
         let fleet = MonitorFleetCoordinator(
             http: MonitorFakeHTTPClient(default: .ok(Data())),
@@ -189,9 +281,25 @@ struct MonitorUIRenderTests {
             onDone: {})
             .frame(width: 780, height: 560)
             .background(Color(nsColor: .windowBackgroundColor))
-        let detailsImage = try render(diagnostics, size: NSSize(width: 780, height: 560))
+        let detailsImage = try renderLight(diagnostics, size: NSSize(width: 780, height: 560))
         #expect(detailsImage.size == NSSize(width: 780, height: 560))
         try writeIfRequested(detailsImage, suffix: "details")
+        let darkDiagnostics = MonitorDiagnosticsView(
+            model: MonitorDiagnosticsModel(selectedID: target.id),
+            fleet: fleet,
+            fullHearthBridge: bridge,
+            onCheck: { _ in },
+            onCopy: { _ in },
+            onRefreshFullHearth: { _ in },
+            onConnectFullHearth: { _ in },
+            onOpenSettings: {},
+            onDone: {})
+            .frame(width: 780, height: 560)
+            .background(Color(nsColor: .windowBackgroundColor))
+            .preferredColorScheme(.dark)
+        let darkDetailsImage = try render(darkDiagnostics, size: NSSize(width: 780, height: 560))
+        #expect(darkDetailsImage.size == NSSize(width: 780, height: 560))
+        try writeIfRequested(darkDetailsImage, suffix: "details-dark")
     }
 
     @Test("Full Hearth pairing renders without exposing a plain token control")
@@ -208,9 +316,46 @@ struct MonitorUIRenderTests {
             onCancel: {})
             .frame(width: 600, height: 650)
             .background(Color(nsColor: .windowBackgroundColor))
-        let image = try render(view, size: NSSize(width: 600, height: 650))
+        let image = try renderLight(view, size: NSSize(width: 600, height: 650))
         #expect(image.size == NSSize(width: 600, height: 650))
         try writeIfRequested(image, suffix: "full-hearth-pairing")
+
+        let darkView = FullHearthPairingView(
+            model: model,
+            hasExistingPairing: false,
+            onSave: {},
+            onDisconnect: {},
+            onCancel: {})
+            .frame(width: 600, height: 650)
+            .background(Color(nsColor: .windowBackgroundColor))
+            .preferredColorScheme(.dark)
+        let darkImage = try render(darkView, size: NSSize(width: 600, height: 650))
+        #expect(darkImage.size == NSSize(width: 600, height: 650))
+        try writeIfRequested(darkImage, suffix: "full-hearth-pairing-dark")
+    }
+
+    private func preferencesView(_ model: MonitorPreferencesModel) -> some View {
+        MonitorPreferencesView(
+            model: model,
+            onSelect: { _ in },
+            onAdd: {},
+            onEdit: {},
+            onRemove: {},
+            onSetAppleEnabled: { _ in },
+            onSetFunctionalChecks: { _ in },
+            onSetAppleInterval: { _ in },
+            onSetAlerts: { _ in },
+            onResumeAlerts: {},
+            onSetLogin: { _ in },
+            onDone: {})
+    }
+
+    private func waitForIdle(_ model: AppleModelLabModel) async {
+        for _ in 0..<200 {
+            if model.phase == .idle { return }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(model.phase == .idle)
     }
 
     private func writeIfRequested(_ image: NSImage, suffix: String) throws {
@@ -225,13 +370,29 @@ struct MonitorUIRenderTests {
         try png.write(to: url, options: .atomic)
     }
 
-    /// A prior offscreen AppKit capture emitted giant black rectangles while the
-    /// size-only smoke test stayed green. Sample the light onboarding render so
-    /// that failure shape becomes mechanically visible without snapshot tooling.
-    private func darkPixelFraction(_ image: NSImage) throws -> Double {
+    /// Headless AppKit can occasionally capture before embedded controls finish
+    /// their first layout. Keep the most detailed of three settled captures, then
+    /// let the defect assertions fail if every candidate remains incomplete.
+    private func renderLight<Content: View>(_ view: Content, size: NSSize) throws -> NSImage {
+        var bestImage = try render(view, size: size)
+        var bestDetail = try lightCaptureDetailScore(bestImage)
+        for _ in 0..<2 {
+            let candidate = try render(view, size: size)
+            let detail = try lightCaptureDetailScore(candidate)
+            if detail > bestDetail {
+                bestImage = candidate
+                bestDetail = detail
+            }
+        }
+        #expect(try lightCaptureDefectFraction(bestImage) < 0.20)
+        #expect(bestDetail > 0.005)
+        return bestImage
+    }
+
+    private func lightCaptureDetailScore(_ image: NSImage) throws -> Double {
         let tiff = try #require(image.tiffRepresentation)
         let bitmap = try #require(NSBitmapImageRep(data: tiff))
-        var dark = 0
+        var detail = 0.0
         var sampled = 0
         for y in stride(from: 0, to: bitmap.pixelsHigh, by: 4) {
             for x in stride(from: 0, to: bitmap.pixelsWide, by: 4) {
@@ -239,15 +400,38 @@ struct MonitorUIRenderTests {
                     continue
                 }
                 sampled += 1
-                if color.alphaComponent > 0.8
-                    && color.redComponent < 0.08
-                    && color.greenComponent < 0.08
-                    && color.blueComponent < 0.08 {
-                    dark += 1
+                let brightness = (color.redComponent
+                                  + color.greenComponent
+                                  + color.blueComponent) / 3
+                detail += max(0, 1 - brightness) * color.alphaComponent
+            }
+        }
+        return sampled == 0 ? 0 : detail / Double(sampled)
+    }
+
+    /// A prior offscreen AppKit capture emitted giant transparent rectangles while
+    /// the size-only smoke test stayed green. Transparent and near-black pixels are
+    /// both defects in the light views that use this gate.
+    private func lightCaptureDefectFraction(_ image: NSImage) throws -> Double {
+        let tiff = try #require(image.tiffRepresentation)
+        let bitmap = try #require(NSBitmapImageRep(data: tiff))
+        var defective = 0
+        var sampled = 0
+        for y in stride(from: 0, to: bitmap.pixelsHigh, by: 4) {
+            for x in stride(from: 0, to: bitmap.pixelsWide, by: 4) {
+                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
+                    continue
+                }
+                sampled += 1
+                if color.alphaComponent <= 0.8
+                    || (color.redComponent < 0.08
+                        && color.greenComponent < 0.08
+                        && color.blueComponent < 0.08) {
+                    defective += 1
                 }
             }
         }
-        return sampled == 0 ? 1 : Double(dark) / Double(sampled)
+        return sampled == 0 ? 1 : Double(defective) / Double(sampled)
     }
 
     private func render<Content: View>(_ view: Content, size: NSSize) throws -> NSImage {
@@ -259,6 +443,9 @@ struct MonitorUIRenderTests {
             backing: .buffered,
             defer: false)
         window.contentView = hosting
+        hosting.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
+        RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.03))
         hosting.layoutSubtreeIfNeeded()
         window.displayIfNeeded()
 
@@ -285,19 +472,50 @@ private struct RenderSecrets: MonitorSecretStoring {
 }
 
 private struct RenderModelLabRunner: AppleModelLabRunning {
+    var result: AppleModelLabResult = .completed(
+        text: "A healthy AI service responds correctly and consistently.",
+        metrics: AppleModelLabMetrics(
+            timeToFirstOutputSeconds: 0.2,
+            totalSeconds: 0.8,
+            responseTokens: 9))
+
     func availability() async -> AppleModelAvailability { .available }
 
     func run(
         _ request: AppleModelLabRequest,
         onPartial: @escaping @Sendable (String, TimeInterval?) async -> Void
     ) async -> AppleModelLabResult {
-        .completed(
-            text: "A healthy AI service responds correctly and consistently.",
-            metrics: AppleModelLabMetrics(
-                timeToFirstOutputSeconds: 0.2,
-                totalSeconds: 0.8,
-                responseTokens: 9))
+        result
     }
 
     func stop() async {}
+}
+
+private actor RenderControlledModelLabRunner: AppleModelLabRunning {
+    private var continuation: CheckedContinuation<AppleModelLabResult, Never>?
+    private var queuedResult: AppleModelLabResult?
+
+    func availability() async -> AppleModelAvailability { .available }
+
+    func run(
+        _ request: AppleModelLabRequest,
+        onPartial: @escaping @Sendable (String, TimeInterval?) async -> Void
+    ) async -> AppleModelLabResult {
+        if let queuedResult {
+            self.queuedResult = nil
+            return queuedResult
+        }
+        return await withCheckedContinuation { continuation = $0 }
+    }
+
+    func stop() async {}
+
+    func finish(_ result: AppleModelLabResult) {
+        if let continuation {
+            self.continuation = nil
+            continuation.resume(returning: result)
+        } else {
+            queuedResult = result
+        }
+    }
 }

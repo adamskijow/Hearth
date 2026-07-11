@@ -270,10 +270,13 @@ struct FullHearthPairingView: View {
                             GridRow {
                                 Text("Host")
                                 TextField("127.0.0.1", text: $model.host)
+                                    .accessibilityLabel("Full Hearth host")
                             }
                             GridRow {
                                 Text("Port")
-                                TextField("11435", text: $model.portText).frame(maxWidth: 120)
+                                TextField("11435", text: $model.portText)
+                                    .frame(maxWidth: 120)
+                                    .accessibilityLabel("Full Hearth port")
                             }
                             GridRow {
                                 Text("Status token")

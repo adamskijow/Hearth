@@ -101,19 +101,47 @@ struct AppleModelDetailsView: View {
                 .padding(22)
             }
             Divider()
-            HStack {
-                Button("Copy Diagnostics", systemImage: "doc.on.doc", action: onCopy)
-                Button("Monitoring Settings…", action: onOpenSettings)
-                Button("Model Lab…", action: onOpenLab)
-                Spacer()
-                Button(model.settings.functionalChecksEnabled
-                       ? "Run Functional Check" : "Check Availability",
-                       action: onCheck)
-                Button("Done", action: onDone).keyboardShortcut(.defaultAction)
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    secondaryActions
+                    Spacer()
+                    primaryActions
+                }
+                HStack {
+                    Menu("Actions", systemImage: "ellipsis.circle") {
+                        Button("Copy Diagnostics", systemImage: "doc.on.doc", action: onCopy)
+                        Button("Monitoring Settings…", action: onOpenSettings)
+                        Button("Model Lab…", action: onOpenLab)
+                    }
+                    .accessibilityLabel("More Apple Intelligence actions")
+                    Spacer()
+                    primaryActions
+                }
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 13)
         }
+    }
+
+    @ViewBuilder
+    private var secondaryActions: some View {
+        Button("Copy Diagnostics", systemImage: "doc.on.doc", action: onCopy)
+            .fixedSize()
+        Button("Monitoring Settings…", action: onOpenSettings)
+            .fixedSize()
+        Button("Model Lab…", action: onOpenLab)
+            .fixedSize()
+    }
+
+    @ViewBuilder
+    private var primaryActions: some View {
+        Button(model.settings.functionalChecksEnabled
+               ? "Run Functional Check" : "Check Availability",
+               action: onCheck)
+            .fixedSize()
+        Button("Done", action: onDone)
+            .fixedSize()
+            .keyboardShortcut(.defaultAction)
     }
 
     private var header: some View {

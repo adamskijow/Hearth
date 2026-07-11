@@ -394,6 +394,10 @@ struct AppleModelLabView: View {
                     Text("Temperature")
                     Slider(value: $model.temperature, in: 0...2, step: 0.1)
                         .disabled(model.sampling == .greedy)
+                        .accessibilityLabel("Temperature")
+                        .accessibilityValue(model.sampling == .greedy
+                            ? "Not used with repeatable sampling"
+                            : model.temperature.formatted(.number.precision(.fractionLength(1))))
                     Text(model.sampling == .greedy ? "Not used" : model.temperature.formatted(.number.precision(.fractionLength(1))))
                         .monospacedDigit()
                         .frame(width: 58, alignment: .trailing)
@@ -412,18 +416,6 @@ struct AppleModelLabView: View {
     private var responseCard: some View {
         GroupBox("Response") {
             VStack(alignment: .leading, spacing: 10) {
-                ScrollView {
-                    Text(responseText)
-                        .foregroundStyle(model.output.isEmpty ? .secondary : .primary)
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .topLeading)
-                        .padding(9)
-                }
-                .frame(minHeight: 150)
-                .background(Color(nsColor: .textBackgroundColor))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.25)))
-
                 if model.phase != .idle {
                     HStack(spacing: 8) {
                         ProgressView().controlSize(.small)
@@ -437,6 +429,18 @@ struct AppleModelLabView: View {
                         .foregroundStyle(.orange)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                ScrollView {
+                    Text(responseText)
+                        .foregroundStyle(model.output.isEmpty ? .secondary : .primary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .padding(9)
+                }
+                .frame(minHeight: 150)
+                .background(Color(nsColor: .textBackgroundColor))
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.25)))
+
                 if let metrics = model.metrics {
                     metricsView(metrics)
                 }

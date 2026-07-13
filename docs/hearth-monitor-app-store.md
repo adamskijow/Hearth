@@ -50,10 +50,21 @@ export HEARTH_MONITOR_PROFILE="$HOME/Downloads/Hearth_Monitor_Mac_App_Store.prov
 The script uses only Apple/Swift build and packaging tools. It verifies the
 profile's App ID, embeds it, signs the single self-contained sandbox app, runs the
 capability/privacy boundary audit, and creates
-`dist/Hearth-Monitor-<version>-<build>.pkg`. Validate and upload that package with
-Xcode Organizer, Transporter, or `xcrun altool` using App Store Connect
-credentials. Do not notarize or staple a Mac App Store package; App Store Connect
-performs its own distribution processing.
+`dist/Hearth-Monitor-<version>-<build>.pkg`. Validate and upload that package
+with an App Store Connect API key:
+
+```sh
+export HEARTH_ASC_KEY="$HOME/path/AuthKey_XXXX.p8"
+export HEARTH_ASC_KEY_ID="XXXX"
+export HEARTH_ASC_ISSUER="<issuer-uuid>"
+./scripts/upload-monitor-app-store.sh
+```
+
+Set `HEARTH_ASC_VALIDATE_ONLY=1` to validate without uploading. The upload script
+passes the private key to Apple's bundled uploader by path and never copies it
+into the repository, app, or package. Transporter remains a supported graphical
+alternative. Do not notarize or staple a Mac App Store package; App Store
+Connect performs its own distribution processing.
 
 The app and installer identities are account material and are intentionally not
 stored in the repository. Without them, a local ad-hoc sandbox package remains a

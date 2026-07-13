@@ -59,4 +59,4 @@ productbuild --component "$APP" /Applications \
 pkgutil --check-signature "$PKG"
 
 echo "Built Mac App Store package: $PKG"
-echo "Validate and upload it with Xcode Organizer, Transporter, or xcrun altool."
+echo "Validate and upload with scripts/upload-monitor-app-store.sh or Transporter."

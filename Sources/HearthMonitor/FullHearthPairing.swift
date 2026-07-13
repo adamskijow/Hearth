@@ -294,6 +294,7 @@ struct FullHearthPairingView: View {
                         HStack {
                             Button("Test Read-Only Connection") { model.test() }
                                 .disabled(model.isWorking || !model.validationIssues.isEmpty)
+                                .accessibilityLabel("Test read-only connection")
                             if model.isWorking { ProgressView().controlSize(.small) }
                             if model.isVerified {
                                 Label("Authenticated", systemImage: "checkmark.circle.fill")
@@ -332,6 +333,7 @@ struct FullHearthPairingView: View {
                                     .font(.callout).foregroundStyle(.orange)
                                     .fixedSize(horizontal: false, vertical: true)
                                 Toggle("Store this broader credential anyway", isOn: $model.allowBroadCredential)
+                                    .accessibilityLabel("Store this broader credential anyway")
                             }
                             .padding(6)
                         }
@@ -354,11 +356,14 @@ struct FullHearthPairingView: View {
                 HStack {
                     if hasExistingPairing {
                         Button("Disconnect…", role: .destructive) { confirmingDisconnect = true }
+                            .accessibilityLabel("Disconnect full Hearth")
                     }
                     Spacer()
                     Button("Cancel", action: onCancel)
+                        .accessibilityLabel("Cancel")
                         .keyboardShortcut(.cancelAction)
                     Button("Save Connection", action: onSave)
+                        .accessibilityLabel("Save connection")
                         .keyboardShortcut(.defaultAction)
                         .disabled(!model.canSave || model.isWorking)
                 }
@@ -368,7 +373,9 @@ struct FullHearthPairingView: View {
         }
         .alert("Disconnect full Hearth?", isPresented: $confirmingDisconnect) {
             Button("Cancel", role: .cancel) {}
+                .accessibilityLabel("Cancel")
             Button("Disconnect", role: .destructive, action: onDisconnect)
+                .accessibilityLabel("Disconnect full Hearth")
         } message: {
             Text("The status token will be deleted from Keychain. Direct runner monitoring and incident history continue.")
         }

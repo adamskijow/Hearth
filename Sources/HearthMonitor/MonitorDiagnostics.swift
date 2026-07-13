@@ -141,7 +141,10 @@ struct MonitorDiagnosticsView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("Settings…", action: onOpenSettings)
-                Button("Done", action: onDone).keyboardShortcut(.defaultAction)
+                    .accessibilityLabel("Settings")
+                Button("Done", action: onDone)
+                    .accessibilityLabel("Done")
+                    .keyboardShortcut(.defaultAction)
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
@@ -263,6 +266,7 @@ private struct RunnerDetails: View {
                                 .font(.caption).foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                             Button("Connect Full Hearth…", action: onConnectFullHearth)
+                                .accessibilityLabel("Connect full Hearth")
                         } else if let fullHearth {
                             Label(fullHearth.message, systemImage: fullHearthSymbol(fullHearth))
                                 .foregroundStyle(fullHearthColor(fullHearth))
@@ -292,8 +296,10 @@ private struct RunnerDetails: View {
                             HStack {
                                 Button("Refresh", action: onRefreshFullHearth)
                                     .disabled(isCheckingFullHearth)
+                                    .accessibilityLabel("Refresh full Hearth status")
                                 if isCheckingFullHearth { ProgressView().controlSize(.small) }
                                 Button("Connection…", action: onConnectFullHearth)
+                                    .accessibilityLabel("Full Hearth connection")
                             }
                         } else {
                             HStack {
@@ -307,9 +313,12 @@ private struct RunnerDetails: View {
                 }
 
                 HStack {
-                    Button("Check Now", action: onCheck).disabled(isChecking)
+                    Button("Check Now", action: onCheck)
+                        .disabled(isChecking)
+                        .accessibilityLabel("Check runner now")
                     if isChecking { ProgressView().controlSize(.small) }
                     Button("Copy Diagnostics", systemImage: "doc.on.doc", action: onCopy)
+                        .accessibilityLabel("Copy runner diagnostics")
                     Spacer()
                 }
             }

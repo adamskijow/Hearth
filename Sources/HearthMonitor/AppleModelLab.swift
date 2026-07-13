@@ -407,6 +407,8 @@ struct AppleModelLabView: View {
                     value: $model.maximumResponseTokens,
                     in: AppleModelLabRequest.responseTokenRange,
                     step: 16)
+                    .accessibilityLabel("Maximum response tokens")
+                    .accessibilityValue("\(model.maximumResponseTokens)")
             }
             .padding(6)
         }
@@ -453,18 +455,23 @@ struct AppleModelLabView: View {
         HStack {
             Button("Copy Response", systemImage: "doc.on.doc", action: onCopy)
                 .disabled(model.output.isEmpty)
+                .accessibilityLabel("Copy response")
             Button("Clear Result", action: model.clearResult)
                 .disabled(model.phase != .idle || (model.output.isEmpty && model.message == nil))
+                .accessibilityLabel("Clear result")
             Spacer()
             if model.phase == .idle {
                 Button(model.output.isEmpty ? "Run Prompt" : "Run Again", action: model.run)
                     .disabled(!model.canRun)
+                    .accessibilityLabel(model.output.isEmpty ? "Run prompt" : "Run again")
                     .keyboardShortcut(.return, modifiers: [.command])
             } else {
                 Button("Stop", action: model.stop)
                     .disabled(model.phase == .stopping)
+                    .accessibilityLabel("Stop generation")
             }
             Button("Done", action: onDone)
+                .accessibilityLabel("Done")
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 13)

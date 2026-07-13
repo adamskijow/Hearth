@@ -110,8 +110,11 @@ struct AppleModelDetailsView: View {
                 HStack {
                     Menu("Actions", systemImage: "ellipsis.circle") {
                         Button("Copy Diagnostics", systemImage: "doc.on.doc", action: onCopy)
+                            .accessibilityLabel("Copy diagnostics")
                         Button("Monitoring Settings…", action: onOpenSettings)
+                            .accessibilityLabel("Monitoring settings")
                         Button("Model Lab…", action: onOpenLab)
+                            .accessibilityLabel("Open private Model Lab")
                     }
                     .accessibilityLabel("More Apple Intelligence actions")
                     Spacer()
@@ -127,10 +130,13 @@ struct AppleModelDetailsView: View {
     private var secondaryActions: some View {
         Button("Copy Diagnostics", systemImage: "doc.on.doc", action: onCopy)
             .fixedSize()
+            .accessibilityLabel("Copy diagnostics")
         Button("Monitoring Settings…", action: onOpenSettings)
             .fixedSize()
+            .accessibilityLabel("Monitoring settings")
         Button("Model Lab…", action: onOpenLab)
             .fixedSize()
+            .accessibilityLabel("Open private Model Lab")
     }
 
     @ViewBuilder
@@ -139,8 +145,11 @@ struct AppleModelDetailsView: View {
                ? "Run Functional Check" : "Check Availability",
                action: onCheck)
             .fixedSize()
+            .accessibilityLabel(model.settings.functionalChecksEnabled
+                ? "Run functional check" : "Check availability")
         Button("Done", action: onDone)
             .fixedSize()
+            .accessibilityLabel("Done")
             .keyboardShortcut(.defaultAction)
     }
 

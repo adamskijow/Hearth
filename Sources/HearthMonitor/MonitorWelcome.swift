@@ -117,6 +117,7 @@ struct MonitorWelcomeView: View {
                     }
                     Toggle("Run private Apple Intelligence functional checks", isOn: $functionalChecks)
                         .disabled(!canSelectFunctionalChecks)
+                        .accessibilityLabel("Run private Apple Intelligence functional checks")
                     Text(functionalHelp)
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -144,9 +145,11 @@ struct MonitorWelcomeView: View {
                 Button("Start and Add a Runner…") {
                     errorMessage = onAddRunner(functionalChecks)
                 }
+                .accessibilityLabel("Start and add a runner")
                 Button("Start Monitoring") {
                     errorMessage = onContinue(functionalChecks)
                 }
+                .accessibilityLabel("Start monitoring")
                 .keyboardShortcut(.defaultAction)
             }
         }

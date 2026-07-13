@@ -97,6 +97,7 @@ struct MonitorHistoryView: View {
                             .foregroundStyle(.orange)
                         Spacer()
                         Button("Reset History…") { confirmingReset = true }
+                            .accessibilityLabel("Reset history")
                     }
                     .padding(10)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -121,26 +122,34 @@ struct MonitorHistoryView: View {
             HStack {
                 Button("Copy Report", systemImage: "doc.on.doc", action: onCopy)
                     .disabled(model.ledger.incidents.isEmpty)
+                    .accessibilityLabel("Copy history report")
                 Button("Clear Resolved…", role: .destructive) { confirmingClear = true }
                     .disabled(!model.ledger.incidents.contains(where: { $0.endedAt != nil }))
+                    .accessibilityLabel("Clear resolved incidents")
                 Spacer()
                 Text("Up to \(model.ledger.limit) incidents are kept locally.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Button("Done", action: onDone).keyboardShortcut(.defaultAction)
+                Button("Done", action: onDone)
+                    .accessibilityLabel("Done")
+                    .keyboardShortcut(.defaultAction)
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 13)
         }
         .alert("Clear resolved incidents?", isPresented: $confirmingClear) {
             Button("Cancel", role: .cancel) {}
+                .accessibilityLabel("Cancel")
             Button("Clear Resolved", role: .destructive, action: onClearResolved)
+                .accessibilityLabel("Clear resolved incidents")
         } message: {
             Text("Active outages stay in history until they recover or monitoring stops.")
         }
         .alert("Reset unreadable history?", isPresented: $confirmingReset) {
             Button("Cancel", role: .cancel) {}
+                .accessibilityLabel("Cancel")
             Button("Reset History", role: .destructive, action: onReset)
+                .accessibilityLabel("Reset history")
         } message: {
             Text("This replaces the unreadable history file with an empty one. Monitoring settings are not affected.")
         }

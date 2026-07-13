@@ -330,12 +330,15 @@ struct MonitorPreferencesView: View {
 
                 HStack {
                     Button("Add Runner", systemImage: "plus", action: onAdd)
+                        .accessibilityLabel("Add runner")
                     Button("Edit", action: onEdit)
                         .disabled(model.selectedTarget == nil)
+                        .accessibilityLabel("Edit selected runner")
                     Button("Remove", role: .destructive) {
                         showingRemoveConfirmation = true
                     }
                     .disabled(model.selectedTarget == nil)
+                    .accessibilityLabel("Remove selected runner")
                     Spacer()
                 }
               }
@@ -348,6 +351,7 @@ struct MonitorPreferencesView: View {
                     .foregroundStyle(.secondary)
                 Spacer()
                 Button("Done", action: onDone)
+                    .accessibilityLabel("Done")
                     .keyboardShortcut(.defaultAction)
             }
             .padding(.horizontal, 20)
@@ -355,7 +359,9 @@ struct MonitorPreferencesView: View {
         }
         .alert("Remove this runner?", isPresented: $showingRemoveConfirmation) {
             Button("Cancel", role: .cancel) {}
+                .accessibilityLabel("Cancel")
             Button("Remove", role: .destructive, action: onRemove)
+                .accessibilityLabel("Remove runner")
         } message: {
             Text("Existing incident history for this runner remains available in History.")
         }
@@ -368,6 +374,7 @@ struct MonitorPreferencesView: View {
                     get: { model.settings.alertsEnabled },
                     set: { value in onSetAlerts(value) }))
                     .disabled(model.generalBusy)
+                    .accessibilityLabel("Outage and recovery alerts")
                 Text(notificationHelp)
                     .font(.caption)
                     .foregroundStyle(notificationHelpColor)
@@ -377,7 +384,9 @@ struct MonitorPreferencesView: View {
                         Label("Snoozed until \(until.formatted(date: .abbreviated, time: .shortened))",
                               systemImage: "bell.slash")
                             .font(.callout)
-                        Button("Resume", action: onResumeAlerts).controlSize(.small)
+                        Button("Resume", action: onResumeAlerts)
+                            .controlSize(.small)
+                            .accessibilityLabel("Resume outage alerts")
                     }
                 }
                 Divider()
@@ -385,6 +394,7 @@ struct MonitorPreferencesView: View {
                     get: { model.loginItemState == .on },
                     set: { value in onSetLogin(value) }))
                     .disabled(model.loginItemState == .unavailable)
+                    .accessibilityLabel("Open Hearth Monitor at login")
                 if model.loginItemState == .requiresApproval {
                     Text("Approval is required in System Settings → General → Login Items.")
                         .font(.caption).foregroundStyle(.orange)
@@ -406,6 +416,7 @@ struct MonitorPreferencesView: View {
                 Toggle("Monitor Apple Intelligence availability", isOn: Binding(
                     get: { model.settings.appleModel.enabled },
                     set: { onSetAppleEnabled($0) }))
+                    .accessibilityLabel("Monitor Apple Intelligence availability")
                 Text("Uses Apple's public Foundation Models availability state. On unsupported Macs, Local AI Runner monitoring remains available.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -415,6 +426,7 @@ struct MonitorPreferencesView: View {
                     get: { model.settings.appleModel.functionalChecksEnabled },
                     set: { onSetFunctionalChecks($0) }))
                     .disabled(!model.settings.appleModel.enabled)
+                    .accessibilityLabel("Run private functional health checks")
                 Text("Generates one tiny fixed response on this Mac. No prompt or response is retained. Two failures are required before Hearth records or alerts on an incident.")
                     .font(.caption)
                     .foregroundStyle(.secondary)

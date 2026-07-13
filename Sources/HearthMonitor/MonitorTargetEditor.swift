@@ -372,7 +372,9 @@ struct MonitorTargetEditorView: View {
         }
         .alert("Save without a successful test?", isPresented: $showingUnverifiedSave) {
             Button("Cancel", role: .cancel) {}
+                .accessibilityLabel("Cancel")
             Button("Save Anyway") { onSave(model.target) }
+                .accessibilityLabel("Save runner anyway")
         } message: {
             Text(model.saveConfirmationMessage)
         }
@@ -418,6 +420,7 @@ struct MonitorTargetEditorView: View {
                             }
                             Spacer()
                             Button("Use") { model.useCandidate(candidate) }
+                                .accessibilityLabel("Use \(candidate.kind.displayName) at \(candidate.host), port \(candidate.port)")
                         }
                     }
                     Text("Candidate means the endpoint is compatible; confirm the runner type below.")
@@ -426,6 +429,7 @@ struct MonitorTargetEditorView: View {
                 }
                 Button("Scan Again", systemImage: "arrow.clockwise") { model.discover() }
                     .disabled(model.isDiscovering || model.isWorking)
+                    .accessibilityLabel("Scan again for local runners")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(6)
@@ -487,6 +491,7 @@ struct MonitorTargetEditorView: View {
             HStack {
                 Button("Test Connection") { model.testConnection() }
                     .disabled(model.isWorking)
+                    .accessibilityLabel("Test connection")
                 if model.isConnectionVerified {
                     Label("Verified", systemImage: "checkmark.circle.fill")
                         .foregroundStyle(.green)
@@ -504,6 +509,7 @@ struct MonitorTargetEditorView: View {
         GroupBox("Inference wedge detection") {
             VStack(alignment: .leading, spacing: 11) {
                 Toggle("Run a one-token inference check", isOn: $model.deepProbeEnabled)
+                    .accessibilityLabel("Run a one-token inference check")
                 Text("Optional. Once per minute, Monitor asks the selected model for one token. This catches a GPU or inference engine that is wedged even when its HTTP API still answers. The test can load the model into unified memory/GPU, and the runner decides how long it stays resident.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -513,6 +519,7 @@ struct MonitorTargetEditorView: View {
                     HStack {
                         Button("Find Models") { model.loadModels() }
                             .disabled(model.isWorking)
+                            .accessibilityLabel("Find models")
                         if !model.availableModels.isEmpty {
                             Picker("Suggested", selection: $model.probeModel) {
                                 ForEach(model.availableModels) { available in
@@ -526,6 +533,7 @@ struct MonitorTargetEditorView: View {
                     HStack {
                         Button("Test One-Token Inference") { model.testInference() }
                             .disabled(model.isWorking || model.probeModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .accessibilityLabel("Test one-token inference")
                         if model.isInferenceVerified {
                             Label("Verified", systemImage: "checkmark.circle.fill")
                                 .foregroundStyle(.green)
@@ -556,6 +564,7 @@ struct MonitorTargetEditorView: View {
             }
             HStack {
                 Button("Cancel", action: onCancel)
+                    .accessibilityLabel("Cancel")
                     .keyboardShortcut(.cancelAction)
                 Spacer()
                 Button("Save Runner") {
@@ -565,6 +574,7 @@ struct MonitorTargetEditorView: View {
                         onSave(model.target)
                     }
                 }
+                .accessibilityLabel("Save runner")
                 .keyboardShortcut(.defaultAction)
                 .disabled(model.isWorking || !model.validationIssues.isEmpty)
             }

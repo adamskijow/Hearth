@@ -173,7 +173,9 @@ final class AppleModelLabModel: ObservableObject {
     func stop() {
         guard phase == .running else { return }
         phase = .stopping
-        Task { [runner] in await runner.stop() }
+        Task.detached(priority: .userInitiated) { [runner] in
+            await runner.stop()
+        }
     }
 
     func clearResult() {
@@ -196,10 +198,12 @@ final class AppleModelLabModel: ObservableObject {
         maximumResponseTokens = 128
         if phase == .idle { return }
         phase = .stopping
-        Task { [weak self, runner] in
+        Task.detached(priority: .userInitiated) { [weak self, runner] in
             await runner.stop()
-            guard let self, self.activeRunID == nil else { return }
-            self.phase = .idle
+            await MainActor.run {
+                guard let self, self.activeRunID == nil else { return }
+                self.phase = .idle
+            }
         }
     }
 

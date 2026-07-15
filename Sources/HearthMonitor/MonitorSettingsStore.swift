@@ -64,7 +64,7 @@ struct MonitorSettingsStore: MonitorSettingsPersisting, Sendable {
                 throw StoreError.invalidTarget("A saved runner is invalid: \(issue)")
             }
             if let issue = settings.appleModel.validationIssues.first {
-                throw StoreError.invalidTarget("Apple Intelligence monitoring is invalid: \(issue)")
+                throw StoreError.invalidTarget("Apple on-device model monitoring is invalid: \(issue)")
             }
             return MonitorSettingsLoadResult(settings: settings, problem: nil)
         } catch {

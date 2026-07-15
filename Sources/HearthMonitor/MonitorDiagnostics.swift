@@ -178,6 +178,7 @@ private struct RunnerDetails: View {
     let onCopy: () -> Void
     let onRefreshFullHearth: () -> Void
     let onConnectFullHearth: () -> Void
+    @State private var showsRecoveryOption = false
 
     var body: some View {
         ScrollView {
@@ -197,6 +198,24 @@ private struct RunnerDetails: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer()
+                }
+
+                if let action = MonitorActionGuidance.runner(target: target, snapshot: snapshot) {
+                    Label {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Recommended action").fontWeight(.medium)
+                            Text(action)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "arrow.forward.circle")
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.orange.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: 9))
+                    .accessibilityElement(children: .combine)
                 }
 
                 GroupBox("Latest check") {
@@ -266,19 +285,31 @@ private struct RunnerDetails: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                GroupBox("Full Hearth recovery") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        if !target.isEnabled {
-                            Text("Paused with runner monitoring")
+                if target.fullHearth == nil {
+                    DisclosureGroup(isExpanded: $showsRecoveryOption) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("A separately installed full Hearth can report whether automatic runner restart and GPU-wedge recovery cover this runner. Direct monitoring is complete without it.")
+                                .font(.caption)
                                 .foregroundStyle(.secondary)
-                        } else if target.fullHearth == nil {
-                            Text("Not connected")
-                            Text("Optionally connect the separately installed full Hearth to see managed restart and GPU-wedge recovery context. Direct monitoring works without it.")
-                                .font(.caption).foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
                             Button("Connect Full Hearth…", action: onConnectFullHearth)
-                                .accessibilityLabel("Connect full Hearth")
-                        } else if let fullHearth {
+                                .accessibilityLabel("Connect full Hearth recovery status")
+                        }
+                        .padding(.top, 8)
+                    } label: {
+                        Label("Optional recovery status", systemImage: "shield.lefthalf.filled")
+                            .font(.callout)
+                    }
+                    .padding(12)
+                    .background(Color.secondary.opacity(0.05))
+                    .clipShape(RoundedRectangle(cornerRadius: 9))
+                } else {
+                    GroupBox("Full Hearth recovery") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            if !target.isEnabled {
+                                Text("Paused with runner monitoring")
+                                    .foregroundStyle(.secondary)
+                            } else if let fullHearth {
                             Label(fullHearth.message, systemImage: fullHearthSymbol(fullHearth))
                                 .foregroundStyle(fullHearthColor(fullHearth))
                                 .fixedSize(horizontal: false, vertical: true)
@@ -312,15 +343,16 @@ private struct RunnerDetails: View {
                                 Button("Connection…", action: onConnectFullHearth)
                                     .accessibilityLabel("Full Hearth connection")
                             }
-                        } else {
-                            HStack {
-                                ProgressView().controlSize(.small)
-                                Text("Checking full Hearth…").foregroundStyle(.secondary)
+                            } else {
+                                HStack {
+                                    ProgressView().controlSize(.small)
+                                    Text("Checking full Hearth…").foregroundStyle(.secondary)
+                                }
                             }
                         }
+                        .padding(6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                    .padding(6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
                 HStack {

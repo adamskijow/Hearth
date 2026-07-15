@@ -22,14 +22,17 @@ final class MonitorHistoryController: NSObject, NSWindowDelegate {
     let model: MonitorHistoryModel
     private let onClearResolved: () -> Void
     private let onReset: () -> Void
+    private let onOpenTarget: (UUID) -> Void
 
     init(ledger: MonitorIncidentLedger,
          problem: String?,
          onClearResolved: @escaping () -> Void,
-         onReset: @escaping () -> Void) {
+         onReset: @escaping () -> Void,
+         onOpenTarget: @escaping (UUID) -> Void) {
         model = MonitorHistoryModel(ledger: ledger, problem: problem)
         self.onClearResolved = onClearResolved
         self.onReset = onReset
+        self.onOpenTarget = onOpenTarget
         super.init()
     }
 
@@ -40,6 +43,7 @@ final class MonitorHistoryController: NSObject, NSWindowDelegate {
                 onCopy: { [weak self] in self?.copyReport() },
                 onClearResolved: onClearResolved,
                 onReset: onReset,
+                onOpenTarget: onOpenTarget,
                 onDone: { [weak self] in self?.window?.close() })
             let hosting = NSHostingController(rootView: view)
             let window = NSWindow(contentViewController: hosting)
@@ -78,6 +82,7 @@ struct MonitorHistoryView: View {
     let onCopy: () -> Void
     let onClearResolved: () -> Void
     let onReset: () -> Void
+    let onOpenTarget: (UUID) -> Void
     let onDone: () -> Void
     @State private var confirmingClear = false
     @State private var confirmingReset = false
@@ -106,13 +111,13 @@ struct MonitorHistoryView: View {
                 }
                 if model.ledger.incidents.isEmpty {
                     ContentUnavailableView(
-                        "No incidents",
+                        "No confirmed incidents",
                         systemImage: "checkmark.shield",
-                        description: Text("Confirmed Apple Intelligence or runner incidents will appear here."))
+                        description: Text("Current check evidence and the latest verified functional response remain visible in the menu and Details."))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List(model.ledger.incidents) { incident in
-                        IncidentRow(incident: incident)
+                        IncidentRow(incident: incident, onOpenTarget: onOpenTarget)
                             .padding(.vertical, 4)
                     }
                 }
@@ -158,6 +163,7 @@ struct MonitorHistoryView: View {
 
 private struct IncidentRow: View {
     let incident: MonitorIncident
+    let onOpenTarget: (UUID) -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -186,9 +192,21 @@ private struct IncidentRow: View {
                 Text(timingText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if incident.endedAt == nil {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Label(MonitorActionGuidance.incident(incident), systemImage: "arrow.forward.circle")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 8)
+                        Button("Open Details…") { onOpenTarget(incident.targetID) }
+                            .controlSize(.small)
+                            .accessibilityLabel("Open \(incident.targetName) details")
+                    }
+                }
             }
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: incident.endedAt == nil ? .contain : .combine)
     }
 
     private var statusText: String {

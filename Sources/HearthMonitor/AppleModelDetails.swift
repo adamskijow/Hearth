@@ -45,7 +45,7 @@ final class AppleModelDetailsController: NSObject, NSWindowDelegate {
                 onDone: { [weak self] in self?.window?.close() })
             let hosting = NSHostingController(rootView: view)
             let window = NSWindow(contentViewController: hosting)
-            window.title = "Apple Intelligence Health"
+            window.title = "Apple On-Device Model Health"
             window.styleMask = [.titled, .closable, .resizable]
             window.minSize = NSSize(width: 560, height: 480)
             window.setContentSize(NSSize(width: 640, height: 700))
@@ -88,6 +88,7 @@ struct AppleModelDetailsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     header
+                    actionCard
                     statusCard
                     timingCard
                     privacyCard
@@ -109,7 +110,7 @@ struct AppleModelDetailsView: View {
                         Button("Monitoring Settings…", action: onOpenSettings)
                             .accessibilityLabel("Monitoring settings")
                     }
-                    .accessibilityLabel("More Apple Intelligence actions")
+                    .accessibilityLabel("More Apple model actions")
                     Spacer()
                     primaryActions
                 }
@@ -150,7 +151,7 @@ struct AppleModelDetailsView: View {
                 .foregroundStyle(statusColor)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 4) {
-                Text("Apple Intelligence").font(.title2.weight(.semibold))
+                Text("Apple On-Device Model").font(.title2.weight(.semibold))
                 Text(AppleModelPresentation.title(model.snapshot))
                     .font(.headline)
                     .foregroundStyle(statusColor)
@@ -160,6 +161,27 @@ struct AppleModelDetailsView: View {
             }
         }
         .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var actionCard: some View {
+        if let action = MonitorActionGuidance.appleModel(model.snapshot) {
+            Label {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Recommended action").fontWeight(.medium)
+                    Text(action)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            } icon: {
+                Image(systemName: "arrow.forward.circle")
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.orange.opacity(0.08))
+            .clipShape(RoundedRectangle(cornerRadius: 9))
+            .accessibilityElement(children: .combine)
+        }
     }
 
     private var statusCard: some View {
@@ -259,7 +281,7 @@ enum AppleModelDiagnosticsText {
     static func report(snapshot: AppleModelHealthSnapshot,
                        settings: AppleModelMonitorSettings) -> String {
         var lines = [
-            "Hearth Monitor Apple Intelligence diagnostics",
+            "Hearth Monitor Apple on-device model diagnostics",
             "Generated: \(Date().formatted(.iso8601))",
             "State: \(AppleModelPresentation.title(snapshot))",
             "Detail: \(AppleModelPresentation.detail(snapshot))",

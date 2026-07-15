@@ -99,8 +99,8 @@ struct MonitorWelcomeView: View {
             HStack(alignment: .top, spacing: 14) {
                 modeCard(
                     icon: "brain.head.profile",
-                    title: "Apple Intelligence",
-                    text: "Zero-setup availability, functional response, latency baseline, confirmed stalls, and recovery verification through Apple's public on-device framework.")
+                    title: "Apple On-Device Model",
+                    text: "On compatible Macs, verify availability and a real language-model response through Apple's public Foundation Models framework.")
                 modeCard(
                     icon: "server.rack",
                     title: "Local AI Runners",
@@ -115,9 +115,9 @@ struct MonitorWelcomeView: View {
                             .foregroundStyle(.orange)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    Toggle("Run private Apple Intelligence functional checks", isOn: $functionalChecks)
+                    Toggle("Run private on-device model functional checks", isOn: $functionalChecks)
                         .disabled(!canSelectFunctionalChecks)
-                        .accessibilityLabel("Run private Apple Intelligence functional checks")
+                        .accessibilityLabel("Run private on-device model functional checks")
                     Text(functionalHelp)
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -188,7 +188,7 @@ struct MonitorWelcomeView: View {
         switch appleAvailability {
         case .available: return nil
         case .unavailable(.unsupportedOS):
-            return "Apple Intelligence health requires macOS 26. Local AI Runner monitoring is fully available."
+            return "Apple's on-device language model requires macOS 26. Local AI Runner monitoring is fully available."
         case .unavailable(.deviceNotEligible):
             return "This Mac is not eligible for Apple Intelligence. Local AI Runner monitoring is fully available."
         case .unavailable(.appleIntelligenceNotEnabled):

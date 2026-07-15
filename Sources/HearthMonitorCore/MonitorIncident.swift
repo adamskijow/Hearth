@@ -141,11 +141,11 @@ public struct MonitorIncidentLedger: Codable, Sendable, Equatable {
         at observedAt: Date? = nil
     ) -> MonitorIncidentEvent {
         let targetID = AppleModelHealthSnapshot.incidentTargetID
-        let targetName = "Apple Intelligence"
+        let targetName = "Apple On-Device Model"
         let now = observedAt ?? snapshot.functionalCheckedAt ?? snapshot.checkedAt ?? Date()
         if snapshot.phase == .down {
             let cause = snapshot.failure?.plainDescription
-                ?? "Apple Intelligence did not complete the functional check."
+                ?? "Apple's on-device language model did not complete the functional check."
             if let index = incidents.firstIndex(where: { $0.targetID == targetID && $0.endedAt == nil }) {
                 var changed = false
                 if incidents[index].cause != cause {

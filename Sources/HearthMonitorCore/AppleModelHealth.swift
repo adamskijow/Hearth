@@ -31,13 +31,13 @@ public struct AppleModelMonitorSettings: Codable, Sendable, Equatable {
     public var validationIssues: [String] {
         var issues: [String] = []
         if !checkIntervalSeconds.isFinite || checkIntervalSeconds < 300 {
-            issues.append("Apple Intelligence checks must be at least 5 minutes apart.")
+            issues.append("Apple on-device model checks must be at least 5 minutes apart.")
         }
         if !timeoutSeconds.isFinite || !(5...120).contains(timeoutSeconds) {
-            issues.append("Apple Intelligence timeout must be between 5 and 120 seconds.")
+            issues.append("Apple on-device model timeout must be between 5 and 120 seconds.")
         }
         if !(2...5).contains(failureThreshold) {
-            issues.append("Apple Intelligence failures must be confirmed by 2 to 5 checks.")
+            issues.append("Apple on-device model failures must be confirmed by 2 to 5 checks.")
         }
         return issues
     }
@@ -109,9 +109,9 @@ public enum AppleModelHealthFailure: Sendable, Equatable {
     public var plainDescription: String {
         switch self {
         case .timedOut:
-            return "Apple Intelligence was available, but a small model response did not finish in time."
+            return "Apple's on-device language model was available, but a small response did not finish in time."
         case .generation(let message):
-            return "Apple Intelligence was available, but the functional check failed: \(message)"
+            return "Apple's on-device language model was available, but the functional check failed: \(message)"
         }
     }
 }
@@ -240,7 +240,7 @@ public actor AppleModelHealthEngine {
         case .rateLimited:
             stuckRequestTimedOutAt = nil
             snapshot.functionalCheckedAt = now
-            snapshot.deferredReason = "Apple Intelligence asked Hearth to wait before checking again."
+            snapshot.deferredReason = "Apple's on-device model asked Hearth to wait before checking again."
         case .requestStillRunning:
             snapshot.deferredReason = "The previous model request is still running; Hearth will not stack another request."
             confirmContinuingTimeoutIfNeeded(at: now)

@@ -13,5 +13,8 @@ DerivedData/
 dist/
 *.app
 
+# Local dogfood evidence
+.dogfood/
+
 # macOS
 .DS_Store

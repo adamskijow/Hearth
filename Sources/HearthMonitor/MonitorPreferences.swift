@@ -434,12 +434,12 @@ struct MonitorPreferencesView: View {
     }
 
     private var appleIntelligence: some View {
-        GroupBox("Apple Intelligence") {
+        GroupBox("Apple On-Device Model") {
             VStack(alignment: .leading, spacing: 11) {
-                Toggle("Monitor Apple Intelligence availability", isOn: Binding(
+                Toggle("Monitor on-device model availability", isOn: Binding(
                     get: { model.settings.appleModel.enabled },
                     set: { onSetAppleEnabled($0) }))
-                    .accessibilityLabel("Monitor Apple Intelligence availability")
+                    .accessibilityLabel("Monitor on-device model availability")
                 Text("Uses Apple's public Foundation Models availability state. On unsupported Macs, Local AI Runner monitoring remains available.")
                     .font(.caption)
                     .foregroundStyle(.secondary)

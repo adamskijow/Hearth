@@ -249,7 +249,7 @@ struct AppleModelHealthTests {
         snapshot.functionalCheckedAt = start.addingTimeInterval(30)
         let opened = ledger.observeAppleModel(snapshot: snapshot)
         #expect(opened.incidentID != nil)
-        #expect(ledger.incidents.first?.targetName == "Apple Intelligence")
+        #expect(ledger.incidents.first?.targetName == "Apple On-Device Model")
 
         snapshot.phase = .healthy
         snapshot.failure = nil

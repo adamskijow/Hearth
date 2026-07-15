@@ -16,7 +16,7 @@ struct MonitorAlertContentTests {
             inferenceLevel: true)
         let message = MonitorAlertContent.outage(incident)
         #expect(message.title.contains("inference is wedged"))
-        #expect(message.body.contains("cannot restart"))
+        #expect(message.body.contains("restart the runner"))
     }
 
     @Test("Recovery alert includes incident duration")
@@ -37,13 +37,13 @@ struct MonitorAlertContentTests {
     func appleAlert() {
         let incident = MonitorIncident(
             targetID: AppleModelHealthSnapshot.incidentTargetID,
-            targetName: "Apple Intelligence",
+            targetName: "Apple On-Device Model",
             startedAt: Date(),
             lastObservedAt: Date(),
             cause: "Two functional checks timed out.",
             inferenceLevel: true)
         let outage = MonitorAlertContent.outage(incident)
-        #expect(outage.title == "Apple Intelligence health check failed")
-        #expect(outage.body.contains("cannot restart Apple's system model service"))
+        #expect(outage.title == "Apple model health check failed")
+        #expect(outage.body.contains("restart the Mac"))
     }
 }

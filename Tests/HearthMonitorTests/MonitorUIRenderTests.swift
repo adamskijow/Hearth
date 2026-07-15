@@ -140,10 +140,28 @@ struct MonitorUIRenderTests {
         #expect(darkDetailsImage.size == NSSize(width: 640, height: 700))
         try writeIfRequested(darkDetailsImage, suffix: "apple-intelligence-details-dark")
 
+        snapshot.phase = .down
+        snapshot.failure = .timedOut
+        snapshot.consecutiveFailures = 2
+        let failedDetails = AppleModelDetailsView(
+            model: AppleModelDetailsModel(
+                snapshot: snapshot,
+                settings: AppleModelMonitorSettings(functionalChecksEnabled: true)),
+            onCopy: {},
+            onCheck: {},
+            onOpenSettings: {},
+            onDone: {})
+            .frame(width: 640, height: 700)
+            .background(Color(nsColor: .windowBackgroundColor))
+        let failedDetailsImage = try renderLight(
+            failedDetails, size: NSSize(width: 640, height: 700))
+        #expect(failedDetailsImage.size == NSSize(width: 640, height: 700))
+        try writeIfRequested(failedDetailsImage, suffix: "apple-model-action")
+
     }
 
     @Test("History and live details render at release sizes")
-    func runtimeWindowsRender() throws {
+    func runtimeWindowsRender() async throws {
         let target = MonitorTarget(name: "GPU", probeModel: "tiny")
         let incident = MonitorIncident(
             targetID: target.id,
@@ -160,6 +178,7 @@ struct MonitorUIRenderTests {
             onCopy: {},
             onClearResolved: {},
             onReset: {},
+            onOpenTarget: { _ in },
             onDone: {})
             .frame(width: 680, height: 560)
             .background(Color(nsColor: .windowBackgroundColor))
@@ -171,6 +190,7 @@ struct MonitorUIRenderTests {
             onCopy: {},
             onClearResolved: {},
             onReset: {},
+            onOpenTarget: { _ in },
             onDone: {})
             .frame(width: 680, height: 560)
             .background(Color(nsColor: .windowBackgroundColor))
@@ -180,9 +200,11 @@ struct MonitorUIRenderTests {
         try writeIfRequested(darkHistoryImage, suffix: "history-dark")
 
         let fleet = MonitorFleetCoordinator(
-            http: MonitorFakeHTTPClient(default: .ok(Data())),
+            http: MonitorFakeHTTPClient(default: .refused),
             automaticallySchedules: false)
         fleet.apply([target])
+        await fleet.checkNow(targetID: target.id)
+        await fleet.checkNow(targetID: target.id)
         let bridge = FullHearthBridgeCoordinator(
             client: FullHearthClient(http: RenderAuthenticatedHTTP()),
             secrets: RenderSecrets(),

@@ -39,4 +39,26 @@ struct MonitorPresentationTests {
         #expect(report.contains("HTTP 500"))
         #expect(!report.lowercased().contains("response body"))
     }
+
+    @Test("Runner failures provide a concrete next action")
+    func runnerAction() {
+        let target = MonitorTarget(name: "GPU", runner: "ollama", probeModel: "tiny")
+        var snapshot = MonitorSnapshot(targetID: target.id, now: Date())
+        snapshot = MonitorStateReducer.failure(
+            snapshot, reason: .inferenceTimedOut, threshold: 1, at: Date())
+        let action = MonitorActionGuidance.runner(target: target, snapshot: snapshot)
+        #expect(action?.contains("restart Ollama") == true)
+        #expect(action?.contains("fits available memory") == true)
+    }
+
+    @Test("Apple model failures name the system-owned recovery path")
+    func appleAction() {
+        var snapshot = AppleModelHealthSnapshot()
+        snapshot.phase = .down
+        snapshot.availability = .available
+        snapshot.failure = .timedOut
+        let action = MonitorActionGuidance.appleModel(snapshot)
+        #expect(action?.contains("restart the Mac") == true)
+        #expect(action?.contains("only macOS") == true)
+    }
 }

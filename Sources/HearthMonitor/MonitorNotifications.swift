@@ -19,21 +19,21 @@ enum MonitorAlertContent {
     static func outage(_ incident: MonitorIncident) -> MonitorAlertMessage {
         if incident.targetID == AppleModelHealthSnapshot.incidentTargetID {
             return MonitorAlertMessage(
-                title: "Apple Intelligence health check failed",
+                title: "Apple model health check failed",
                 body: incident.cause
-                    + " Hearth recreated its app session, but cannot restart Apple's system model service.")
+                    + " Open Details. \(MonitorActionGuidance.incident(incident))")
         }
         return MonitorAlertMessage(
             title: incident.inferenceLevel
                 ? "\(incident.targetName) inference is wedged"
                 : "\(incident.targetName) is down",
-            body: incident.cause + " Hearth Monitor is attached-only and cannot restart it.")
+            body: incident.cause + " Open Details. \(MonitorActionGuidance.incident(incident))")
     }
 
     static func recovery(_ incident: MonitorIncident) -> MonitorAlertMessage {
         if incident.targetID == AppleModelHealthSnapshot.incidentTargetID {
             return MonitorAlertMessage(
-                title: "Apple Intelligence is responding again",
+                title: "Apple's on-device model is responding again",
                 body: "A fresh Hearth session completed the private functional check after \(MonitorPresentation.duration(incident.duration)).")
         }
         return MonitorAlertMessage(
@@ -43,8 +43,14 @@ enum MonitorAlertContent {
 }
 
 @MainActor
-final class MonitorLocalNotifier {
+final class MonitorLocalNotifier: NSObject, UNUserNotificationCenterDelegate {
     private let center = UNUserNotificationCenter.current()
+    var onOpenTarget: ((UUID) -> Void)?
+
+    override init() {
+        super.init()
+        center.delegate = self
+    }
 
     func permission() async -> MonitorNotificationPermission {
         let settings = await center.notificationSettings()
@@ -87,5 +93,26 @@ final class MonitorLocalNotifier {
         } catch {
             return false
         }
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        completionHandler([.banner, .sound])
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let rawTarget = response.notification.request.content.userInfo["targetID"] as? String
+        let targetID = rawTarget.flatMap(UUID.init(uuidString:))
+        if let targetID {
+            Task { @MainActor [weak self] in self?.onOpenTarget?(targetID) }
+        }
+        completionHandler()
     }
 }

@@ -681,3 +681,36 @@ is active without weakening the Store boundary.
 - The installed full Hearth reports healthy with zero restarts or failures and a
   clean doctor result. While a separate agent actively used a 14B GPU model,
   Hearth preserved that residency and emitted no repeated model-expiry events.
+
+## Gate 12: adversarial Mac-product value audit
+
+### Promise and action audit
+
+- Monitor now identifies its Apple surface as the on-device language model
+  exposed by Foundation Models. Compatibility text still names Apple
+  Intelligence where it is the relevant System Settings or hardware condition,
+  while Store and UI copy explicitly avoid claiming coverage of Siri, Writing
+  Tools, image generation, or every Apple Intelligence feature.
+- Every live runner failure and actionable Apple model state has a concrete next
+  step in Details. Active history rows repeat the short next step and open the
+  relevant Details view; selecting a delivered outage notification routes there
+  as well.
+- The menu shows only the most recent real functional success from an Apple
+  canary or configured runner inference probe. Monitor does not invent an uptime
+  percentage or durable check count from data it does not retain.
+
+### Product hierarchy and verification
+
+- Unpaired full Hearth recovery context remains one collapsed optional row in
+  runner Details and is no longer promoted in every runner submenu. Connected
+  users retain the complete recovery-status card and connection controls.
+- The privacy policy and Unreleased changelog no longer describe the removed
+  Model Lab. Release metadata keeps the Apple Intelligence search term but
+  narrows the actual monitored claim to Foundation Models language generation.
+- The Xcode-backed suite passes 465 tests in 76 suites. Light and dark render
+  gates include healthy and failed Apple model Details, actionable runner
+  Details, incident actions, and the collapsed recovery option.
+- The universal signed sandbox package passed its real Keychain boundary test
+  and completed a live Foundation Models response on the dogfood Mac in 0.82
+  seconds. This is initial functional evidence, not yet a claim about long-term
+  incident frequency.

@@ -9,18 +9,26 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- A private Apple Intelligence Model Lab for deliberate manual testing. It
-  streams an ephemeral response, reports first-output and total timing, exposes
-  bounded sampling and response-length controls, supports stop and retry, and
-  reports exact response tokens on macOS 26.4 or later. Prompts and responses
-  are cleared when the window closes and never enter health history or alerts.
+- Recommended next steps for every current Monitor failure class. Active
+  incidents link directly to the relevant Details view, and selecting an outage
+  notification opens the affected Apple model or runner.
+- A restrained menu-bar proof-of-work line showing the latest successful
+  functional response without claiming an uptime percentage or lifetime count.
 
 ### Changed
 
-- Manual Model Lab requests and unattended Apple health canaries now share one
-  non-stacking lease. Health inference pauses while the lab is active, and a
-  request whose cancellation is still unwinding blocks another request rather
-  than competing for the system model.
+- Hearth Monitor and its Store listing now name the checked surface precisely as
+  Apple's on-device language model through Foundation Models, rather than
+  implying that one canary verifies every Apple Intelligence feature.
+- Optional full Hearth recovery pairing remains available but is collapsed in
+  unpaired runner Details and absent from the primary runner menu until paired.
+- The privacy policy now matches the shipped feature set.
+
+### Removed
+
+- The private Model Lab. Product review found that a generic prompt playground
+  diluted Hearth's monitoring and recovery value without adding a defensible
+  capability.
 
 ## [1.4.0] - 2026-07-11
 

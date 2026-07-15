@@ -66,6 +66,92 @@ enum MonitorPresentation {
     }
 }
 
+/// Concrete next steps for states that Monitor can diagnose but, by design,
+/// cannot repair inside App Sandbox. Guidance stays beside the live evidence so
+/// a failure is useful without implying process-control authority.
+enum MonitorActionGuidance {
+    static func runner(target: MonitorTarget, snapshot: MonitorSnapshot) -> String? {
+        guard let failure = snapshot.failure else { return nil }
+        let runner = target.runnerKind.displayName
+        switch failure {
+        case .unreachable:
+            return "Start \(runner) and confirm its server is running at the configured address, then choose Check Now."
+        case .timedOut:
+            return "Check whether \(runner) or the Mac is overloaded. Let active work finish, then choose Check Now."
+        case .http(let status):
+            return httpGuidance(status: status, runner: runner, inference: false)
+        case .transport:
+            return "Verify the host, port, HTTPS certificate, and network connection, then test the runner again in Settings."
+        case .inferenceTimedOut:
+            return "Stop any stuck request or restart \(runner) with its own controls, confirm the probe model fits available memory, then choose Check Now."
+        case .inferenceHTTP(let status):
+            return httpGuidance(status: status, runner: runner, inference: true)
+        case .inferenceTransport:
+            return "Confirm the configured probe model exists and can generate directly in \(runner), then choose Check Now."
+        }
+    }
+
+    static func appleModel(_ snapshot: AppleModelHealthSnapshot) -> String? {
+        if snapshot.deferredReason != nil {
+            return "Let the Mac return to a normal power, thermal, or service state, then run the functional check again."
+        }
+        switch snapshot.phase {
+        case .verifying:
+            return "Let current on-device model work finish, then run the functional check again. Hearth will wait for confirmation before alerting."
+        case .down:
+            return "Run the check again when the Mac is idle. If it repeatedly fails, restart the Mac; only macOS can restart the underlying model service."
+        case .slow:
+            return "Check again when the Mac is idle and off Low Power Mode. Compare the result with this Mac's recent baseline."
+        case .unavailable:
+            switch snapshot.availability {
+            case .available:
+                return "Run Check Availability again. If the state persists, restart Hearth Monitor."
+            case .unavailable(.unsupportedOS):
+                return "Update to macOS 26 or later, or use Local AI Runner monitoring on this Mac."
+            case .unavailable(.deviceNotEligible):
+                return "This model cannot run on this Mac. Local AI Runner monitoring remains available."
+            case .unavailable(.appleIntelligenceNotEnabled):
+                return "Turn on Apple Intelligence in System Settings, wait for preparation to finish, then check again."
+            case .unavailable(.modelNotReady):
+                return "Keep the Mac connected to power and the network while macOS prepares the model, then check again."
+            case .unavailable(.unsupportedLocale):
+                return "Choose a supported language and locale in System Settings, then check again."
+            case .unavailable(.frameworkUnavailable):
+                return "Install current macOS updates and restart Hearth Monitor. Restart the Mac if the framework remains unavailable."
+            }
+        case .checking, .available, .healthy:
+            return nil
+        }
+    }
+
+    static func incident(_ incident: MonitorIncident) -> String {
+        if incident.targetID == AppleModelHealthSnapshot.incidentTargetID {
+            return "Retry when the Mac is idle, and restart the Mac if the failure persists."
+        }
+        if incident.inferenceLevel {
+            return "Stop stuck work or restart the runner, and verify that the probe model fits available memory."
+        }
+        return "Confirm that the runner is running and reachable at its configured address."
+    }
+
+    private static func httpGuidance(status: Int, runner: String, inference: Bool) -> String {
+        switch status {
+        case 401, 403:
+            return "Update the runner's bearer credential in Settings, test the connection, then check again."
+        case 404 where inference:
+            return "Confirm the configured probe model exists in \(runner), then test the runner again in Settings."
+        case 404:
+            return "Confirm that the selected runner type and endpoint are correct, then test the connection in Settings."
+        case 429:
+            return "Let the runner's current work finish, then check again. Increase the check interval if this recurs."
+        case 500...599:
+            return "Review \(runner)'s logs and restart it with its own controls if the error persists, then choose Check Now."
+        default:
+            return "Review HTTP \(status) in \(runner), verify the configured endpoint, then choose Check Now."
+        }
+    }
+}
+
 enum AppleModelPresentation {
     static func title(_ snapshot: AppleModelHealthSnapshot) -> String {
         switch snapshot.phase {

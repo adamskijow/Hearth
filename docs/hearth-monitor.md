@@ -4,7 +4,7 @@
 Hearth Monitor is a private, sandboxed menu-bar health monitor for two kinds of
 local AI:
 
-- **Apple Intelligence**: zero-setup availability plus an optional tiny
+- **Apple on-device model**: zero-setup availability plus an optional tiny
   functional response that proves Apple's on-device system model can complete a
   request.
 - **Local AI Runners**: attached monitoring for Ollama, LM Studio, `mlx_lm`, and
@@ -32,7 +32,7 @@ whether full Hearth is providing that recovery.
   data, but local and LAN runners cannot be reached until permission is enabled
   in System Settings.
 
-## Monitor Apple Intelligence
+## Monitor Apple's on-device language model
 
 On first launch, choose whether to enable private functional checks. Passive
 availability monitoring only reads the public Foundation Models state. A
@@ -96,7 +96,7 @@ than only HTTP.
   turn **Monitor this runner** back on. Pausing closes any open incident as
   monitoring stopped, not recovered.
 
-Use the Apple Intelligence and runner submenus for exact reasons, last checks,
+Use the Apple On-Device Model and runner submenus for exact reasons, last checks,
 timing or resident models, **Check Now**, and **Details**. The root icon
 summarizes both modes, with a confirmed failure taking priority.
 
@@ -121,8 +121,9 @@ On the Mac running full Hearth:
 1. Open full Hearth **Settings → Remote control** and enable its endpoint.
 2. Open **Status-only tokens**, add a token named `hearth-monitor`, generate a
    unique secret, and copy it.
-3. In Hearth Monitor, open the watched runner's submenu and choose **Connect Full
-   Hearth…**. Enter the status endpoint and paste the token.
+3. In Hearth Monitor, open the watched runner's **Details**, expand **Optional
+   recovery status**, and choose **Connect Full Hearth…**. Enter the status
+   endpoint and paste the token.
 4. Choose **Test Read-Only Connection**, then Save.
 
 Monitor authenticates only `GET /status`. A current status-only token receives

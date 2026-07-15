@@ -16,9 +16,9 @@ field limits and localized text before submission.
 
 ## Promotional text
 
-Know when Apple Intelligence and the local AI runners on your Mac are actually
-working, with private functional checks, confirmed incidents, and clear recovery
-boundaries.
+Know when Apple's on-device language model and the local AI runners on your Mac
+are actually responding, with private functional checks, confirmed incidents,
+and clear recovery boundaries.
 
 ## Keywords
 
@@ -30,12 +30,14 @@ Hearth Monitor is a private menu-bar health monitor for local AI on your Mac.
 It requires no account, contains no analytics or advertising, and sends no data
 to the developer.
 
-APPLE INTELLIGENCE HEALTH
+APPLE ON-DEVICE MODEL HEALTH
 
-On a compatible Mac running macOS 26 or later, Hearth reads Apple's public
-Foundation Models availability state. With your permission, it periodically asks
-the on-device model for one tiny fixed response. The response is discarded
-immediately; only timing, status, and confirmed incident metadata stay local.
+On an Apple Intelligence-compatible Mac running macOS 26 or later, Hearth reads
+Apple's public Foundation Models availability state. With your permission, it
+periodically asks the on-device language model for one tiny fixed response. The
+response is discarded immediately; only timing, status, and confirmed incident
+metadata stay local. This check covers the Foundation Models language model, not
+Siri, Writing Tools, image generation, or every Apple Intelligence feature.
 
 Hearth distinguishes an unavailable or downloading model, unusual slowness, one
 unconfirmed timeout, and a persistent functional failure. It requires two failed
@@ -57,27 +59,27 @@ check so monitoring does not pin unnecessary GPU memory.
 
 LOCAL HISTORY AND ALERTS
 
-Confirmed Apple Intelligence and runner incidents share one bounded local
+Confirmed on-device model and runner incidents share one bounded local
 history. Notifications, snooze, and Open at Login are optional. Scheduled Apple
 and local-runner functional checks pause during sleep, Low Power Mode, and
 serious thermal pressure.
 
-HONEST RECOVERY
+CLEAR RECOVERY BOUNDARY
 
-The App Store edition is a monitor. It can recreate its own Apple model session,
-but macOS owns the underlying service. It never claims to restart Apple
-Intelligence. It also never starts, stops, installs, or changes a local AI runner.
+The App Store edition monitors but does not control AI services. It can recreate
+its own Foundation Models session, but macOS owns the underlying model service.
+It never starts, stops, installs, or changes a local AI runner.
 
-Users who separately install full Hearth can connect a status-only credential to
-see whether managed runner restart and GPU-wedge recovery are active. This pairing
-is optional and is not required for either monitoring mode.
+Optional: users who separately install full Hearth can connect a status-only
+credential to see whether managed runner restart and GPU-wedge recovery cover a
+watched runner. Direct monitoring remains complete without this pairing.
 
 Hearth Monitor is an independent project and is not affiliated with or endorsed
 by Apple, Ollama, or the other supported runner vendors.
 
 ## What's new in 0.2.0
 
-- Added zero-setup Apple Intelligence availability and optional functional health
+- Added zero-setup Apple on-device model availability and optional functional health
   checks through Apple's on-device Foundation Models framework.
 - Added a personal latency baseline, confirmed timeout incidents, fresh-session
   recovery verification, and non-stacking protection for timed-out requests.
@@ -92,7 +94,7 @@ by Apple, Ollama, or the other supported runner vendors.
 
 1. **Know when local AI is actually working**: two-mode welcome with Apple
    Intelligence and Local AI Runners shown together.
-2. **Private Apple Intelligence health**: healthy details with availability,
+2. **Private on-device model health**: healthy details with availability,
    response time, personal baseline, privacy, and recovery boundary.
 3. **Catch inference wedges behind healthy HTTP**: configured Ollama details with
    the optional one-token check and resident-model context.
@@ -108,9 +110,9 @@ submit the clearer appearance for each story rather than duplicating every shot.
 ## Reviewer path
 
 1. Launch on an eligible macOS 26 Mac with Apple Intelligence enabled.
-2. Keep **Run private Apple Intelligence functional checks** enabled and choose
+2. Keep **Run private on-device model functional checks** enabled and choose
    **Start Monitoring**.
-3. Open the menu and select **Run Functional Check**. Open Apple Intelligence
+3. Open the menu and select **Run Functional Check**. Open Apple On-Device Model
    Details to verify availability, completion time, baseline, privacy text, and
    recovery boundary.
 4. Open Settings to disable functional checks and confirm availability-only mode

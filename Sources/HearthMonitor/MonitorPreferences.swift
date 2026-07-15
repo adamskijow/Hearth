@@ -36,15 +36,21 @@ final class MonitorPreferencesController: NSObject, NSWindowDelegate {
     private let http: any HTTPClient
     private let notifier: MonitorLocalNotifier
     private let onChange: (MonitorSettings) throws -> Void
+    private let loadRunnerToken: (UUID) throws -> String?
+    private let onRunnerChange: (MonitorTarget, String?) throws -> Void
 
     init(settings: MonitorSettings,
          problem: String?,
          http: any HTTPClient,
          notifier: MonitorLocalNotifier,
+         loadRunnerToken: @escaping (UUID) throws -> String?,
+         onRunnerChange: @escaping (MonitorTarget, String?) throws -> Void,
          onChange: @escaping (MonitorSettings) throws -> Void) {
         model = MonitorPreferencesModel(settings: settings, problem: problem)
         self.http = http
         self.notifier = notifier
+        self.loadRunnerToken = loadRunnerToken
+        self.onRunnerChange = onRunnerChange
         self.onChange = onChange
         super.init()
     }
@@ -111,11 +117,11 @@ final class MonitorPreferencesController: NSObject, NSWindowDelegate {
         editor = MonitorTargetEditorController(
             target: target,
             http: http,
-            onSave: { [weak self] target in
+            onSave: { [weak self] target, token in
                 guard let self else { return }
+                try self.onRunnerChange(target, token)
                 var updated = self.model.settings
                 updated.upsert(target)
-                try self.onChange(updated)
                 self.model.settings = updated
                 self.model.selectedID = target.id
                 self.model.problem = nil
@@ -126,14 +132,22 @@ final class MonitorPreferencesController: NSObject, NSWindowDelegate {
 
     private func editTarget() {
         guard let target = model.selectedTarget else { return }
+        let token: String
+        do {
+            token = try loadRunnerToken(target.id) ?? ""
+        } catch {
+            model.problem = "Could not read the runner credential from Keychain: \(error.localizedDescription)"
+            return
+        }
         editor = MonitorTargetEditorController(
             target: target,
+            bearerToken: token,
             http: http,
-            onSave: { [weak self] target in
+            onSave: { [weak self] target, token in
                 guard let self else { return }
+                try self.onRunnerChange(target, token)
                 var updated = self.model.settings
                 updated.upsert(target)
-                try self.onChange(updated)
                 self.model.settings = updated
                 self.model.selectedID = target.id
                 self.model.problem = nil
@@ -307,6 +321,15 @@ struct MonitorPreferencesView: View {
                                          ? "API health" : "API + inference wedge detection")
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
+                                    if !target.isEnabled {
+                                        Text("Monitoring paused")
+                                            .font(.caption)
+                                            .foregroundStyle(.orange)
+                                    } else if target.authentication == .bearer {
+                                        Text("Bearer credential in Keychain")
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
                                     if target.fullHearth != nil {
                                         Text("Full Hearth recovery status connected")
                                             .font(.caption)

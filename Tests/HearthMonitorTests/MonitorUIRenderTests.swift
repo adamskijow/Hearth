@@ -105,7 +105,6 @@ struct MonitorUIRenderTests {
                 settings: AppleModelMonitorSettings(functionalChecksEnabled: true)),
             onCopy: {},
             onCheck: {},
-            onOpenLab: {},
             onOpenSettings: {},
             onDone: {})
             .frame(width: 640, height: 700)
@@ -119,7 +118,6 @@ struct MonitorUIRenderTests {
                 settings: AppleModelMonitorSettings(functionalChecksEnabled: true)),
             onCopy: {},
             onCheck: {},
-            onOpenLab: {},
             onOpenSettings: {},
             onDone: {})
             .frame(width: 560, height: 700)
@@ -133,7 +131,6 @@ struct MonitorUIRenderTests {
                 settings: AppleModelMonitorSettings(functionalChecksEnabled: true)),
             onCopy: {},
             onCheck: {},
-            onOpenLab: {},
             onOpenSettings: {},
             onDone: {})
             .frame(width: 640, height: 700)
@@ -143,84 +140,6 @@ struct MonitorUIRenderTests {
         #expect(darkDetailsImage.size == NSSize(width: 640, height: 700))
         try writeIfRequested(darkDetailsImage, suffix: "apple-intelligence-details-dark")
 
-        let labModel = AppleModelLabModel(
-            runner: RenderModelLabRunner(),
-            availability: .available)
-        let lab = AppleModelLabView(model: labModel, onCopy: {}, onDone: {})
-            .frame(width: 720, height: 780)
-            .background(Color(nsColor: .windowBackgroundColor))
-        let labImage = try renderLight(lab, size: NSSize(width: 720, height: 780))
-        #expect(labImage.size == NSSize(width: 720, height: 780))
-        #expect(try lightCaptureDefectFraction(labImage) < 0.20)
-        try writeIfRequested(labImage, suffix: "apple-intelligence-model-lab")
-
-        let darkLab = AppleModelLabView(model: labModel, onCopy: {}, onDone: {})
-            .frame(width: 720, height: 780)
-            .background(Color(nsColor: .windowBackgroundColor))
-            .preferredColorScheme(.dark)
-        let darkLabImage = try render(darkLab, size: NSSize(width: 720, height: 780))
-        #expect(darkLabImage.size == NSSize(width: 720, height: 780))
-        try writeIfRequested(darkLabImage, suffix: "apple-intelligence-model-lab-dark")
-
-        let unavailableModel = AppleModelLabModel(
-            runner: RenderModelLabRunner(),
-            availability: .unavailable(.appleIntelligenceNotEnabled))
-        let unavailableLab = AppleModelLabView(model: unavailableModel, onCopy: {}, onDone: {})
-            .frame(width: 720, height: 780)
-            .background(Color(nsColor: .windowBackgroundColor))
-        let unavailableImage = try renderLight(unavailableLab, size: NSSize(width: 720, height: 780))
-        #expect(unavailableImage.size == NSSize(width: 720, height: 780))
-        try writeIfRequested(unavailableImage, suffix: "apple-intelligence-model-lab-unavailable")
-
-        let completedModel = AppleModelLabModel(
-            runner: RenderModelLabRunner(), availability: .available)
-        completedModel.run()
-        await waitForIdle(completedModel)
-        let completedLab = AppleModelLabView(model: completedModel, onCopy: {}, onDone: {})
-            .frame(width: 720, height: 780)
-            .background(Color(nsColor: .windowBackgroundColor))
-        let completedImage = try renderLight(completedLab, size: NSSize(width: 720, height: 780))
-        #expect(completedImage.size == NSSize(width: 720, height: 780))
-        try writeIfRequested(completedImage, suffix: "apple-intelligence-model-lab-completed")
-
-        let failedModel = AppleModelLabModel(
-            runner: RenderModelLabRunner(result: .failed("The private model could not finish this request.")),
-            availability: .available)
-        failedModel.run()
-        await waitForIdle(failedModel)
-        let failedLab = AppleModelLabView(model: failedModel, onCopy: {}, onDone: {})
-            .frame(width: 720, height: 780)
-            .background(Color(nsColor: .windowBackgroundColor))
-        let failedImage = try renderLight(failedLab, size: NSSize(width: 720, height: 780))
-        #expect(failedImage.size == NSSize(width: 720, height: 780))
-        try writeIfRequested(failedImage, suffix: "apple-intelligence-model-lab-failed")
-
-        let controlledRunner = RenderControlledModelLabRunner()
-        let runningModel = AppleModelLabModel(runner: controlledRunner, availability: .available)
-        runningModel.run()
-        let runningLab = AppleModelLabView(model: runningModel, onCopy: {}, onDone: {})
-            .frame(width: 720, height: 780)
-            .background(Color(nsColor: .windowBackgroundColor))
-        let runningImage = try renderLight(runningLab, size: NSSize(width: 720, height: 780))
-        #expect(runningImage.size == NSSize(width: 720, height: 780))
-        try writeIfRequested(runningImage, suffix: "apple-intelligence-model-lab-running")
-
-        runningModel.stop()
-        let stoppingLab = AppleModelLabView(model: runningModel, onCopy: {}, onDone: {})
-            .frame(width: 720, height: 780)
-            .background(Color(nsColor: .windowBackgroundColor))
-        let stoppingImage = try renderLight(stoppingLab, size: NSSize(width: 720, height: 780))
-        #expect(stoppingImage.size == NSSize(width: 720, height: 780))
-        try writeIfRequested(stoppingImage, suffix: "apple-intelligence-model-lab-stopping")
-        await controlledRunner.finish(.stopped)
-        await waitForIdle(runningModel)
-
-        let stoppedLab = AppleModelLabView(model: runningModel, onCopy: {}, onDone: {})
-            .frame(width: 720, height: 780)
-            .background(Color(nsColor: .windowBackgroundColor))
-        let stoppedImage = try renderLight(stoppedLab, size: NSSize(width: 720, height: 780))
-        #expect(stoppedImage.size == NSSize(width: 720, height: 780))
-        try writeIfRequested(stoppedImage, suffix: "apple-intelligence-model-lab-stopped")
     }
 
     @Test("History and live details render at release sizes")
@@ -350,14 +269,6 @@ struct MonitorUIRenderTests {
             onDone: {})
     }
 
-    private func waitForIdle(_ model: AppleModelLabModel) async {
-        for _ in 0..<200 {
-            if model.phase == .idle { return }
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-        #expect(model.phase == .idle)
-    }
-
     private func writeIfRequested(_ image: NSImage, suffix: String) throws {
         guard let directory = ProcessInfo.processInfo.environment["HEARTH_MONITOR_RENDER_UI"],
               let tiff = image.tiffRepresentation,
@@ -469,53 +380,7 @@ private struct RenderSecrets: MonitorSecretStoring {
     func token(for targetID: UUID) throws -> String? { nil }
     func setToken(_ token: String, for targetID: UUID) throws {}
     func deleteToken(for targetID: UUID) throws {}
-}
-
-private struct RenderModelLabRunner: AppleModelLabRunning {
-    var result: AppleModelLabResult = .completed(
-        text: "A healthy AI service responds correctly and consistently.",
-        metrics: AppleModelLabMetrics(
-            timeToFirstOutputSeconds: 0.2,
-            totalSeconds: 0.8,
-            responseTokens: 9))
-
-    func availability() async -> AppleModelAvailability { .available }
-
-    func run(
-        _ request: AppleModelLabRequest,
-        onPartial: @escaping @Sendable (String, TimeInterval?) async -> Void
-    ) async -> AppleModelLabResult {
-        result
-    }
-
-    func stop() async {}
-}
-
-private actor RenderControlledModelLabRunner: AppleModelLabRunning {
-    private var continuation: CheckedContinuation<AppleModelLabResult, Never>?
-    private var queuedResult: AppleModelLabResult?
-
-    func availability() async -> AppleModelAvailability { .available }
-
-    func run(
-        _ request: AppleModelLabRequest,
-        onPartial: @escaping @Sendable (String, TimeInterval?) async -> Void
-    ) async -> AppleModelLabResult {
-        if let queuedResult {
-            self.queuedResult = nil
-            return queuedResult
-        }
-        return await withCheckedContinuation { continuation = $0 }
-    }
-
-    func stop() async {}
-
-    func finish(_ result: AppleModelLabResult) {
-        if let continuation {
-            self.continuation = nil
-            continuation.resume(returning: result)
-        } else {
-            queuedResult = result
-        }
-    }
+    func runnerToken(for targetID: UUID) throws -> String? { nil }
+    func setRunnerToken(_ token: String, for targetID: UUID) throws {}
+    func deleteRunnerToken(for targetID: UUID) throws {}
 }

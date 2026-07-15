@@ -50,6 +50,19 @@ public struct ResidentModel: Sendable, Equatable {
     }
 }
 
+/// Equality for the part of residency that is meaningful to a person. Ollama's
+/// `expires_at` moves forward whenever a model is used; treating that timer as
+/// an inventory change floods Hearth's bounded event history on every poll.
+public func sameResidentModelInventory(
+    _ left: [ResidentModel],
+    _ right: [ResidentModel]
+) -> Bool {
+    let stable: (ResidentModel) -> String = { model in
+        "\(model.name)\u{0}\(model.sizeBytes.map(String.init) ?? "")"
+    }
+    return left.map(stable).sorted() == right.map(stable).sorted()
+}
+
 /// A model the runner can use for a deep-probe test. Unlike `ResidentModel`, this
 /// is a catalog entry and does not imply the model is currently loaded in memory.
 public struct AvailableModel: Sendable, Equatable, Identifiable {
@@ -228,11 +241,16 @@ public protocol Runner: Sendable {
     /// A request that runs a tiny inference against the named model, for the
     /// optional deep readiness probe. nil when the runner cannot build one (an empty
     /// model, or a runner without an inference endpoint Hearth knows). Default: nil.
-    func deepReadinessRequest(model: String) -> DeepProbeRequest?
+    func deepReadinessRequest(model: String, unloadAfter: Bool) -> DeepProbeRequest?
 }
 
 public extension Runner {
-    func deepReadinessRequest(model: String) -> DeepProbeRequest? { nil }
+    /// Compatibility convenience for deliberate warm-up and callers that want
+    /// the runner's normal residency policy.
+    func deepReadinessRequest(model: String) -> DeepProbeRequest? {
+        deepReadinessRequest(model: model, unloadAfter: false)
+    }
+    func deepReadinessRequest(model: String, unloadAfter: Bool) -> DeepProbeRequest? { nil }
     var availableModelsEndpoint: URL { modelsEndpoint }
     func parseAvailableModels(_ data: Data) throws -> [AvailableModel] {
         try parseResidentModels(data).map {

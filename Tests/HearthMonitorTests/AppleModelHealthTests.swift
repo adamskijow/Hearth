@@ -83,9 +83,9 @@ struct AppleModelHealthTests {
         #expect(snapshot.failure == nil)
     }
 
-    @Test("A stuck prior request is not treated as recovery")
-    func noFalseRecovery() async {
-        let probe = Probe(results: [.timedOut, .requestStillRunning])
+    @Test("A stuck prior request confirms by elapsed time without stacking")
+    func stuckRequestConfirmsWithoutStacking() async {
+        let probe = Probe(results: [.timedOut, .requestStillRunning, .requestStillRunning])
         let engine = AppleModelHealthEngine(
             settings: AppleModelMonitorSettings(functionalChecksEnabled: true),
             probe: probe,
@@ -93,12 +93,40 @@ struct AppleModelHealthTests {
 
         var snapshot = await engine.check(now: start, forceFunctional: true)
         #expect(snapshot.phase == .verifying)
-        snapshot = await engine.check(now: start.addingTimeInterval(31), forceFunctional: true)
+        snapshot = await engine.check(now: start.addingTimeInterval(29), forceFunctional: true)
         #expect(snapshot.phase == .verifying)
         #expect(snapshot.failure == .timedOut)
         #expect(snapshot.functionalCheckedAt == start)
         #expect(snapshot.functionalSucceededAt == nil)
         #expect(snapshot.deferredReason?.contains("will not stack") == true)
+
+        snapshot = await engine.check(now: start.addingTimeInterval(31), forceFunctional: true)
+        #expect(snapshot.phase == .down)
+        #expect(snapshot.consecutiveFailures == 2)
+        #expect(snapshot.failure == .timedOut)
+        #expect(await probe.callCount() == 3)
+    }
+
+    @Test("A separate timeout starts a fresh elapsed confirmation window")
+    func separateTimeoutResetsElapsedConfirmation() async {
+        let probe = Probe(results: [.timedOut, .timedOut, .requestStillRunning])
+        let engine = AppleModelHealthEngine(
+            settings: AppleModelMonitorSettings(
+                functionalChecksEnabled: true,
+                timeoutSeconds: 30,
+                failureThreshold: 3),
+            probe: probe,
+            now: start)
+
+        _ = await engine.check(now: start, forceFunctional: true)
+        var snapshot = await engine.check(
+            now: start.addingTimeInterval(120), forceFunctional: true)
+        #expect(snapshot.consecutiveFailures == 2)
+
+        snapshot = await engine.check(
+            now: start.addingTimeInterval(125), forceFunctional: true)
+        #expect(snapshot.phase == .verifying)
+        #expect(snapshot.consecutiveFailures == 2)
     }
 
     @Test("Rate limiting and energy deferral are not outages")

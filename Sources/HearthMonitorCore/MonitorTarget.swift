@@ -3,16 +3,25 @@
 import Foundation
 import SupervisorCore
 
+/// The non-secret authentication choice stored with a runner. The credential
+/// itself lives only in Keychain in the app target.
+public enum MonitorRunnerAuthentication: String, Codable, Sendable, Equatable {
+    case none
+    case bearer
+}
+
 /// One local or remote AI runner Hearth Monitor watches. The companion stores no
 /// executable path because attached monitoring never launches code.
 public struct MonitorTarget: Codable, Identifiable, Sendable, Equatable {
     public var id: UUID
+    public var isEnabled: Bool
     public var name: String
     public var runner: String
     public var scheme: String
     public var host: String
     public var port: Int
     public var probeModel: String?
+    public var authentication: MonitorRunnerAuthentication
     public var fullHearth: FullHearthEndpoint?
     public var probeIntervalSeconds: TimeInterval
     public var probeTimeoutSeconds: TimeInterval
@@ -22,27 +31,31 @@ public struct MonitorTarget: Codable, Identifiable, Sendable, Equatable {
     public var modelRefreshIntervalSeconds: TimeInterval
 
     public init(id: UUID = UUID(),
+                isEnabled: Bool = true,
                 name: String? = nil,
                 runner: String = "ollama",
                 scheme: String = "http",
                 host: String = "127.0.0.1",
                 port: Int? = nil,
                 probeModel: String? = nil,
+                authentication: MonitorRunnerAuthentication = .none,
                 probeIntervalSeconds: TimeInterval = 10,
                 probeTimeoutSeconds: TimeInterval = 3,
-                deepProbeIntervalSeconds: TimeInterval = 60,
+                deepProbeIntervalSeconds: TimeInterval = 300,
                 deepProbeTimeoutSeconds: TimeInterval = 30,
                 failureThreshold: Int = 2,
                 modelRefreshIntervalSeconds: TimeInterval = 30,
                 fullHearth: FullHearthEndpoint? = nil) {
         let kind = RunnerKind(fromConfigString: runner)
         self.id = id
+        self.isEnabled = isEnabled
         self.name = name ?? kind.displayName
         self.runner = kind.rawValue
         self.scheme = scheme.lowercased() == "https" ? "https" : "http"
         self.host = host
         self.port = port ?? kind.monitorDefaultPort
         self.probeModel = probeModel
+        self.authentication = authentication
         self.fullHearth = fullHearth
         self.probeIntervalSeconds = probeIntervalSeconds
         self.probeTimeoutSeconds = probeTimeoutSeconds
@@ -168,7 +181,7 @@ public struct MonitorTarget: Codable, Identifiable, Sendable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, name, runner, scheme, host, port, probeModel, fullHearth
+        case id, isEnabled, name, runner, scheme, host, port, probeModel, authentication, fullHearth
         case probeIntervalSeconds, probeTimeoutSeconds
         case deepProbeIntervalSeconds, deepProbeTimeoutSeconds
         case failureThreshold, modelRefreshIntervalSeconds
@@ -178,12 +191,15 @@ public struct MonitorTarget: Codable, Identifiable, Sendable, Equatable {
         let defaults = MonitorTarget()
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        isEnabled = try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? defaults.isEnabled
         name = try container.decodeIfPresent(String.self, forKey: .name) ?? defaults.name
         runner = try container.decodeIfPresent(String.self, forKey: .runner) ?? defaults.runner
         scheme = try container.decodeIfPresent(String.self, forKey: .scheme) ?? defaults.scheme
         host = try container.decodeIfPresent(String.self, forKey: .host) ?? defaults.host
         port = try container.decodeIfPresent(Int.self, forKey: .port) ?? defaults.port
         probeModel = try container.decodeIfPresent(String.self, forKey: .probeModel)
+        authentication = try container.decodeIfPresent(
+            MonitorRunnerAuthentication.self, forKey: .authentication) ?? defaults.authentication
         fullHearth = try container.decodeIfPresent(FullHearthEndpoint.self, forKey: .fullHearth)
         probeIntervalSeconds = try container.decodeIfPresent(
             TimeInterval.self, forKey: .probeIntervalSeconds) ?? defaults.probeIntervalSeconds
@@ -254,8 +270,9 @@ struct MonitorRunnerAPI: Sendable {
             return (try? base.parseAvailableModels(data)) != nil
         }
     }
-    func deepReadinessRequest(model: String) -> DeepProbeRequest? {
-        guard let request = base.deepReadinessRequest(model: model) else { return nil }
+    func deepReadinessRequest(model: String, unloadAfter: Bool = false) -> DeepProbeRequest? {
+        guard let request = base.deepReadinessRequest(
+            model: model, unloadAfter: unloadAfter) else { return nil }
         return DeepProbeRequest(url: withScheme(request.url), body: request.body)
     }
 

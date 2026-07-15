@@ -15,16 +15,14 @@ actor AppleFoundationModelProbe: AppleModelProbing {
     typealias Operation = @Sendable () async -> AppleModelFunctionalResult
 
     private let operation: Operation
-    private let gate: AppleModelRequestGate
     private var inFlight: (
         id: UUID,
         task: Task<AppleModelFunctionalResult, Never>,
         state: AppleModelProbeOperationState
     )?
 
-    init(operation: Operation? = nil, gate: AppleModelRequestGate = AppleModelRequestGate()) {
+    init(operation: Operation? = nil) {
         self.operation = operation ?? { await Self.performSystemCanary() }
-        self.gate = gate
     }
 
     func availability() -> AppleModelAvailability {
@@ -37,13 +35,10 @@ actor AppleFoundationModelProbe: AppleModelProbing {
             inFlight = nil
         }
         let id = UUID()
-        guard await gate.acquire(id) else { return .requestStillRunning }
         let operation = self.operation
         let state = AppleModelProbeOperationState()
-        let gate = self.gate
         let task = Task {
             let result = await operation()
-            await gate.release(id)
             state.markCompleted()
             return result
         }
@@ -125,168 +120,6 @@ actor AppleFoundationModelProbe: AppleModelProbing {
                 return .failed(error.localizedDescription)
             }
         } catch {
-            return .failed(error.localizedDescription)
-        }
-    }
-#endif
-}
-
-/// One app-wide lease prevents a manual lab request and an unattended health
-/// canary from competing for Apple's model session. A timed-out request keeps
-/// its lease until the underlying task actually exits.
-actor AppleModelRequestGate {
-    private var owner: UUID?
-
-    func acquire(_ candidate: UUID) -> Bool {
-        guard owner == nil else { return false }
-        owner = candidate
-        return true
-    }
-
-    func release(_ candidate: UUID) {
-        if owner == candidate { owner = nil }
-    }
-}
-
-actor AppleFoundationModelLab: AppleModelLabRunning {
-    private let gate: AppleModelRequestGate
-    private var inFlight: (id: UUID, task: Task<AppleModelLabResult, Never>)?
-
-    init(gate: AppleModelRequestGate = AppleModelRequestGate()) {
-        self.gate = gate
-    }
-
-    func availability() -> AppleModelAvailability {
-        AppleFoundationModelAvailability.current()
-    }
-
-    func run(
-        _ request: AppleModelLabRequest,
-        onPartial: @escaping @Sendable (String, TimeInterval?) async -> Void
-    ) async -> AppleModelLabResult {
-        guard inFlight == nil else { return .busy }
-        let submitted = request.normalized
-        if let validation = submitted.validationMessage { return .failed(validation) }
-        switch AppleFoundationModelAvailability.current() {
-        case .available:
-            break
-        case .unavailable(let reason):
-            return .unavailable(reason)
-        }
-
-        let id = UUID()
-        guard await gate.acquire(id) else { return .busy }
-        let gate = self.gate
-        let task = Task {
-            let result = await Self.performSystemPrompt(submitted, onPartial: onPartial)
-            await gate.release(id)
-            return result
-        }
-        inFlight = (id, task)
-        let result = await task.value
-        if inFlight?.id == id { inFlight = nil }
-        return result
-    }
-
-    func stop() {
-        inFlight?.task.cancel()
-    }
-
-    private static func performSystemPrompt(
-        _ request: AppleModelLabRequest,
-        onPartial: @escaping @Sendable (String, TimeInterval?) async -> Void
-    ) async -> AppleModelLabResult {
-#if canImport(FoundationModels)
-        guard #available(macOS 26.0, *) else { return .unavailable(.unsupportedOS) }
-        return await performPrompt(request, onPartial: onPartial)
-#else
-        return .unavailable(.frameworkUnavailable)
-#endif
-    }
-
-#if canImport(FoundationModels)
-    @available(macOS 26.0, *)
-    private static func performPrompt(
-        _ request: AppleModelLabRequest,
-        onPartial: @escaping @Sendable (String, TimeInterval?) async -> Void
-    ) async -> AppleModelLabResult {
-        let clock = ContinuousClock()
-        let started = clock.now
-        var firstOutputSeconds: TimeInterval?
-        var latest = ""
-        let model = SystemLanguageModel.default
-        let session = LanguageModelSession(
-            model: model,
-            instructions: request.instructions.isEmpty ? nil : request.instructions)
-        let sampling: GenerationOptions.SamplingMode?
-        let temperature: Double?
-        switch request.sampling {
-        case .automatic:
-            sampling = nil
-            temperature = request.temperature
-        case .greedy:
-            sampling = .greedy
-            temperature = nil
-        case .varied:
-            sampling = .random(top: 40)
-            temperature = request.temperature
-        }
-        let options = GenerationOptions(
-            sampling: sampling,
-            temperature: temperature,
-            maximumResponseTokens: request.maximumResponseTokens)
-
-        do {
-            let stream = session.streamResponse(to: request.prompt, options: options)
-            for try await snapshot in stream {
-                try Task.checkCancellation()
-                let partial = snapshot.content
-                guard partial != latest else { continue }
-                latest = partial
-                if firstOutputSeconds == nil, !partial.isEmpty {
-                    firstOutputSeconds = started.duration(to: clock.now).timeInterval
-                }
-                await onPartial(partial, firstOutputSeconds)
-            }
-            try Task.checkCancellation()
-            guard !latest.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                return .failed("Apple Intelligence returned an empty response.")
-            }
-            let total = started.duration(to: clock.now).timeInterval
-            var responseTokens: Int?
-            if #available(macOS 26.4, *) {
-                responseTokens = try? await model.tokenCount(for: latest)
-            }
-            return .completed(
-                text: latest,
-                metrics: AppleModelLabMetrics(
-                    timeToFirstOutputSeconds: firstOutputSeconds,
-                    totalSeconds: total,
-                    responseTokens: responseTokens))
-        } catch is CancellationError {
-            return .stopped
-        } catch let error as LanguageModelSession.GenerationError {
-            if Task.isCancelled { return .stopped }
-            switch error {
-            case .rateLimited:
-                return .failed("Apple Intelligence is rate limited. Wait a moment and try again.")
-            case .concurrentRequests:
-                return .busy
-            case .assetsUnavailable:
-                return .unavailable(.modelNotReady)
-            case .unsupportedLanguageOrLocale:
-                return .unavailable(.unsupportedLocale)
-            case .guardrailViolation, .refusal:
-                return .failed("Apple Intelligence declined this prompt. Try a different request.")
-            case .exceededContextWindowSize:
-                return .failed("The prompt is too long for the on-device model context.")
-            case .unsupportedGuide, .decodingFailure:
-                return .failed(error.localizedDescription)
-            @unknown default:
-                return .failed(error.localizedDescription)
-            }
-        } catch {
-            if Task.isCancelled { return .stopped }
             return .failed(error.localizedDescription)
         }
     }

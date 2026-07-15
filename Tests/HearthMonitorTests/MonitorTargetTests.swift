@@ -10,12 +10,14 @@ struct MonitorTargetTests {
     @Test("A target round-trips every user-visible connection field")
     func targetRoundTrip() throws {
         let target = MonitorTarget(
+            isEnabled: false,
             name: "Studio Mac",
             runner: "mlx",
             scheme: "https",
             host: "studio.example.test",
             port: 9443,
             probeModel: "tiny",
+            authentication: .bearer,
             probeIntervalSeconds: 12,
             probeTimeoutSeconds: 4,
             deepProbeIntervalSeconds: 90,
@@ -35,6 +37,9 @@ struct MonitorTargetTests {
         let data = Data(#"{"name":"Local Ollama","runner":"ollama","host":"127.0.0.1","port":11434}"#.utf8)
         let decoded = try JSONDecoder().decode(MonitorTarget.self, from: data)
         #expect(decoded.scheme == "http")
+        #expect(decoded.isEnabled)
+        #expect(decoded.authentication == .none)
+        #expect(decoded.deepProbeIntervalSeconds == 300)
         #expect(decoded.validationIssues.isEmpty)
     }
 

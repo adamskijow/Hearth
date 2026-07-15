@@ -158,6 +158,7 @@ struct MonitorDiagnosticsView: View {
 
     private func stateColor(_ snapshot: MonitorSnapshot) -> Color {
         switch snapshot.phase {
+        case .paused: return .secondary
         case .healthy: return .green
         case .busy: return .blue
         case .down: return .red
@@ -202,6 +203,8 @@ private struct RunnerDetails: View {
                     Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 8) {
                         detailRow("Runner", target.runnerKind.displayName)
                         detailRow("Endpoint", "\(target.scheme)://\(target.host):\(target.port)")
+                        detailRow("Authentication", target.authentication == .bearer
+                                  ? "Bearer credential in Keychain" : "None")
                         detailRow("Checked", MonitorPresentation.relative(snapshot.checkedAt))
                         if let checkedAt = snapshot.checkedAt {
                             detailRow("Exact time", checkedAt.formatted(date: .abbreviated, time: .standard))
@@ -227,6 +230,11 @@ private struct RunnerDetails: View {
                                 .font(.callout.monospaced())
                             Text("Last run: \(MonitorPresentation.relative(snapshot.deepProbeLastAt))")
                                 .font(.caption).foregroundStyle(.secondary)
+                            if let reason = snapshot.deepProbeDeferredReason {
+                                Label(reason, systemImage: "leaf")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                     }
                     .padding(6)
@@ -260,7 +268,10 @@ private struct RunnerDetails: View {
 
                 GroupBox("Full Hearth recovery") {
                     VStack(alignment: .leading, spacing: 8) {
-                        if target.fullHearth == nil {
+                        if !target.isEnabled {
+                            Text("Paused with runner monitoring")
+                                .foregroundStyle(.secondary)
+                        } else if target.fullHearth == nil {
                             Text("Not connected")
                             Text("Optionally connect the separately installed full Hearth to see managed restart and GPU-wedge recovery context. Direct monitoring works without it.")
                                 .font(.caption).foregroundStyle(.secondary)
@@ -314,7 +325,7 @@ private struct RunnerDetails: View {
 
                 HStack {
                     Button("Check Now", action: onCheck)
-                        .disabled(isChecking)
+                        .disabled(isChecking || !target.isEnabled)
                         .accessibilityLabel("Check runner now")
                     if isChecking { ProgressView().controlSize(.small) }
                     Button("Copy Diagnostics", systemImage: "doc.on.doc", action: onCopy)
@@ -335,6 +346,7 @@ private struct RunnerDetails: View {
 
     private var stateColor: Color {
         switch snapshot.phase {
+        case .paused: return .secondary
         case .healthy: return .green
         case .busy: return .blue
         case .down: return .red

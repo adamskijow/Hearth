@@ -6,6 +6,7 @@ import HearthMonitorCore
 enum MonitorPresentation {
     static func title(_ snapshot: MonitorSnapshot) -> String {
         switch snapshot.phase {
+        case .paused: return "Paused"
         case .healthy: return "Healthy"
         case .busy where snapshot.failure?.isInferenceLevel == true: return "Busy (verifying recovery)"
         case .busy: return "Busy (serving)"
@@ -18,6 +19,7 @@ enum MonitorPresentation {
 
     static func symbol(_ snapshot: MonitorSnapshot) -> String {
         switch snapshot.phase {
+        case .paused: return "pause.circle.fill"
         case .healthy: return "checkmark.circle.fill"
         case .busy: return "hourglass.circle.fill"
         case .down: return "exclamationmark.circle.fill"
@@ -27,11 +29,13 @@ enum MonitorPresentation {
     }
 
     static func detail(_ snapshot: MonitorSnapshot) -> String {
+        if snapshot.phase == .paused { return "Monitoring is paused for this runner." }
         if snapshot.phase == .busy, snapshot.failure?.isInferenceLevel == true {
             return "The runner is busy. Hearth Monitor is waiting to verify that real inference recovered."
         }
         if let failure = snapshot.failure { return failure.plainDescription }
         switch snapshot.phase {
+        case .paused: return "Monitoring is paused for this runner."
         case .healthy:
             return snapshot.deepProbeConfigured && snapshot.deepProbeLastSucceeded == true
                 ? "The API and configured inference check are answering."
@@ -145,6 +149,8 @@ enum MonitorDiagnosticsText {
             "Generated: \(Date().formatted(.iso8601))",
             "Runner: \(target.name) (\(target.runnerKind.displayName))",
             "Endpoint: \(target.scheme)://\(target.host):\(target.port)",
+            "Monitoring: \(target.isEnabled ? "enabled" : "paused")",
+            "Runner authentication: \(target.authentication == .bearer ? "bearer credential in Keychain" : "none")",
         ]
         if let snapshot {
             lines.append("State: \(MonitorPresentation.title(snapshot))")
@@ -161,6 +167,10 @@ enum MonitorDiagnosticsText {
                 }
                 lines.append("Deep probe result: \(deepResult)")
                 lines.append("Deep probe at: \(snapshot.deepProbeLastAt?.formatted(.iso8601) ?? "never")")
+                lines.append("Deep probe cadence: \(Int(target.clampedDeepProbeInterval)) seconds")
+                if let reason = snapshot.deepProbeDeferredReason {
+                    lines.append("Deep probe deferred: \(reason)")
+                }
             }
             if snapshot.residentModels.isEmpty {
                 lines.append("Resident models: none reported")

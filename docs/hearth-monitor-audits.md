@@ -592,7 +592,7 @@ is active without weakening the Store boundary.
 
 ### Release audit
 
-- Monitor version advanced to 0.2.0 build 2. Hosted CI and release workflows now
+- Monitor version advanced to 0.2.0 build 3. Hosted CI and release workflows now
   use GitHub's macOS 26 image so a green shipping build proves the Foundation
   Models adapter compiled; macOS 15 CI could otherwise silently compile only the
   fallback path.
@@ -609,46 +609,75 @@ is active without weakening the Store boundary.
   clean-account checks, and App Review itself. They must not be represented as
   passed until performed on the distribution build.
 
-## Gate 10: private Model Lab without product dilution
+## Gate 10: scope correction after Model Lab evaluation
 
-### Product-value and scope audit
+### Product-value decision
 
-- A comparable Foundation Models lab product validated demand for deliberate
-  prompt testing, streaming output, timing, stop/retry, and sampling controls.
-  Hearth adopts those useful primitives as an optional one-turn diagnostic lab
-  while retaining health monitoring and wedge detection as the primary promise.
-- Persistent chats, accounts, cloud models, tool calling, prompt libraries, and
-  saved sessions remain excluded. They would turn a focused monitor into a
-  generic assistant and create retention/privacy obligations without improving
-  incident detection.
-- The lab reports Apple's exact response-token count only on macOS 26.4 or later,
-  where the public tokenizer API exists. Earlier systems show that the metric is
-  unavailable rather than presenting a word-count estimate as tokens.
+- The private prompt lab was implemented and audited, then removed after direct
+  product review. It duplicated dedicated model-playground apps without improving
+  Hearth's core promise: knowing whether local inference works and whether full
+  Hearth can recover a wedged runner.
+- Removing it leaves two coherent Monitor modes: Apple Intelligence functional
+  health and attached local-runner health. Apple mode keeps its fixed private
+  canary, latency baseline, confirmed incidents, and fresh-session verification.
+- The removal also eliminates arbitrary prompt input, streaming state, sampling
+  controls, token accounting, a secondary window, and competition between manual
+  generations and unattended health checks.
 
-### Reliability, energy, and privacy audit
+### Boundary and release effect
 
-- Manual lab work and unattended canaries share one request lease. Scheduled
-  functional checks pause while the lab is active, a race returns a neutral busy
-  state, and Stop keeps the lease until the underlying stream actually exits.
-  This preserves the earlier no-stacking guarantee across both product paths.
-- Prompt input is bounded to 8,000 characters, instructions to 2,000, and output
-  to 16 through 512 tokens. Generation is user-initiated, never scheduled, and
-  the health engine receives none of the prompt, output, timing, or result.
-- Prompt and response exist only in the live view model and framework session.
-  Closing the window clears both; no value enters settings, copied health
-  diagnostics, incident history, notifications, or configured runner traffic.
+- Foundation Models remains isolated to one adapter file. The signed release
+  self-test still requires a real fixed response through the public framework.
+- The menu, health details, App Store listing, reviewer notes, screenshots,
+  package script, and tests now describe only capabilities that contribute to
+  monitoring or recovery context.
+- This is a deliberate scope reduction, not a deferred feature. Reintroducing a
+  generic prompt surface would require new evidence that it improves health or
+  recovery outcomes enough to justify the added product and reliability surface.
 
-### UX and boundary audit
+## Gate 11: adversarial reliability and usefulness audit
 
-- The Apple submenu and health-details window expose **Private Model Lab** as a
-  secondary action. The release-sized view explains the health-state separation,
-  memory-only privacy, availability, input bounds, sampling behavior, streaming
-  progress, stop state, and Command-Return shortcut without requiring users to
-  understand Foundation Models APIs.
-- Foundation Models remains imported by exactly one adapter file. The mechanical
-  boundary audit now rejects any future framework import elsewhere in Monitor or
-  its pure core, in addition to its process, privilege, secret, architecture,
-  entitlement, and weak-link checks.
-- Six new tests cover streaming state, stop behavior, unavailable state, input
-  bounds, close clearing, and the shared health/lab request gate. The complete
-  repository now passes 460 tests in 77 suites before signed-runtime validation.
+### Failure-safety audit
+
+- Full Hearth defers destructive inference recovery while the metrics proxy sees
+  client traffic. HTTP 503 remains a serving/busy result, and an ambiguous deep
+  failure now needs a second spaced confirmation before restart or reboot logic
+  can act. Attached mode never turns a failed check into process control.
+- The deep check refreshes resident models first. A probe-only Ollama model is
+  unloaded with `keep_alive: 0` only when a successful inventory proves it was
+  not already resident; failed inventory cannot evict a user's loaded model.
+- A timed-out Apple request is retained without stacking another generation. If
+  it remains alive for a second configured timeout window, elapsed time confirms
+  the stall; a definitive completion or availability state clears that marker.
+
+### Usability, energy, and access audit
+
+- Automatic runner inference checks default to five minutes, stagger their first
+  runs, pause for sleep, Low Power Mode, and serious thermal pressure, and run
+  sequentially for Check All. Explicit user checks still run immediately.
+- Individual runners can be paused without deleting configuration. Pausing stops
+  runner and full Hearth polling, excludes that runner from aggregate health,
+  and closes an open incident as monitoring stopped rather than recovered.
+- Runner bearer authentication is attached to both read and inference requests.
+  Secrets live in a runner-specific Keychain service, never in settings,
+  diagnostics, or Codable state; a missing credential fails explicitly instead
+  of silently retrying without authentication.
+
+### Signal quality and verification audit
+
+- Resident-model expiry refreshes no longer flood the bounded event history.
+  Current expiry metadata still refreshes, while a models-updated event is
+  emitted only when stable name/size inventory changes.
+- URLSession-level tests verify bearer headers on GET and POST and enforce the
+  real 16 MB response cap. Light and dark release-sized renders cover onboarding,
+  Settings, Apple details, history, runner details, and full Hearth pairing.
+- The complete Xcode-backed gate passes 463 tests in 76 suites, debug and release
+  builds, a universal sandbox package, the App Store boundary audit, and all
+  whitespace, source-header, and project-style lints.
+- The final packaged Monitor passed its signed Keychain write/read/delete test
+  and completed a real fixed Apple Foundation Models response in 0.71 seconds.
+  The installed 0.2.0 build 3 binary matches that package byte for byte; its live
+  Accessibility menu is healthy and contains no removed lab action.
+- The installed full Hearth reports healthy with zero restarts or failures and a
+  clean doctor result. While a separate agent actively used a 14B GPU model,
+  Hearth preserved that residency and emitted no repeated model-expiry events.

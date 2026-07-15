@@ -79,4 +79,18 @@ struct MonitorTargetEditorModelTests {
         #expect(model.deepProbeEnabled)
         #expect(model.validationIssues.contains(where: { $0.contains("model") }))
     }
+
+    @Test("Bearer authentication requires a Keychain-bound credential")
+    func bearerCredentialValidation() {
+        let target = MonitorTarget(authentication: .bearer)
+        let missing = MonitorTargetEditorModel(target: target, http: MonitorFakeHTTPClient())
+        #expect(missing.validationIssues.contains(where: { $0.contains("bearer") }))
+
+        let present = MonitorTargetEditorModel(
+            target: target,
+            bearerToken: "credential-value",
+            http: MonitorFakeHTTPClient())
+        #expect(!present.validationIssues.contains(where: { $0.contains("bearer") }))
+        #expect(present.target.authentication == .bearer)
+    }
 }

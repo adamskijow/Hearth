@@ -2,6 +2,7 @@
 
 import AppKit
 import HearthMonitorCore
+import SupervisorCore
 
 @MainActor
 final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
@@ -12,10 +13,10 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
     private let historyStore = MonitorHistoryStore()
     private let notifier = MonitorLocalNotifier()
     private let secrets = MonitorKeychainSecretStore()
-    private let appleRequestGate = AppleModelRequestGate()
-    private lazy var appleProbe = AppleFoundationModelProbe(gate: appleRequestGate)
-    private lazy var appleLab = AppleFoundationModelLab(gate: appleRequestGate)
-    private lazy var fleet = MonitorFleetCoordinator(http: http)
+    private let appleProbe = AppleFoundationModelProbe()
+    private lazy var fleet = MonitorFleetCoordinator(httpFactory: { [unowned self] target in
+        self.runnerHTTP(for: target)
+    })
     private lazy var appleHealth = AppleModelHealthCoordinator(probe: appleProbe)
     private lazy var fullHearthClient = FullHearthClient(http: http)
     private lazy var fullHearthBridge = FullHearthBridgeCoordinator(
@@ -36,7 +37,6 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
     private var diagnosticsController: MonitorDiagnosticsController?
     private var pairingController: FullHearthPairingController?
     private var appleDetailsController: AppleModelDetailsController?
-    private var appleLabController: AppleModelLabController?
     private var welcomeController: MonitorWelcomeController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -120,8 +120,8 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
                 symbol = "gauge.with.dots.needle.67percent"
                 description = "Hearth Monitor: Apple Intelligence is responding slowly"
                 tint = .systemOrange
-            case (.healthy, .healthy), (.healthy, .busy), (.healthy, nil),
-                 (.available, .healthy), (.available, .busy), (.available, nil),
+            case (.healthy, .healthy), (.healthy, .busy), (.healthy, .paused), (.healthy, nil),
+                 (.available, .healthy), (.available, .busy), (.available, .paused), (.available, nil),
                  (nil, .healthy):
                 symbol = "checkmark.circle.fill"
                 description = "Hearth Monitor: local AI healthy"
@@ -134,6 +134,10 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
                 symbol = "circle.dotted"
                 description = "Hearth Monitor: checking local AI"
                 tint = .systemOrange
+            case (_, .paused):
+                symbol = "pause.circle.fill"
+                description = "Hearth Monitor: runner monitoring paused"
+                tint = nil
             case (nil, nil):
                 symbol = "waveform.path.ecg.rectangle"
                 description = "Hearth Monitor: monitoring is not configured"
@@ -212,7 +216,14 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
                 ? "Hearth Monitor: add a Local AI Runner"
                 : "Hearth Monitor: Apple Intelligence"
         }
-        let snapshots = settings.targets.compactMap { fleet.snapshots[$0.id] }
+        let enabled = settings.targets.filter(\.isEnabled)
+        guard !enabled.isEmpty else {
+            if settings.appleModel.enabled && !appleIsUnavailableByDesign {
+                return "Hearth Monitor: \(AppleModelPresentation.title(appleHealth.snapshot))"
+            }
+            return "Hearth Monitor: runner monitoring paused"
+        }
+        let snapshots = enabled.compactMap { fleet.snapshots[$0.id] }
         let down = snapshots.filter { $0.phase == .down }.count
         if down > 0 { return "Hearth Monitor: \(down) down" }
         if snapshots.contains(where: { $0.phase == .checking }) { return "Hearth Monitor: checking" }
@@ -270,12 +281,6 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: "")
         details.target = self
         submenu.addItem(details)
-        let lab = NSMenuItem(
-            title: "Open Private Model Lab…",
-            action: #selector(appleLabTapped),
-            keyEquivalent: "")
-        lab.target = self
-        submenu.addItem(lab)
         item.submenu = submenu
         return item
     }
@@ -337,7 +342,7 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
         let check = NSMenuItem(title: "Check Now", action: #selector(checkTargetTapped(_:)), keyEquivalent: "")
         check.target = self
         check.representedObject = target.id.uuidString
-        check.isEnabled = !fleet.checkingTargetIDs.contains(target.id)
+        check.isEnabled = target.isEnabled && !fleet.checkingTargetIDs.contains(target.id)
         submenu.addItem(check)
         let details = NSMenuItem(title: "Open Details…", action: #selector(targetDetailsTapped(_:)), keyEquivalent: "")
         details.target = self
@@ -355,6 +360,7 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func deepProbeMenuText(_ snapshot: MonitorSnapshot) -> String {
+        if let reason = snapshot.deepProbeDeferredReason { return reason }
         switch snapshot.deepProbeLastSucceeded {
         case .some(true): return "Inference check passed \(MonitorPresentation.relative(snapshot.deepProbeLastAt))"
         case .some(false): return "Inference check failed \(MonitorPresentation.relative(snapshot.deepProbeLastAt))"
@@ -363,6 +369,9 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func fullHearthMenuText(targetID: UUID) -> String {
+        if settings.targets.first(where: { $0.id == targetID })?.isEnabled == false {
+            return "Full Hearth: paused with runner monitoring"
+        }
         guard let snapshot = fullHearthBridge.snapshots[targetID] else {
             return "Full Hearth: checking recovery status"
         }
@@ -595,6 +604,12 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
                 problem: settingsProblem,
                 http: http,
                 notifier: notifier,
+                loadRunnerToken: { [weak self] id in
+                    try self?.secrets.runnerToken(for: id)
+                },
+                onRunnerChange: { [weak self] target, token in
+                    try self?.save(target, runnerToken: token)
+                },
                 onChange: { [weak self] updated in try self?.save(updated) })
         }
         preferences?.show(settings: settings, problem: settingsProblem)
@@ -643,33 +658,59 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
         refreshRuntimePresentation()
     }
 
-    private func save(_ target: MonitorTarget) throws {
-        var updated = settings
-        updated.upsert(target)
-        try save(updated)
+    private func runnerHTTP(for target: MonitorTarget) -> any HTTPClient {
+        guard target.authentication == .bearer else { return http }
+        guard let token = try? secrets.runnerToken(for: target.id),
+              !token.isEmpty else {
+            return MonitorMissingRunnerCredentialHTTPClient()
+        }
+        return MonitorBearerRunnerHTTPClient(base: http, token: token)
     }
 
-    private func save(_ updated: MonitorSettings) throws {
-        let updatedIDs = Set(updated.targets.map(\.id))
-        let removedPairedIDs = settings.targets
-            .filter { $0.fullHearth != nil && !updatedIDs.contains($0.id) }
-            .map(\.id)
-        var tokenBackups: [UUID: String] = [:]
+    private func save(_ target: MonitorTarget, runnerToken: String?) throws {
+        let previous = try secrets.runnerToken(for: target.id)
+        if let runnerToken, target.authentication == .bearer {
+            try secrets.setRunnerToken(runnerToken, for: target.id)
+        } else {
+            try secrets.deleteRunnerToken(for: target.id)
+        }
+        var updated = settings
+        updated.upsert(target)
         do {
-            for id in removedPairedIDs {
-                if let token = try secrets.token(for: id) { tokenBackups[id] = token }
+            try save(updated, reloadCredentialsFor: [target.id])
+        } catch {
+            if let previous { try? secrets.setRunnerToken(previous, for: target.id) }
+            else { try? secrets.deleteRunnerToken(for: target.id) }
+            throw error
+        }
+    }
+
+    private func save(_ updated: MonitorSettings,
+                      reloadCredentialsFor: Set<UUID> = []) throws {
+        let updatedIDs = Set(updated.targets.map(\.id))
+        let removedIDs = settings.targets
+            .filter { !updatedIDs.contains($0.id) }
+            .map(\.id)
+        var fullHearthBackups: [UUID: String] = [:]
+        var runnerBackups: [UUID: String] = [:]
+        do {
+            for id in removedIDs {
+                if let token = try secrets.token(for: id) { fullHearthBackups[id] = token }
+                if let token = try secrets.runnerToken(for: id) { runnerBackups[id] = token }
                 try secrets.deleteToken(for: id)
+                try secrets.deleteRunnerToken(for: id)
             }
             try store.save(updated)
         } catch {
-            for (id, token) in tokenBackups { try? secrets.setToken(token, for: id) }
+            for (id, token) in fullHearthBackups { try? secrets.setToken(token, for: id) }
+            for (id, token) in runnerBackups { try? secrets.setRunnerToken(token, for: id) }
             throw error
         }
         handleAppleMonitoringChange(from: settings, to: updated)
         settings = updated
         settingsProblem = nil
         appleHealth.apply(updated.appleModel)
-        fleet.apply(updated.targets)
+        fleet.apply(updated.targets, reloadCredentialsFor: reloadCredentialsFor)
         fullHearthBridge.apply(updated.targets)
         preferences?.settingsDidChange(updated)
         refreshRuntimePresentation()
@@ -779,7 +820,9 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
         editor = MonitorTargetEditorController(
             target: MonitorTarget(),
             http: http,
-            onSave: { [weak self] target in try self?.save(target) },
+            onSave: { [weak self] target, token in
+                try self?.save(target, runnerToken: token)
+            },
             onClose: { [weak self] in self?.editor = nil })
         editor?.show(title: "Add Runner", discoverOnOpen: true)
     }
@@ -804,26 +847,11 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
                 onCheck: { [weak self] in
                     Task { await self?.appleHealth.checkNow(forceFunctional: true) }
                 },
-                onOpenLab: { [weak self] in self?.openAppleModelLab() },
                 onOpenSettings: { [weak self] in self?.openSettings() })
         }
         appleDetailsController?.show(
             snapshot: appleHealth.snapshot,
             settings: settings.appleModel)
-    }
-
-    @objc private func appleLabTapped() { openAppleModelLab() }
-
-    private func openAppleModelLab() {
-        if appleLabController == nil {
-            appleLabController = AppleModelLabController(
-                runner: appleLab,
-                availability: appleHealth.snapshot.availability,
-                onActivityChanged: { [weak self] active in
-                    self?.appleHealth.setManualLabActive(active)
-                })
-        }
-        appleLabController?.show(availability: appleHealth.snapshot.availability)
     }
 
     private func observeSystemPowerState() {
@@ -840,8 +868,14 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
             object: nil)
     }
 
-    @objc private func systemWillSleep() { appleHealth.setSystemAwake(false) }
-    @objc private func systemDidWake() { appleHealth.setSystemAwake(true) }
+    @objc private func systemWillSleep() {
+        appleHealth.setSystemAwake(false)
+        fleet.setSystemAwake(false)
+    }
+    @objc private func systemDidWake() {
+        appleHealth.setSystemAwake(true)
+        fleet.setSystemAwake(true)
+    }
 
     @objc private func checkTargetTapped(_ sender: NSMenuItem) {
         guard let raw = sender.representedObject as? String, let id = UUID(uuidString: raw) else { return }

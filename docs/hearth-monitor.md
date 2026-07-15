@@ -60,35 +60,26 @@ Hearth creates a fresh app session for each functional check. A successful fresh
 session can verify app-level recovery, but Hearth cannot kill or restart Apple's
 OS-owned service and never claims it did.
 
-## Try a private prompt
-
-Choose **Apple Intelligence → Open Private Model Lab…** for a deliberate manual
-test. The lab streams the on-device response, shows time to first output and
-total time, and supports repeatable or varied sampling, a bounded temperature,
-and a 16-to-512-token response limit. Exact response tokens appear on macOS 26.4
-or later, where Apple's public tokenizer API is available.
-
-The lab is intentionally one ephemeral turn rather than a saved chat product.
-Its prompt and response live only in memory and are cleared when the window
-closes. They never enter settings, diagnostics, notifications, health history,
-or incident state. While the lab runs, scheduled functional health checks pause;
-both paths share one request gate, so Stop cannot cause a new request to stack
-behind model work that macOS is still unwinding.
-
 ## Set up a Local AI Runner
 
 1. Open Hearth Monitor. It appears in the menu bar rather than the Dock.
 2. Choose a compatible local candidate, or enter the runner type, host, and port.
 3. Select HTTP for loopback or a trusted private network. Prefer HTTPS elsewhere.
-4. Choose **Test Connection**. You can still save a temporarily offline address
+4. If a reverse proxy protects the runner, enable bearer authentication and
+   enter its credential. The credential is stored only in the login Keychain.
+5. Choose **Test Connection**. You can still save a temporarily offline address
    after confirming that it is unverified.
-5. Optionally enable **Run a one-token inference check**, choose a small resident
-   model, and test it. This can load the model into unified memory/GPU; the runner
-   controls how long it remains resident.
+6. Optionally enable **Run a one-token inference check**, choose a small model,
+   select a cadence, and test it. The default is five minutes. For Ollama, a
+   model loaded only for an automatic check is unloaded immediately afterward;
+   a model that was already resident keeps its normal residency policy.
 
 The default scheduled API check is frequent and lightweight. The optional
-one-token check runs more slowly. **Check Now** intentionally runs both so a user-
-requested check verifies real inference rather than only HTTP.
+one-token check runs more slowly, pauses during sleep, Low Power Mode, and serious
+thermal pressure, and is staggered across runners. **Check All Now** checks
+runners sequentially so canaries do not fight for one GPU. A user-requested check
+intentionally overrides the energy deferral and verifies real inference rather
+than only HTTP.
 
 ## Read the status
 
@@ -101,6 +92,9 @@ requested check verifies real inference rather than only HTTP.
 - **Down:** repeated API checks failed, or a one-token inference check failed.
 - **Busy (verifying recovery):** the API is serving work after a confirmed
   inference failure, but Monitor has not yet observed successful inference.
+- **Paused:** this runner performs no checks or full Hearth polling until you
+  turn **Monitor this runner** back on. Pausing closes any open incident as
+  monitoring stopped, not recovered.
 
 Use the Apple Intelligence and runner submenus for exact reasons, last checks,
 timing or resident models, **Check Now**, and **Details**. The root icon
@@ -116,7 +110,8 @@ was delivered recently.
 
 History contains confirmed Apple or runner incidents rather than samples, is
 capped at 500, and stays on this Mac. Removing a down target records **monitoring
-stopped**, not a false recovery. **Open at Login** is also opt-in and uses
+stopped**, not a false recovery. Pausing has the same honest incident boundary
+without deleting the configuration. **Open at Login** is also opt-in and uses
 macOS's Login Items API.
 
 ## Show full Hearth recovery status (optional)
@@ -151,8 +146,9 @@ are bounded.
 The app contains no analytics, ads, tracking, account, or third-party SDK and
 sends no data to the developer. The Apple canary prompt and response are never
 persisted; only availability, timing, broad failure category, and incident state
-are retained. Settings and history stay in its sandbox container; optional full
-Hearth credentials stay in Keychain. See the [privacy policy](../PRIVACY.md).
+are retained. Settings and history stay in its sandbox container; optional runner
+and full Hearth credentials stay in separate Keychain items. See the
+[privacy policy](../PRIVACY.md).
 
 ## Troubleshooting and removal
 
@@ -165,9 +161,16 @@ Hearth credentials stay in Keychain. See the [privacy policy](../PRIVACY.md).
   availability state and does not create a timeout incident.
 - **Model not ready:** let macOS finish downloading or preparing its model, then
   use **Check Now**. Hearth does not repeatedly generate while assets are absent.
-- **Persistent Apple timeout:** Hearth has already avoided overlapping canaries
-  and retried only after the prior request finished. macOS owns further recovery;
-  save the diagnostic report before rebooting or updating the system.
+- **Persistent Apple timeout:** Hearth avoids overlapping canaries. If the same
+  retained request remains alive for another timeout window, that continuing
+  stall confirms the incident without launching a second request. macOS owns
+  further recovery; save the diagnostic report before rebooting or updating the
+  system.
+- **Inference check deferred:** wake the Mac, turn off Low Power Mode, or let
+  thermal pressure ease. **Check Now** remains available when you deliberately
+  want an immediate check.
+- **Bearer credential missing or rejected:** edit the runner and paste a current
+  credential. Hearth does not silently retry the endpoint without authentication.
 - **HTTP warning:** use HTTPS unless the endpoint is loopback or carried by an
   encrypted private overlay such as Tailscale.
 - **Full Hearth token rejected:** create a fresh status-only token and test the

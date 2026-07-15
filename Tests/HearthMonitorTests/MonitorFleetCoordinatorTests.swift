@@ -56,6 +56,26 @@ struct MonitorFleetCoordinatorTests {
         #expect(fleet.overallPhase == nil)
     }
 
+    @Test("A paused target does no work and closes active monitoring")
+    func pausedTarget() async {
+        var target = MonitorTarget()
+        let api = MonitorRunnerAPI(target: target)
+        let http = MonitorFakeHTTPClient(default: .ok(Data()))
+        let fleet = MonitorFleetCoordinator(http: http, automaticallySchedules: false)
+        var stopped: UUID?
+        fleet.onTargetRemoved = { stopped = $0 }
+        fleet.apply([target])
+        await fleet.checkNow(targetID: target.id)
+
+        target.isEnabled = false
+        fleet.apply([target])
+        await fleet.checkNow(targetID: target.id)
+        #expect(stopped == target.id)
+        #expect(fleet.snapshots[target.id]?.phase == .paused)
+        #expect(fleet.overallPhase == .paused)
+        #expect(http.getCount(api.readinessEndpoint) == 1)
+    }
+
     @Test("Check Now forces the configured inference probe")
     func manualCheckForcesDeepProbe() async throws {
         let target = MonitorTarget(

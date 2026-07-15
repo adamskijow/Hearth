@@ -85,18 +85,20 @@ public struct OllamaRunner: Runner {
 
     /// A one-token `/api/generate` against the named model. This actually runs the
     /// model, so it catches a wedged runner that still answers `/api/version`. It
-    /// sends no `keep_alive`, so the runner's own policy (the user's
-    /// `OLLAMA_KEEP_ALIVE`) decides how long the model stays resident; the probe
-    /// observes, it does not impose a residency of its own.
-    public func deepReadinessRequest(model: String) -> DeepProbeRequest? {
+    /// When the model was not resident before the check, `keep_alive: 0` unloads
+    /// it immediately afterward so a one-minute health cadence cannot pin a
+    /// probe-only model in unified memory forever. Existing resident models keep
+    /// the runner's normal policy.
+    public func deepReadinessRequest(model: String, unloadAfter: Bool) -> DeepProbeRequest? {
         let trimmed = model.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return nil }
-        let payload: [String: Any] = [
+        var payload: [String: Any] = [
             "model": trimmed,
             "prompt": "ping",
             "stream": false,
             "options": ["num_predict": 1],
         ]
+        if unloadAfter { payload["keep_alive"] = 0 }
         guard let body = try? JSONSerialization.data(withJSONObject: payload) else { return nil }
         return DeepProbeRequest(url: runnerEndpoint(host: host, port: port, path: "/api/generate"), body: body)
     }

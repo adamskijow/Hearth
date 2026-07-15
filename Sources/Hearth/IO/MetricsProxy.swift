@@ -19,6 +19,15 @@ final class MetricsProxy: @unchecked Sendable {
         init(_ connection: NWConnection) { self.connection = connection }
     }
 
+    /// Reference semantics keep the streaming parser alive across recursive
+    /// receive callbacks without capturing and mutating a local variable in
+    /// concurrently executing code.
+    private final class ScannerBox: @unchecked Sendable {
+        private var scanner: TokenStreamScanner
+        init(_ scanner: TokenStreamScanner) { self.scanner = scanner }
+        func ingest(_ data: Data) -> [TokenSample] { scanner.ingest(data) }
+    }
+
     private let listener: NWListener
     private let upstreamHost: String
     private let upstreamPort: UInt16
@@ -130,7 +139,7 @@ final class MetricsProxy: @unchecked Sendable {
         // Request side: client -> runner, untouched and unscanned.
         relay(from: down, to: up, scanner: nil, pair: pair)
         // Response side: runner -> client, scanned for throughput numbers.
-        relay(from: up, to: down, scanner: TokenStreamScanner(), pair: pair)
+        relay(from: up, to: down, scanner: ScannerBox(TokenStreamScanner()), pair: pair)
     }
 
     /// Pump bytes one way. A clean end-of-stream forwards the FIN to the sink
@@ -139,18 +148,17 @@ final class MetricsProxy: @unchecked Sendable {
     /// error, or both directions finishing, tears the pair down. The optional
     /// scanner taps the stream for samples as it passes.
     private func relay(from source: ConnectionBox, to sink: ConnectionBox,
-                       scanner: TokenStreamScanner?, pair: RelayPair) {
-        var scanner = scanner
+                       scanner: ScannerBox?, pair: RelayPair) {
         let store = self.store
-        source.connection.receive(minimumIncompleteLength: 1, maximumLength: 262_144) { [weak self] data, _, isComplete, error in
+        source.connection.receive(minimumIncompleteLength: 1, maximumLength: 262_144) { data, _, isComplete, error in
             if error != nil {
                 source.connection.cancel()
                 sink.connection.cancel()
                 pair.close()
                 return
             }
-            if let data, !data.isEmpty, scanner != nil {
-                for sample in scanner!.ingest(data) { store.record(sample) }
+            if let data, !data.isEmpty, let scanner {
+                for sample in scanner.ingest(data) { store.record(sample) }
             }
             // Forward the bytes, and the FIN when this direction ended, in one
             // send so ordering is preserved.
@@ -174,7 +182,7 @@ final class MetricsProxy: @unchecked Sendable {
                         }
                         return
                     }
-                    self?.relay(from: source, to: sink, scanner: scanner, pair: pair)
+                    self.relay(from: source, to: sink, scanner: scanner, pair: pair)
                 }
             )
         }

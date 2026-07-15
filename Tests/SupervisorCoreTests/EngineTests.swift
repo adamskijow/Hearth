@@ -621,7 +621,8 @@ struct EngineTests {
     }
 
     /// With a deep probe, the same wedge is caught: the deep request times out, so
-    /// the runner is treated as not ready and restarted, unlike the shallow case.
+    /// the runner is treated as not ready and restarted after a paced confirmation,
+    /// unlike the shallow case. One ambiguous miss never kills a valid long request.
     @Test func deepProbeCatchesAnInferenceWedge() async {
         let h = makeHarness(deepProbe: DeepProbeConfig(model: "llama3:8b", interval: 60, timeout: 30))
         makeServing(h)
@@ -636,7 +637,51 @@ struct EngineTests {
         h.http.set(deepURL, .timedOut)
         h.clock.advance(by: 61)                       // the deep probe is due again
         _ = await h.engine.stepOnce()
+        #expect(await h.engine.snapshot().phase == .healthy)   // first miss verifies
+
+        h.clock.advance(by: 61)
+        _ = await h.engine.stepOnce()                 // second paced miss confirms it
 
         #expect(await h.engine.snapshot().phase != .healthy)   // caught it
+    }
+
+    @Test func deepProbeBusyNeverRestartsTheRunner() async {
+        let h = makeHarness(deepProbe: DeepProbeConfig(model: "llama3:8b", interval: 60, timeout: 30))
+        makeServing(h)
+        let deepURL = h.runner.deepReadinessRequest(model: "llama3:8b")!.url
+        h.http.set(deepURL, .http(status: 503, body: Data()))
+
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+        #expect(await h.engine.snapshot().phase == .healthy)
+        #expect(await h.engine.snapshot().busy)
+        #expect(h.processes.terminateCount == 0)
+
+        h.clock.advance(by: 61)
+        _ = await h.engine.stepOnce()
+        #expect(await h.engine.snapshot().phase == .healthy)
+        #expect(h.processes.terminateCount == 0)
+    }
+
+    @Test func deepProbeDefersWhileClientTrafficIsObserved() async {
+        final class Traffic: @unchecked Sendable {
+            let lock = NSLock()
+            var count = 1
+            func current() -> Int { lock.withLock { count } }
+        }
+        let traffic = Traffic()
+        let h = makeHarness(
+            deepProbe: DeepProbeConfig(model: "llama3:8b", interval: 60, timeout: 30),
+            inFlight: { traffic.current() })
+        makeServing(h)
+        let deepURL = h.runner.deepReadinessRequest(model: "llama3:8b")!.url
+        h.http.set(deepURL, .timedOut)
+
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+        #expect(await h.engine.snapshot().phase == .healthy)
+        #expect(await h.engine.snapshot().busy)
+        #expect(h.http.postCount(to: deepURL) == 0)
+        #expect(h.processes.terminateCount == 0)
     }
 }

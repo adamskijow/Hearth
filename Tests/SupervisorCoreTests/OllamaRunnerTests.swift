@@ -34,8 +34,24 @@ struct OllamaRunnerTests {
         let json = try JSONSerialization.jsonObject(with: req.body) as? [String: Any]
         #expect(json?["model"] as? String == "llama3:8b")
         #expect(json?["stream"] as? Bool == false)
+        #expect(json?["keep_alive"] == nil)
+        let disposable = try #require(
+            runner.deepReadinessRequest(model: "llama3:8b", unloadAfter: true))
+        let disposableJSON = try #require(
+            JSONSerialization.jsonObject(with: disposable.body) as? [String: Any])
+        #expect(disposableJSON["keep_alive"] as? Int == 0)
         // An empty or blank model means no deep probe.
         #expect(runner.deepReadinessRequest(model: "   ") == nil)
+    }
+
+    @Test func expiryRefreshDoesNotChangeResidentInventory() {
+        let first = [ResidentModel(
+            name: "tiny", sizeBytes: 42, expiresAt: Date(timeIntervalSince1970: 10))]
+        let refreshed = [ResidentModel(
+            name: "tiny", sizeBytes: 42, expiresAt: Date(timeIntervalSince1970: 70))]
+        #expect(sameResidentModelInventory(first, refreshed))
+        #expect(!sameResidentModelInventory(
+            first, [ResidentModel(name: "other", sizeBytes: 42)]))
     }
 
     @Test func endpoints() {

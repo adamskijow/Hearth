@@ -38,6 +38,10 @@ private final class FakeMonitorSecrets: MonitorSecretStoring, @unchecked Sendabl
     func deleteToken(for targetID: UUID) throws {
         _ = lock.withLock { values.removeValue(forKey: targetID) }
     }
+
+    func runnerToken(for targetID: UUID) throws -> String? { nil }
+    func setRunnerToken(_ token: String, for targetID: UUID) throws {}
+    func deleteRunnerToken(for targetID: UUID) throws {}
 }
 
 private func fullHearthBody(

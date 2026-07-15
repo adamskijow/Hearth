@@ -52,7 +52,9 @@ public actor MonitorEngine {
     }
 
     @discardableResult
-    public func check(now: Date = Date(), forceDeepProbe: Bool = false) async -> MonitorSnapshot {
+    public func check(now: Date = Date(),
+                      forceDeepProbe: Bool = false,
+                      deepProbeAllowed: Bool = true) async -> MonitorSnapshot {
         // A timer tick and a user's Check Now can coincide. Do not queue duplicate
         // probes or let an older, slower request overwrite a newer result.
         guard !checkInFlight else { return snapshot }
@@ -83,12 +85,37 @@ public actor MonitorEngine {
             return recordFailure(.transport(message), target: checkedTarget, at: now)
         }
 
-        if let model = checkedTarget.normalizedProbeModel,
-           forceDeepProbe || snapshot.failure?.isInferenceLevel == true
-               || deepProbeIsDue(target: checkedTarget, now: now) {
+        let candidateDeepProbeDue = checkedTarget.normalizedProbeModel != nil
+            && (forceDeepProbe || snapshot.failure?.isInferenceLevel == true
+                || deepProbeIsDue(target: checkedTarget, now: now))
+        let willRunDeepProbe = candidateDeepProbeDue && (forceDeepProbe || deepProbeAllowed)
+
+        // Refresh residency before inference so Ollama can unload a model that
+        // Hearth loaded solely for the check without disturbing a model the
+        // user already had resident.
+        if willRunDeepProbe || modelRefreshIsDue(target: checkedTarget, now: now) {
+            lastModelRefreshAt = now
+            await refreshModels(
+                api: api,
+                target: checkedTarget,
+                generation: checkedGeneration,
+                now: now)
+            guard generation == checkedGeneration else { return snapshot }
+        }
+
+        let deepProbeDue = candidateDeepProbeDue
+        if deepProbeDue && !deepProbeAllowed && !forceDeepProbe {
+            snapshot.deepProbeDeferredReason =
+                "Inference check paused to reduce energy or thermal impact."
+        } else if let model = checkedTarget.normalizedProbeModel, deepProbeDue {
             lastDeepProbeAt = now
             snapshot.deepProbeLastAt = now
-            guard let request = api.deepReadinessRequest(model: model) else {
+            snapshot.deepProbeDeferredReason = nil
+            let wasResident = snapshot.residentModels.contains { $0.name == model }
+            let residencyIsCurrent = snapshot.modelsUpdatedAt == now
+            guard let request = api.deepReadinessRequest(
+                model: model,
+                unloadAfter: residencyIsCurrent && !wasResident) else {
                 snapshot.deepProbeLastSucceeded = false
                 return recordFailure(
                     .inferenceTransport("This runner could not build the configured probe."),
@@ -124,16 +151,6 @@ public actor MonitorEngine {
                 return recordFailure(
                     .inferenceTransport(message), target: checkedTarget, at: now)
             }
-        }
-
-        if modelRefreshIsDue(target: checkedTarget, now: now) {
-            lastModelRefreshAt = now
-            await refreshModels(
-                api: api,
-                target: checkedTarget,
-                generation: checkedGeneration,
-                now: now)
-            guard generation == checkedGeneration else { return snapshot }
         }
         snapshot = MonitorStateReducer.success(snapshot, phase: .healthy, at: now)
         return snapshot

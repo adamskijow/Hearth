@@ -53,9 +53,8 @@ Hearth now has two deliberately separate Mac products:
 - **[Hearth Monitor](docs/hearth-monitor.md)** is the sandboxed, universal
   menu-bar companion for the Mac App Store. Its Apple Intelligence mode checks
   whether the on-device system model is available and actually completes a tiny
-  private response. An optional private Model Lab can stream a deliberate manual
-  prompt with timing and bounded generation controls without changing health
-  state. Its Local AI Runners mode watches Ollama, LM Studio, mlx_lm, and Osaurus,
+  private response. Its Local AI Runners mode watches Ollama, LM Studio, mlx_lm,
+  and Osaurus,
   keeps inference-aware history and alerts, and never controls a process. An
   optional read-only connection can show whether a separately installed full
   Hearth is providing managed recovery.
@@ -105,8 +104,8 @@ Full Hearth runs unsandboxed (supervising another process is exactly what the Ap
 Sandbox forbids) as a Developer ID signed and notarized build, and sends only
 short status text to notifiers, never prompts or model content. The separate
 Hearth Monitor has only App Sandbox and outbound network-client entitlements,
-stores an optional status credential in Keychain, and contains no analytics or
-tracking. See the [privacy policy](PRIVACY.md).
+stores optional runner and status credentials in separate Keychain items, and
+contains no analytics or tracking. See the [privacy policy](PRIVACY.md).
 
 The runner stays on `127.0.0.1` by default; do not expose it raw, since it has no
 authentication of its own. Exposure and reverse-proxy setup are in the

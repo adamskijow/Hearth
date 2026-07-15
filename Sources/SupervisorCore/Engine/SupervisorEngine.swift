@@ -55,11 +55,16 @@ public actor SupervisorEngine {
     private var currentModels: [ResidentModel] = []
     private var current: SupervisorState = SupervisorState()
     private var lastSpawnError: String?
-    /// When the deep probe last passed, so it runs on its own slower cadence.
-    /// Only a pass is recorded; a failure clears this so a wedged runner keeps
-    /// failing every cycle. Reset at each spawn so a fresh runner is deep-probed
-    /// once it is shallow-ready.
+    /// When the deep probe last ran or was deliberately deferred, so success,
+    /// busy work, and ambiguous failures all respect the slower deep cadence.
+    /// Reset at each spawn so a fresh runner is deep-probed once it is
+    /// shallow-ready.
     private var lastDeepProbeAt: Date?
+    /// Deep inference is intentionally more conservative than shallow
+    /// readiness. A queued request and a wedged request can both time out, so a
+    /// single ambiguous miss must never kill a serving runner. Failures are
+    /// paced at the configured deep interval and require confirmation.
+    private var consecutiveDeepProbeFailures = 0
     private var looping = false
     /// Bumped by every external control action (start, stop, restart), so a
     /// probe that was in flight across the actor's await can tell its report
@@ -170,6 +175,7 @@ public actor SupervisorEngine {
         modelsToRestore = []
         suppressWarmupAfterCrash = false
         lastWarmupStartedAt = nil
+        consecutiveDeepProbeFailures = 0
         let output = machine.start(now: clock.now)
         await apply(output, models: nil)
         nudgeLoop()
@@ -180,6 +186,7 @@ public actor SupervisorEngine {
         controlGeneration &+= 1
         busySince = nil
         drainDeadline = nil
+        consecutiveDeepProbeFailures = 0
         let output = machine.stop(now: clock.now)
         await apply(output, models: nil)
         nudgeLoop()
@@ -333,8 +340,13 @@ public actor SupervisorEngine {
             // own (the kill effect is skipped anyway).
             let outcome = await http.get(runner.readinessEndpoint, timeout: policy.probeTimeout)
             var readiness = Readiness.from(outcome)
-            if readiness == .ready, !(await deepProbePassed(now: now)) {
-                readiness = .timedOut   // the HTTP server answers, but inference is wedged
+            let fetchedModels = readiness == .ready ? await fetchModels() : nil
+            let models = fetchedModels ?? currentModels
+            if readiness == .ready {
+                readiness = await readinessAfterDeepProbe(
+                    now: now,
+                    residentModels: models,
+                    residencyIsCurrent: fetchedModels != nil)
             }
             guard readiness == .ready else {
                 // Busy (a full queue) is serving: the runner is doing its job.
@@ -348,7 +360,6 @@ public actor SupervisorEngine {
                 }
                 return HealthReport(isAlive: false, readiness: readiness, exitReason: .unknown)
             }
-            let models = await fetchModels() ?? currentModels
             return HealthReport(isAlive: true, readiness: .ready, exitReason: .running, models: models)
         }
 
@@ -366,12 +377,16 @@ public actor SupervisorEngine {
         }
         let outcome = await http.get(runner.readinessEndpoint, timeout: policy.probeTimeout)
         var readiness = Readiness.from(outcome)
-        if readiness == .ready, !(await deepProbePassed(now: now)) {
-            readiness = .timedOut   // the HTTP server answers, but inference is wedged
-        }
         var models = currentModels
-        if readiness == .ready, let fetched = await fetchModels() {
+        let fetchedModels = readiness == .ready ? await fetchModels() : nil
+        if let fetched = fetchedModels {
             models = fetched
+        }
+        if readiness == .ready {
+            readiness = await readinessAfterDeepProbe(
+                now: now,
+                residentModels: models,
+                residencyIsCurrent: fetchedModels != nil)
         }
         return HealthReport(isAlive: true,
                             readiness: readiness,
@@ -386,26 +401,84 @@ public actor SupervisorEngine {
         return try? runner.parseResidentModels(data)
     }
 
-    /// The optional deep readiness probe, run on its own slower cadence. Returns true
-    /// when it is not enabled, not yet due, or it passed; false when a real inference
-    /// request fails or times out, which means the model runner is wedged even though
-    /// the shallow endpoint still answers.
-    private func deepProbePassed(now: Date) async -> Bool {
-        guard let deep = deepProbe else { return true }
-        if let last = lastDeepProbeAt, now.timeIntervalSince(last) < deep.interval { return true }
-        guard let request = runner.deepReadinessRequest(model: deep.model) else { return true }
-        if case .ok = await http.post(request.url, body: request.body, timeout: deep.timeout) {
-            // Only a pass is cached, so a healthy runner is not deep-probed every
-            // cycle. A failure must not suppress the next probe: in attached mode
-            // nothing respawns to reset the timestamp, so caching a failure would
-            // let the next shallow-ready cycle skip the deep probe and falsely
-            // report a still-wedged runner as recovered.
-            lastDeepProbeAt = now
-            return true
+    private enum DeepProbeVerdict {
+        case serving
+        case busy
+        case unconfirmedFailure
+        case confirmedFailure
+    }
+
+    /// Translate the inference-specific result back into the existing readiness
+    /// vocabulary. A first ambiguous miss remains serving while Hearth verifies
+    /// it; a queue-full response or observed client traffic is busy; only a
+    /// confirmed miss becomes a destructive wedge signal.
+    private func readinessAfterDeepProbe(
+        now: Date,
+        residentModels: [ResidentModel],
+        residencyIsCurrent: Bool
+    ) async -> Readiness {
+        switch await deepProbeVerdict(
+            now: now,
+            residentModels: residentModels,
+            residencyIsCurrent: residencyIsCurrent) {
+        case .serving, .unconfirmedFailure:
+            return .ready
+        case .busy:
+            return .busy
+        case .confirmedFailure:
+            return .timedOut
         }
-        lastDeepProbeAt = nil
-        lastDeepProbeFailedAt = now
-        return false
+    }
+
+    /// The optional deep readiness probe, run on its own slower cadence. Deep
+    /// timeouts are ambiguous because a legitimate long generation may occupy
+    /// the queue. Hearth therefore refuses to probe while proxy-observed client
+    /// work is active, treats HTTP 503 as busy, and requires two failures spaced
+    /// by the configured deep interval before recovery may become destructive.
+    private func deepProbeVerdict(
+        now: Date,
+        residentModels: [ResidentModel],
+        residencyIsCurrent: Bool
+    ) async -> DeepProbeVerdict {
+        guard let deep = deepProbe else { return .serving }
+        if let last = lastDeepProbeAt, now.timeIntervalSince(last) < deep.interval {
+            return .serving
+        }
+        if let inFlight, inFlight() > 0 {
+            consecutiveDeepProbeFailures = 0
+            lastDeepProbeAt = now
+            return .busy
+        }
+        let wasResident = residentModels.contains { $0.name == deep.model }
+        guard let request = runner.deepReadinessRequest(
+            model: deep.model,
+            unloadAfter: residencyIsCurrent && !wasResident) else {
+            consecutiveDeepProbeFailures = 0
+            return .serving
+        }
+        let outcome = await http.post(request.url, body: request.body, timeout: deep.timeout)
+        switch outcome {
+        case .ok:
+            lastDeepProbeAt = now
+            consecutiveDeepProbeFailures = 0
+            return .serving
+        case .http(status: 503, body: _):
+            lastDeepProbeAt = now
+            consecutiveDeepProbeFailures = 0
+            return .busy
+        default:
+            lastDeepProbeFailedAt = now
+            consecutiveDeepProbeFailures += 1
+            if consecutiveDeepProbeFailures >= 2 {
+                // Do not cache a confirmed failure. Attached mode has no spawn
+                // to clear the timestamp, so every recovery attempt must prove
+                // inference again rather than passing on cadence alone.
+                lastDeepProbeAt = nil
+                return .confirmedFailure
+            }
+            lastDeepProbeAt = now
+            return .unconfirmedFailure
+        }
     }
 
     /// Whether a due routine restart should wait for in-flight work. True while
@@ -455,9 +528,15 @@ public actor SupervisorEngine {
             case .releasePower:
                 power.release()
             case .updateModels:
-                if let models, models != currentModels {
+                if let models {
+                    let inventoryChanged = !sameResidentModelInventory(models, currentModels)
+                    // Keep expiry metadata current for status surfaces, but only
+                    // spend an event-log line when the actual resident set or
+                    // footprint changed.
                     currentModels = models
-                    eventContinuation.yield(.modelsUpdated(models))
+                    if inventoryChanged {
+                        eventContinuation.yield(.modelsUpdated(models))
+                    }
                 }
             case .emit(let event):
                 await handleEvent(event)
@@ -486,6 +565,7 @@ public actor SupervisorEngine {
             processes.terminate(previous)
         }
         lastDeepProbeAt = nil   // deep-probe the fresh runner once it is shallow-ready
+        consecutiveDeepProbeFailures = 0
         do {
             currentHandle = try processes.spawn(runner.processSpec())
             spawnedBinaryFingerprint = processes.executableFingerprint(at: runner.processSpec().executableURL)

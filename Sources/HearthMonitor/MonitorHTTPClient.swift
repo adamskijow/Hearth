@@ -3,10 +3,41 @@
 import Foundation
 import SupervisorCore
 
+protocol MonitorBearerHTTPClient: HTTPClient {
+    func get(_ url: URL, bearerToken: String, timeout: TimeInterval) async -> HTTPOutcome
+    func post(_ url: URL, body: Data, bearerToken: String, timeout: TimeInterval) async -> HTTPOutcome
+}
+
+/// Adds one Keychain-sourced bearer to runner requests without exposing that
+/// credential to the Codable target or the monitoring core.
+struct MonitorBearerRunnerHTTPClient: HTTPClient, Sendable {
+    let base: any MonitorBearerHTTPClient
+    let token: String
+
+    func get(_ url: URL, timeout: TimeInterval) async -> HTTPOutcome {
+        await base.get(url, bearerToken: token, timeout: timeout)
+    }
+
+    func post(_ url: URL, body: Data, timeout: TimeInterval) async -> HTTPOutcome {
+        await base.post(url, body: body, bearerToken: token, timeout: timeout)
+    }
+}
+
+struct MonitorMissingRunnerCredentialHTTPClient: HTTPClient, Sendable {
+    func get(_ url: URL, timeout: TimeInterval) async -> HTTPOutcome {
+        .failure("This runner requires a bearer credential, but none is available in Keychain.")
+    }
+
+    func post(_ url: URL, body: Data, timeout: TimeInterval) async -> HTTPOutcome {
+        .failure("This runner requires a bearer credential, but none is available in Keychain.")
+    }
+}
+
 /// Sandboxed, outbound-only runner transport. Redirects are refused so a runner
 /// cannot make an inference POST escape to another host, and response bodies are
 /// capped so a broken endpoint cannot grow the menu app without bound.
-final class MonitorHTTPClient: HTTPClient, MonitorAuthenticatedHTTPClient, @unchecked Sendable {
+final class MonitorHTTPClient: HTTPClient, MonitorAuthenticatedHTTPClient,
+                               MonitorBearerHTTPClient, @unchecked Sendable {
     private static let maxResponseBytes = 16 * 1024 * 1024
     private let session: URLSession
 
@@ -56,6 +87,20 @@ final class MonitorHTTPClient: HTTPClient, MonitorAuthenticatedHTTPClient, @unch
         request.httpShouldHandleCookies = false
         request.timeoutInterval = timeout
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+        return await send(request)
+    }
+
+    func post(_ url: URL,
+              body: Data,
+              bearerToken: String,
+              timeout: TimeInterval) async -> HTTPOutcome {
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.httpShouldHandleCookies = false
+        request.timeoutInterval = timeout
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
         request.httpBody = body
         return await send(request)
     }

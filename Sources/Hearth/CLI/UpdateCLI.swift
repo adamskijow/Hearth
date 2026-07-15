@@ -11,6 +11,10 @@ import SupervisorCore
 /// forever. When Hearth was installed with the Homebrew cask, a second phase
 /// upgrades Hearth too, so the command's name tells the whole truth.
 enum UpdateCLI {
+    private final class AcceptanceBox: @unchecked Sendable {
+        var value = false
+    }
+
     static func run() -> Never {
         let config = ConfigStore.load().config
         guard let brew = firstExisting(["/opt/homebrew/bin/brew", "/usr/local/bin/brew"]) else {
@@ -141,12 +145,12 @@ enum UpdateCLI {
         request.httpMethod = "POST"
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         let semaphore = DispatchSemaphore(value: 0)
-        var accepted = false
+        let accepted = AcceptanceBox()
         URLSession.shared.dataTask(with: request) { _, response, _ in
-            accepted = (response as? HTTPURLResponse)?.statusCode == 202
+            accepted.value = (response as? HTTPURLResponse)?.statusCode == 202
             semaphore.signal()
         }.resume()
         _ = semaphore.wait(timeout: .now() + 4)
-        return accepted
+        return accepted.value
     }
 }

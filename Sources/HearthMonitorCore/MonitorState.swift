@@ -4,6 +4,7 @@ import Foundation
 import SupervisorCore
 
 public enum MonitorPhase: String, Codable, Sendable, Equatable {
+    case paused
     case checking
     case healthy
     case busy
@@ -60,6 +61,7 @@ public struct MonitorSnapshot: Sendable, Equatable {
     public var deepProbeConfigured: Bool
     public var deepProbeLastAt: Date?
     public var deepProbeLastSucceeded: Bool?
+    public var deepProbeDeferredReason: String?
 
     public init(targetID: UUID, now: Date, deepProbeConfigured: Bool = false) {
         self.targetID = targetID
@@ -75,6 +77,7 @@ public struct MonitorSnapshot: Sendable, Equatable {
         self.deepProbeConfigured = deepProbeConfigured
         self.deepProbeLastAt = nil
         self.deepProbeLastSucceeded = nil
+        self.deepProbeDeferredReason = nil
     }
 
     public var isServing: Bool {

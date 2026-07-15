@@ -10,7 +10,10 @@ enum MonitorKeychainSelfTest {
         let store = MonitorKeychainSecretStore()
         let id = UUID()
         let token = "self-test-\(UUID().uuidString)"
-        defer { try? store.deleteToken(for: id) }
+        defer {
+            try? store.deleteToken(for: id)
+            try? store.deleteRunnerToken(for: id)
+        }
         do {
             try store.setToken(token, for: id)
             guard try store.token(for: id) == token else {
@@ -20,6 +23,16 @@ enum MonitorKeychainSelfTest {
             try store.deleteToken(for: id)
             guard try store.token(for: id) == nil else {
                 FileHandle.standardError.write(Data("Keychain self-test deletion did not complete.\n".utf8))
+                return 1
+            }
+            try store.setRunnerToken(token, for: id)
+            guard try store.runnerToken(for: id) == token else {
+                FileHandle.standardError.write(Data("Keychain runner credential readback did not match.\n".utf8))
+                return 1
+            }
+            try store.deleteRunnerToken(for: id)
+            guard try store.runnerToken(for: id) == nil else {
+                FileHandle.standardError.write(Data("Keychain runner credential deletion did not complete.\n".utf8))
                 return 1
             }
             print("Hearth Monitor Keychain self-test passed.")

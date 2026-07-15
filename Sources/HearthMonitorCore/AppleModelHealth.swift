@@ -160,6 +160,10 @@ public actor AppleModelHealthEngine {
     private let probe: any AppleModelProbing
     private var snapshot: AppleModelHealthSnapshot
     private var lastFunctionalAttemptAt: Date?
+    /// The first app-level timeout for a Foundation Models request that may
+    /// still be executing inside macOS. Continued execution confirms the same
+    /// stall by elapsed timeout windows without launching overlapping work.
+    private var stuckRequestTimedOutAt: Date?
     private var checkInFlight = false
 
     public init(settings: AppleModelMonitorSettings,
@@ -187,6 +191,7 @@ public actor AppleModelHealthEngine {
         snapshot.deferredReason = nil
 
         guard availability == .available else {
+            stuckRequestTimedOutAt = nil
             transition(to: .unavailable, at: now)
             snapshot.healthySince = nil
             snapshot.failure = nil
@@ -195,6 +200,7 @@ public actor AppleModelHealthEngine {
         }
 
         guard settings.functionalChecksEnabled else {
+            stuckRequestTimedOutAt = nil
             transition(to: .available, at: now)
             snapshot.failure = nil
             snapshot.consecutiveFailures = 0
@@ -219,19 +225,27 @@ public actor AppleModelHealthEngine {
         let result = await probe.runFunctionalCheck(timeout: settings.clampedTimeout)
         switch result {
         case .completed(let elapsed):
+            stuckRequestTimedOutAt = nil
             recordSuccess(elapsed: elapsed, at: now)
         case .timedOut:
+            // requestStillRunning identifies the same retained task. A new
+            // timedOut result therefore starts a new confirmation window.
+            stuckRequestTimedOutAt = now
             snapshot.functionalCheckedAt = now
             recordFailure(.timedOut, at: now)
         case .failed(let message):
+            stuckRequestTimedOutAt = nil
             snapshot.functionalCheckedAt = now
             recordFailure(.generation(message), at: now)
         case .rateLimited:
+            stuckRequestTimedOutAt = nil
             snapshot.functionalCheckedAt = now
             snapshot.deferredReason = "Apple Intelligence asked Hearth to wait before checking again."
         case .requestStillRunning:
             snapshot.deferredReason = "The previous model request is still running; Hearth will not stack another request."
+            confirmContinuingTimeoutIfNeeded(at: now)
         case .modelNotReady:
+            stuckRequestTimedOutAt = nil
             snapshot.functionalCheckedAt = now
             snapshot.availability = .unavailable(.modelNotReady)
             transition(to: .unavailable, at: now)
@@ -239,6 +253,7 @@ public actor AppleModelHealthEngine {
             snapshot.consecutiveFailures = 0
             snapshot.healthySince = nil
         case .unsupportedLocale:
+            stuckRequestTimedOutAt = nil
             snapshot.functionalCheckedAt = now
             snapshot.availability = .unavailable(.unsupportedLocale)
             transition(to: .unavailable, at: now)
@@ -247,6 +262,23 @@ public actor AppleModelHealthEngine {
             snapshot.healthySince = nil
         }
         return snapshot
+    }
+
+    /// One request that remains alive across multiple timeout windows is itself
+    /// repeated evidence; issuing another request would only make the wedge
+    /// worse. Advance the configured confirmation count from elapsed time, at
+    /// most to the threshold, and transition to down when it is satisfied.
+    private func confirmContinuingTimeoutIfNeeded(at now: Date) {
+        guard snapshot.failure == .timedOut,
+              let firstTimeout = stuckRequestTimedOutAt else { return }
+        let elapsed = max(0, now.timeIntervalSince(firstTimeout))
+        let observedWindows = 1 + Int(elapsed / settings.clampedTimeout)
+        let desiredFailures = min(
+            settings.clampedFailureThreshold,
+            max(snapshot.consecutiveFailures, observedWindows))
+        while snapshot.consecutiveFailures < desiredFailures {
+            recordFailure(.timedOut, at: now)
+        }
     }
 
     private func functionalCheckIsDue(now: Date) -> Bool {

@@ -21,17 +21,14 @@ final class AppleModelDetailsController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private let model: AppleModelDetailsModel
     private let onCheck: () -> Void
-    private let onOpenLab: () -> Void
     private let onOpenSettings: () -> Void
 
     init(snapshot: AppleModelHealthSnapshot,
          settings: AppleModelMonitorSettings,
          onCheck: @escaping () -> Void,
-         onOpenLab: @escaping () -> Void,
          onOpenSettings: @escaping () -> Void) {
         model = AppleModelDetailsModel(snapshot: snapshot, settings: settings)
         self.onCheck = onCheck
-        self.onOpenLab = onOpenLab
         self.onOpenSettings = onOpenSettings
         super.init()
     }
@@ -44,7 +41,6 @@ final class AppleModelDetailsController: NSObject, NSWindowDelegate {
                 model: model,
                 onCopy: { [weak self] in self?.copyReport() },
                 onCheck: onCheck,
-                onOpenLab: onOpenLab,
                 onOpenSettings: onOpenSettings,
                 onDone: { [weak self] in self?.window?.close() })
             let hosting = NSHostingController(rootView: view)
@@ -84,7 +80,6 @@ struct AppleModelDetailsView: View {
     @ObservedObject var model: AppleModelDetailsModel
     let onCopy: () -> Void
     let onCheck: () -> Void
-    let onOpenLab: () -> Void
     let onOpenSettings: () -> Void
     let onDone: () -> Void
 
@@ -113,8 +108,6 @@ struct AppleModelDetailsView: View {
                             .accessibilityLabel("Copy diagnostics")
                         Button("Monitoring Settings…", action: onOpenSettings)
                             .accessibilityLabel("Monitoring settings")
-                        Button("Model Lab…", action: onOpenLab)
-                            .accessibilityLabel("Open private Model Lab")
                     }
                     .accessibilityLabel("More Apple Intelligence actions")
                     Spacer()
@@ -134,9 +127,6 @@ struct AppleModelDetailsView: View {
         Button("Monitoring Settings…", action: onOpenSettings)
             .fixedSize()
             .accessibilityLabel("Monitoring settings")
-        Button("Model Lab…", action: onOpenLab)
-            .fixedSize()
-            .accessibilityLabel("Open private Model Lab")
     }
 
     @ViewBuilder

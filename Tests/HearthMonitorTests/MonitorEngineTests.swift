@@ -89,6 +89,26 @@ struct MonitorEngineTests {
         #expect(http.postCount(request.url) == 2)
     }
 
+    @Test("Energy policy defers scheduled inference but manual check overrides it")
+    func deepProbeEnergyDeferral() async throws {
+        let target = MonitorTarget(probeModel: "tiny", failureThreshold: 1)
+        let api = MonitorRunnerAPI(target: target)
+        let request = try #require(api.deepReadinessRequest(model: "tiny"))
+        let http = MonitorFakeHTTPClient(default: .ok(Data()))
+        let engine = MonitorEngine(target: target, http: http, now: now)
+
+        let deferred = await engine.check(now: now, deepProbeAllowed: false)
+        #expect(deferred.phase == .healthy)
+        #expect(deferred.deepProbeDeferredReason?.contains("energy") == true)
+        #expect(http.postCount(request.url) == 0)
+
+        let forced = await engine.check(
+            now: now.addingTimeInterval(1), forceDeepProbe: true, deepProbeAllowed: false)
+        #expect(forced.deepProbeLastSucceeded == true)
+        #expect(forced.deepProbeDeferredReason == nil)
+        #expect(http.postCount(request.url) == 1)
+    }
+
     @Test("Inference failure must pass inference again before recovery")
     func inferenceRecoveryIsVerified() async throws {
         let target = MonitorTarget(

@@ -65,7 +65,7 @@ final class FullHearthBridgeCoordinator: ObservableObject {
     }
 
     func apply(_ targets: [MonitorTarget]) {
-        let paired = targets.filter { $0.fullHearth != nil }
+        let paired = targets.filter { $0.isEnabled && $0.fullHearth != nil }
         let incoming = Set(paired.map(\.id))
         for id in entries.keys.filter({ !incoming.contains($0) }) {
             entries[id]?.loop?.cancel()

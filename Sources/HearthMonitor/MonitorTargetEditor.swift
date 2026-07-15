@@ -10,6 +10,7 @@ import SwiftUI
 final class MonitorTargetEditorModel: ObservableObject {
     enum FeedbackTone { case neutral, success, warning, error }
 
+    @Published var isEnabled: Bool
     @Published var name: String
     @Published var runnerKind: RunnerKind
     @Published var scheme: String
@@ -17,6 +18,9 @@ final class MonitorTargetEditorModel: ObservableObject {
     @Published var portText: String
     @Published var deepProbeEnabled: Bool
     @Published var probeModel: String
+    @Published var deepProbeIntervalSeconds: TimeInterval
+    @Published var bearerAuthenticationEnabled: Bool
+    @Published var bearerToken: String
     @Published private(set) var candidates: [DiscoveredRunner] = []
     @Published private(set) var availableModels: [AvailableModel] = []
     @Published private(set) var isWorking = false
@@ -31,8 +35,9 @@ final class MonitorTargetEditorModel: ObservableObject {
     private var verifiedConnectionFingerprint: String?
     private var verifiedInferenceFingerprint: String?
 
-    init(target: MonitorTarget, http: any HTTPClient) {
+    init(target: MonitorTarget, bearerToken: String = "", http: any HTTPClient) {
         base = target
+        isEnabled = target.isEnabled
         name = target.name
         runnerKind = target.runnerKind
         scheme = target.scheme
@@ -40,11 +45,15 @@ final class MonitorTargetEditorModel: ObservableObject {
         portText = String(target.port)
         deepProbeEnabled = target.normalizedProbeModel != nil
         probeModel = target.normalizedProbeModel ?? ""
+        deepProbeIntervalSeconds = target.deepProbeIntervalSeconds
+        bearerAuthenticationEnabled = target.authentication == .bearer
+        self.bearerToken = bearerToken
         self.http = http
     }
 
     var target: MonitorTarget {
         var value = base
+        value.isEnabled = isEnabled
         value.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         value.runner = runnerKind.rawValue
         value.scheme = scheme.lowercased()
@@ -52,6 +61,8 @@ final class MonitorTargetEditorModel: ObservableObject {
         value.port = Int(portText.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
         let model = probeModel.trimmingCharacters(in: .whitespacesAndNewlines)
         value.probeModel = deepProbeEnabled && !model.isEmpty ? model : nil
+        value.deepProbeIntervalSeconds = deepProbeIntervalSeconds
+        value.authentication = bearerAuthenticationEnabled ? .bearer : .none
         return value
     }
 
@@ -59,6 +70,10 @@ final class MonitorTargetEditorModel: ObservableObject {
         var issues = target.validationIssues
         if deepProbeEnabled && target.normalizedProbeModel == nil {
             issues.append("Choose or enter a model for inference wedge detection.")
+        }
+        if bearerAuthenticationEnabled
+            && bearerToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            issues.append("Enter the runner's bearer credential.")
         }
         return issues
     }
@@ -149,7 +164,7 @@ final class MonitorTargetEditorModel: ObservableObject {
             do {
                 let result = try await MonitorProbeSetup.checkConnection(
                     target: checkedTarget,
-                    http: self.http)
+                    http: self.runnerHTTP)
                 guard self.operationIsCurrent(generation), self.connectionFingerprint == fingerprint else {
                     self.reportChangedDuringTest()
                     return
@@ -179,7 +194,7 @@ final class MonitorTargetEditorModel: ObservableObject {
             do {
                 let models = try await MonitorProbeSetup.availableModels(
                     target: checkedTarget,
-                    http: self.http)
+                    http: self.runnerHTTP)
                 guard self.operationIsCurrent(generation), self.connectionFingerprint == fingerprint else {
                     self.reportChangedDuringTest()
                     return
@@ -214,7 +229,7 @@ final class MonitorTargetEditorModel: ObservableObject {
                 let result = try await MonitorProbeSetup.testInference(
                     target: checkedTarget,
                     model: checkedTarget.normalizedProbeModel ?? "",
-                    http: self.http)
+                    http: self.runnerHTTP)
                 guard self.operationIsCurrent(generation), self.inferenceFingerprint == fingerprint else {
                     self.reportChangedDuringTest()
                     return
@@ -251,11 +266,21 @@ final class MonitorTargetEditorModel: ObservableObject {
     }
 
     private var connectionFingerprint: String {
-        "\(runnerKind.rawValue)|\(scheme.lowercased())|\(host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())|\(portText.trimmingCharacters(in: .whitespacesAndNewlines))"
+        "\(runnerKind.rawValue)|\(scheme.lowercased())|\(host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())|\(portText.trimmingCharacters(in: .whitespacesAndNewlines))|\(bearerAuthenticationEnabled)|\(bearerToken.hashValue)"
     }
 
     private var inferenceFingerprint: String {
-        "\(connectionFingerprint)|\(probeModel.trimmingCharacters(in: .whitespacesAndNewlines))"
+        "\(connectionFingerprint)|\(probeModel.trimmingCharacters(in: .whitespacesAndNewlines))|\(deepProbeIntervalSeconds)"
+    }
+
+    private var runnerHTTP: any HTTPClient {
+        guard bearerAuthenticationEnabled else { return http }
+        let token = bearerToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !token.isEmpty else { return MonitorMissingRunnerCredentialHTTPClient() }
+        guard let capable = http as? any MonitorBearerHTTPClient else {
+            return MonitorMissingRunnerCredentialHTTPClient()
+        }
+        return MonitorBearerRunnerHTTPClient(base: capable, token: token)
     }
 
     private func startOperation(
@@ -298,14 +323,15 @@ final class MonitorTargetEditorModel: ObservableObject {
 final class MonitorTargetEditorController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private let model: MonitorTargetEditorModel
-    private let onSave: (MonitorTarget) throws -> Void
+    private let onSave: (MonitorTarget, String?) throws -> Void
     private let onClose: () -> Void
 
     init(target: MonitorTarget,
+         bearerToken: String = "",
          http: any HTTPClient,
-         onSave: @escaping (MonitorTarget) throws -> Void,
+         onSave: @escaping (MonitorTarget, String?) throws -> Void,
          onClose: @escaping () -> Void = {}) {
-        model = MonitorTargetEditorModel(target: target, http: http)
+        model = MonitorTargetEditorModel(target: target, bearerToken: bearerToken, http: http)
         self.onSave = onSave
         self.onClose = onClose
         super.init()
@@ -342,7 +368,10 @@ final class MonitorTargetEditorController: NSObject, NSWindowDelegate {
 
     private func commit(_ target: MonitorTarget) {
         do {
-            try onSave(target)
+            let token = model.bearerAuthenticationEnabled
+                ? model.bearerToken.trimmingCharacters(in: .whitespacesAndNewlines)
+                : nil
+            try onSave(target, token)
             window?.close()
         } catch {
             model.reportSaveError(error)
@@ -393,6 +422,9 @@ struct MonitorTargetEditorView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            Toggle("Monitor this runner", isOn: $model.isEnabled)
+                .toggleStyle(.switch)
+                .accessibilityLabel("Monitor this runner")
         }
     }
 
@@ -488,6 +520,23 @@ struct MonitorTargetEditorView: View {
                     .padding(.bottom, 4)
             }
 
+            VStack(alignment: .leading, spacing: 7) {
+                Toggle("Runner requires a bearer credential",
+                       isOn: $model.bearerAuthenticationEnabled)
+                    .accessibilityLabel("Runner requires a bearer credential")
+                if model.bearerAuthenticationEnabled {
+                    SecureField("Bearer credential", text: $model.bearerToken)
+                        .textContentType(.password)
+                        .accessibilityLabel("Runner bearer credential")
+                    Text("Stored only in your login Keychain. It is sent only to this exact runner endpoint and never appears in settings or diagnostics.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.horizontal, 6)
+            .padding(.bottom, 4)
+
             HStack {
                 Button("Test Connection") { model.testConnection() }
                     .disabled(model.isWorking)
@@ -510,12 +559,24 @@ struct MonitorTargetEditorView: View {
             VStack(alignment: .leading, spacing: 11) {
                 Toggle("Run a one-token inference check", isOn: $model.deepProbeEnabled)
                     .accessibilityLabel("Run a one-token inference check")
-                Text("Optional. Once per minute, Monitor asks the selected model for one token. This catches a GPU or inference engine that is wedged even when its HTTP API still answers. The test can load the model into unified memory/GPU, and the runner decides how long it stays resident.")
+                Text("Optional. On the selected cadence, Monitor asks the model for one token. This catches a GPU or inference engine that is wedged even when HTTP still answers. For Ollama, a model loaded only for this check is unloaded immediately afterward; an already-resident model keeps its normal policy.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 if model.deepProbeEnabled {
+                    HStack {
+                        Text("Check cadence")
+                        Spacer()
+                        Picker("Inference check cadence", selection: $model.deepProbeIntervalSeconds) {
+                            Text("1 minute").tag(TimeInterval(60))
+                            Text("5 minutes").tag(TimeInterval(300))
+                            Text("15 minutes").tag(TimeInterval(900))
+                            Text("30 minutes").tag(TimeInterval(1_800))
+                        }
+                        .labelsHidden()
+                        .frame(width: 150)
+                    }
                     HStack {
                         Button("Find Models") { model.loadModels() }
                             .disabled(model.isWorking)

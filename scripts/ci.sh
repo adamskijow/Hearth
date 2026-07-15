@@ -95,9 +95,12 @@ fi
 
 section "Lint: SPDX header on every Swift source"
 MISSING=""
-for f in $(git ls-files '*.swift'); do
+while IFS= read -r -d '' f; do
+  # Cached paths can be absent before a deletion is staged. Check only files
+  # present in the working tree, including new untracked Swift sources.
+  [ -f "$f" ] || continue
   head -3 "$f" | grep -q "SPDX-License-Identifier" || MISSING="$MISSING $f"
-done
+done < <(git ls-files --cached --others --exclude-standard -z -- '*.swift')
 if [ -n "$MISSING" ]; then
   echo "  missing SPDX:$MISSING"
   bad "Swift files without an SPDX header"

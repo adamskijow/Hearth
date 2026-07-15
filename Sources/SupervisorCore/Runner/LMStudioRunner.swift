@@ -73,7 +73,7 @@ public struct LMStudioRunner: Runner {
 
     /// A one-token chat completion against the named model, so the deep probe
     /// catches a wedged LM Studio server that still answers `/v1/models`.
-    public func deepReadinessRequest(model: String) -> DeepProbeRequest? {
+    public func deepReadinessRequest(model: String, unloadAfter: Bool) -> DeepProbeRequest? {
         openAIDeepReadinessRequest(host: host, port: port, model: model)
     }
 }

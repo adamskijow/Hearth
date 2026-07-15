@@ -101,7 +101,10 @@ struct AttachedModeTests {
         // The runner wedges: /api/version still answers, inference hangs.
         http.set(deepURL, .timedOut)
         clock.advance(by: 61)                           // the deep probe is due again
-        var wait = await engine.stepOnce()              // deep probe fails -> down
+        _ = await engine.stepOnce()                     // first miss -> verifying
+        #expect(await engine.snapshot().phase == .healthy)
+        clock.advance(by: 61)
+        var wait = await engine.stepOnce()              // confirmed miss -> down
         #expect(await engine.snapshot().phase != .healthy)
 
         // Drive several retry cycles, all well inside the deep-probe interval.

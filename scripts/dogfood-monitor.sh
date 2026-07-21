@@ -32,6 +32,13 @@ record_once() {
   timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   output="$("$APP/Contents/MacOS/HearthMonitor" --self-test-apple-model 2>&1)"
   status=$?
+  if [[ -z "$output" ]]; then
+    if (( status > 128 )); then
+      output="Apple model self-test terminated without output (signal $((status - 128)), exit $status)."
+    else
+      output="Apple model self-test exited with status $status and no diagnostic output."
+    fi
+  fi
   output="${output//$'\t'/ }"
   output="${output//$'\n'/ }"
   printf '%s\t%s\t%s\n' "$timestamp" "$status" "$output" >>"$LOG"

@@ -144,6 +144,20 @@ the privacy-safe canary recorder once or in a bounded developer loop:
 ./scripts/dogfood-monitor.sh --loop
 ```
 
+For unattended dogfooding on a logged-in Mac, install the per-user LaunchAgent:
+
+```sh
+./scripts/install-dogfood-monitor-agent.sh
+```
+
+It runs at login and every 15 minutes. Each run reopens the installed Monitor
+only if it is no longer running, then records one bounded Apple on-device model
+canary. It makes no cloud or third-party model request and consumes no API
+tokens. Results live at `~/Library/Logs/Hearth Monitor/dogfood.tsv`; scheduler
+diagnostics live beside them in `dogfood-launchd.log`. Remove the scheduler with
+`./scripts/install-dogfood-monitor-agent.sh --uninstall`; existing evidence is
+preserved.
+
 The default loop interval is 15 minutes. Results go to the ignored,
 user-readable `.dogfood/hearth-monitor.tsv` with mode `0600` and contain only
 UTC time, exit status, and the existing self-test summary. Override the app

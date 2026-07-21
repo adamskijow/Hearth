@@ -22,6 +22,7 @@ final class MonitorWelcomeController: NSObject, NSWindowDelegate {
 
     func show() {
         if window == nil {
+            let size = MonitorWelcomeView.windowSize(for: appleAvailability)
             let view = MonitorWelcomeView(
                 appleAvailability: appleAvailability,
                 onContinue: { [weak self] functional in
@@ -45,11 +46,13 @@ final class MonitorWelcomeController: NSObject, NSWindowDelegate {
                         return error.localizedDescription
                     }
                 })
+                .frame(width: size.width, height: size.height)
             let hosting = NSHostingController(rootView: view)
+            hosting.sizingOptions = []
             let window = NSWindow(contentViewController: hosting)
             window.title = "Welcome to Hearth Monitor"
             window.styleMask = [.titled, .closable]
-            window.setContentSize(MonitorWelcomeView.windowSize(for: appleAvailability))
+            window.setContentSize(size)
             window.isReleasedWhenClosed = false
             window.delegate = self
             window.center()

@@ -10,6 +10,27 @@ import Testing
 @MainActor
 @Suite("Monitor UI render smoke tests", .serialized)
 struct MonitorUIRenderTests {
+    @Test("Welcome controller preserves its real window size")
+    func welcomeControllerKeepsReleaseSize() async throws {
+        let expected = MonitorWelcomeView.windowSize(for: .available)
+        let controller = MonitorWelcomeController(
+            appleAvailability: .available,
+            onContinue: { _ in },
+            onAddRunner: {})
+        controller.show()
+        try await Task.sleep(for: .seconds(2))
+
+        let window = try #require(NSApp.windows.first {
+            $0.title == "Welcome to Hearth Monitor"
+        })
+        defer { window.close() }
+        window.contentView?.layoutSubtreeIfNeeded()
+
+        let actual = try #require(window.contentView?.bounds.size)
+        #expect(abs(actual.width - expected.width) < 1)
+        #expect(abs(actual.height - expected.height) < 1)
+    }
+
     @Test("First-run editor renders at its release window size")
     func editorRenders() throws {
         let model = MonitorTargetEditorModel(

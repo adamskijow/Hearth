@@ -146,10 +146,15 @@ the privacy-safe canary recorder once or in a bounded developer loop:
 
 The default loop interval is 15 minutes. Results go to the ignored,
 user-readable `.dogfood/hearth-monitor.tsv` with mode `0600` and contain only
-UTC time, exit status, and the existing self-test summary. Override the app, log,
-or interval with `HEARTH_MONITOR_DOGFOOD_APP`,
-`HEARTH_MONITOR_DOGFOOD_LOG`, or
-`HEARTH_MONITOR_DOGFOOD_INTERVAL` (minimum five minutes).
+UTC time, exit status, and the existing self-test summary. Override the app
+path, log path, interval, or process timeout with
+`HEARTH_MONITOR_DOGFOOD_APP`, `HEARTH_MONITOR_DOGFOOD_LOG`,
+`HEARTH_MONITOR_DOGFOOD_INTERVAL` (minimum five minutes), or
+`HEARTH_MONITOR_DOGFOOD_TIMEOUT` (75 seconds by default). The external timeout
+also catches a launch that stalls before Hearth Monitor's in-process model
+timeout can start. Switching the same bundle identifier between local and Store
+signatures can cause macOS to request confirmation before reusing its container;
+complete that confirmation before treating the first timeout as a model failure.
 
 Do not pass the full Hearth signing identity or release bundle through this
 path. Creating an uploadable Store package additionally needs the explicit App

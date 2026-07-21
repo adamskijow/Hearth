@@ -88,6 +88,20 @@ final class MonitorAppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.notificationCenter.removeObserver(self)
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication,
+                                       hasVisibleWindows flag: Bool) -> Bool {
+        if flag {
+            sender.activate(ignoringOtherApps: true)
+        } else if settingsProblem != nil {
+            openSettings()
+        } else if !settings.onboardingCompleted {
+            openWelcome()
+        } else {
+            openDiagnostics(selectedID: settings.selectedTargetID)
+        }
+        return true
+    }
+
     private func configureStatusItem() {
         menu.delegate = self
         statusItem.menu = menu

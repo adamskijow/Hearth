@@ -65,28 +65,30 @@ struct MonitorUIRenderTests {
 
     @Test("Two-mode welcome and Apple health details render")
     func appleModelWindowsRender() async throws {
+        let welcomeSize = MonitorWelcomeView.windowSize(for: .available)
         let welcome = MonitorWelcomeView(onContinue: { _ in nil }, onAddRunner: { _ in nil })
-            .frame(width: 640, height: 650)
+            .frame(width: welcomeSize.width, height: welcomeSize.height)
             .background(Color(nsColor: .windowBackgroundColor))
-        let welcomeImage = try renderLight(welcome, size: NSSize(width: 640, height: 650))
-        #expect(welcomeImage.size == NSSize(width: 640, height: 650))
+        let welcomeImage = try renderLight(welcome, size: welcomeSize)
+        #expect(welcomeImage.size == welcomeSize)
         try writeIfRequested(welcomeImage, suffix: "welcome-two-mode")
         let darkWelcome = MonitorWelcomeView(
             onContinue: { _ in nil }, onAddRunner: { _ in nil })
-            .frame(width: 640, height: 650)
+            .frame(width: welcomeSize.width, height: welcomeSize.height)
             .background(Color(nsColor: .windowBackgroundColor))
             .preferredColorScheme(.dark)
-        let darkWelcomeImage = try render(darkWelcome, size: NSSize(width: 640, height: 650))
-        #expect(darkWelcomeImage.size == NSSize(width: 640, height: 650))
+        let darkWelcomeImage = try render(darkWelcome, size: welcomeSize)
+        #expect(darkWelcomeImage.size == welcomeSize)
         try writeIfRequested(darkWelcomeImage, suffix: "welcome-two-mode-dark")
+        let runnerOnlySize = MonitorWelcomeView.windowSize(for: .unavailable(.deviceNotEligible))
         let runnerOnlyWelcome = MonitorWelcomeView(
             appleAvailability: .unavailable(.deviceNotEligible),
             onContinue: { _ in nil },
             onAddRunner: { _ in nil })
-            .frame(width: 640, height: 650)
+            .frame(width: runnerOnlySize.width, height: runnerOnlySize.height)
             .background(Color(nsColor: .windowBackgroundColor))
-        let runnerOnlyImage = try renderLight(runnerOnlyWelcome, size: NSSize(width: 640, height: 650))
-        #expect(runnerOnlyImage.size == NSSize(width: 640, height: 650))
+        let runnerOnlyImage = try renderLight(runnerOnlyWelcome, size: runnerOnlySize)
+        #expect(runnerOnlyImage.size == runnerOnlySize)
         #expect(try lightCaptureDefectFraction(runnerOnlyImage) < 0.20)
         try writeIfRequested(runnerOnlyImage, suffix: "welcome-runner-only")
 

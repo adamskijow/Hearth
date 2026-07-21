@@ -49,7 +49,7 @@ final class MonitorWelcomeController: NSObject, NSWindowDelegate {
             let window = NSWindow(contentViewController: hosting)
             window.title = "Welcome to Hearth Monitor"
             window.styleMask = [.titled, .closable]
-            window.setContentSize(NSSize(width: 640, height: 650))
+            window.setContentSize(MonitorWelcomeView.windowSize(for: appleAvailability))
             window.isReleasedWhenClosed = false
             window.delegate = self
             window.center()
@@ -79,6 +79,11 @@ struct MonitorWelcomeView: View {
         self.onContinue = onContinue
         self.onAddRunner = onAddRunner
         _functionalChecks = State(initialValue: appleAvailability == .available)
+    }
+
+    static func windowSize(for availability: AppleModelAvailability) -> NSSize {
+        let height: CGFloat = availability == .available ? 550 : 560
+        return NSSize(width: 640, height: height)
     }
 
     var body: some View {

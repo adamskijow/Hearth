@@ -12,6 +12,26 @@ DerivedData/
 # Packaging output
 dist/
 *.app
+*.dmg
+*.pkg
+*.xcarchive
+*.xcresult
+
+# Local credentials and signing material
+.env
+.env.*
+!.env.example
+*.p8
+*.p12
+*.pfx
+*.pem
+*.key
+*.cer
+*.crt
+*.der
+*.certSigningRequest
+*.mobileprovision
+*.provisionprofile
 
 # Local dogfood evidence
 .dogfood/

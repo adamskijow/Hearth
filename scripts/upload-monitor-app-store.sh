@@ -21,7 +21,19 @@ PKG="${HEARTH_MONITOR_PKG:-dist/Hearth-Monitor-$VERSION-$BUILD.pkg}"
 
 test -f "$HEARTH_ASC_KEY"
 test -f "$PKG"
-xcrun --find altool >/dev/null
+
+ALTOOL="${HEARTH_ALTOOL:-$(xcrun --find altool)}"
+if ! "$ALTOOL" --help >/dev/null 2>&1; then
+  # Xcode 26 can ship a Transporter-dependent shim at Developer/usr/bin/altool
+  # even when the self-contained ContentDelivery implementation is present.
+  # Prefer the shim when it works, but fall back to Apple's bundled binary.
+  BUNDLED_ALTOOL="$DEVELOPER_DIR/../SharedFrameworks/ContentDelivery.framework/Versions/A/Resources/altool"
+  if [ ! -x "$BUNDLED_ALTOOL" ]; then
+    echo "Apple's altool is unavailable at $ALTOOL and $BUNDLED_ALTOOL." >&2
+    exit 2
+  fi
+  ALTOOL="$BUNDLED_ALTOOL"
+fi
 
 AUTH=(
   --api-key "$HEARTH_ASC_KEY_ID"
@@ -30,7 +42,7 @@ AUTH=(
 )
 
 echo "Validating $PKG with App Store Connect..."
-xcrun altool --validate-app "$PKG" "${AUTH[@]}" --output-format json
+"$ALTOOL" --validate-app "$PKG" "${AUTH[@]}" --output-format json
 
 if [ "${HEARTH_ASC_VALIDATE_ONLY:-0}" = "1" ]; then
   echo "Validation passed. Upload skipped because HEARTH_ASC_VALIDATE_ONLY=1."
@@ -38,7 +50,7 @@ if [ "${HEARTH_ASC_VALIDATE_ONLY:-0}" = "1" ]; then
 fi
 
 echo "Uploading $PKG to App Store Connect..."
-xcrun altool --upload-package "$PKG" "${AUTH[@]}" \
+"$ALTOOL" --upload-package "$PKG" "${AUTH[@]}" \
   --wait --show-progress --output-format json
 
 echo "App Store Connect accepted Hearth Monitor $VERSION ($BUILD)."

@@ -16,9 +16,8 @@ field limits and localized text before submission.
 
 ## Promotional text
 
-Know when Apple's on-device language model and the local AI runners on your Mac
-are actually responding, with private functional checks, confirmed incidents,
-and clear recovery boundaries.
+Private health checks for Apple’s on-device language model and local AI runners,
+with confirmed incidents and clear recovery boundaries.
 
 ## Keywords
 

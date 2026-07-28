@@ -5,6 +5,16 @@ This is the distribution checklist for the separate `com.hearth.HearthMonitor`
 product. It does not apply App Sandbox to full Hearth and must never replace the
 full product's Developer ID release.
 
+The public GitHub beta uses the same sandboxed Monitor target but is signed and
+notarized with Developer ID through `scripts/release-monitor.sh`. Let that build
+accumulate installation, setup, false-positive, missed-failure, and
+accessibility feedback before public App Review. Private TestFlight proves
+Apple's delivery path; it does not replace use by unfamiliar people.
+Switching an existing beta installation to TestFlight or the Store can make
+macOS request access to the existing sandbox container because the designated
+code-signing requirement changes. Document that expected one-time prompt for
+beta users rather than presenting it as a product failure.
+
 Use [the listing draft](hearth-monitor-app-store-listing.md) for the description,
 keywords, screenshot order, What's New text, and reviewer walkthrough.
 
@@ -107,6 +117,40 @@ credentials or ask the reviewer to install full Hearth. Screenshots must show
 Apple health, the two-mode onboarding, configured runner state, Details,
 History, and the optional inference distinction.
 
+## Current candidate evidence
+
+Private TestFlight build **0.2.0 (5)** completed its bounded passive dogfood run
+on July 25, 2026:
+
+- 372 consecutive Apple on-device model canaries passed over 93.7 hours.
+- Median latency was 1.47 seconds, p95 was 3.07 seconds, and the maximum was
+  5.86 seconds.
+- Scheduler diagnostics remained empty.
+- A 58-minute gap straddled a real shutdown and reboot; the per-user scheduler
+  resumed after the next logged-in session and subsequent canaries passed.
+- The scheduler was then intentionally removed. Raw logs remain local and are
+  not release assets.
+
+Candidate **0.2.0 (6)** was validated, uploaded, processed as valid, installed
+through private TestFlight, and launched on July 28, 2026. On the exact
+TestFlight-delivered binary:
+
+- The private Keychain write/read/delete self-test passed.
+- A real Apple on-device model response completed in 0.56 seconds.
+- The isolated production-transport runner gate passed healthy inference, one
+  provisional timeout, a confirmed inference incident with actionable alert
+  content, and inference-verified recovery.
+- The complete 466-test suite, both product builds, Store capability boundary
+  audit, and release-sized light/dark/empty/narrow UI renders passed before
+  upload.
+
+This closes the passive Foundation Models success path, current-Mac relaunch,
+isolated runner-incident logic, package validation, and private TestFlight
+delivery evidence. It does **not** prove notification presentation, a live
+VoiceOver and keyboard-only traversal, denied-permission behavior, a real
+third-party runner wedge, or the oldest supported macOS matrix. Those remain
+explicit release-gate work below.
+
 ## Release gate
 
 1. Run the whole Swift test suite through the installed Xcode toolchain so Swift
@@ -120,7 +164,9 @@ History, and the optional inference distinction.
    a completed real response. Exercise the injected timeout-containment test and
    confirm a timed-out canary cannot stack another request.
 6. Exercise a real compatible runner and an inference-only wedge through the
-   signed app. Confirm the incident closes only after real inference succeeds.
+   signed app. The isolated fake-runner gate must prove the complete incident
+   path through the production URL transport; confirm separately against a real
+   compatible runner before App Review.
 7. Verify VoiceOver labels, keyboard-only setup, light/dark appearance, disabled
    Apple Intelligence, model-not-ready, ineligible/old Mac, Low Power Mode,
    thermal pause, denied

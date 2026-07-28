@@ -1,5 +1,5 @@
-name: Bug report
-description: Something Hearth did wrong (a runner not restarting, a wedge missed, a crash)
+name: Full Hearth bug report
+description: Full Hearth missed a wedge, failed recovery, or behaved incorrectly
 labels: ["bug"]
 body:
   - type: markdown

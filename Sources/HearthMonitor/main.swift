@@ -13,6 +13,11 @@ if Array(CommandLine.arguments.dropFirst()) == ["--self-test-apple-model"] {
     dispatchMain()
 }
 
+if Array(CommandLine.arguments.dropFirst()) == ["--self-test-runner-incident"] {
+    Task { exit(await MonitorRunnerIncidentSelfTest.run()) }
+    dispatchMain()
+}
+
 // Hearth Monitor is intentionally a different executable from full Hearth. The
 // App Store target never imports Hearth, HearthSpawn, or any process-management
 // adapter. Monitoring behavior is added behind this boundary once the sandboxed

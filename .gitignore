@@ -36,5 +36,8 @@ dist/
 # Local dogfood evidence
 .dogfood/
 
+# Local session handoff
+HANDOFF.md
+
 # macOS
 .DS_Store

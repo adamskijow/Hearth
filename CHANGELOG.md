@@ -14,6 +14,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   notification opens the affected Apple model or runner.
 - A restrained menu-bar proof-of-work line showing the latest successful
   functional response without claiming an uptime percentage or lifetime count.
+- A token-free per-user dogfood scheduler for bounded Apple on-device model
+  canaries, with private local evidence and separate scheduler diagnostics.
+- A signed, isolated runner-incident release gate that proves a transient
+  inference miss stays provisional, a confirmed wedge produces actionable
+  outage content, and recovery is withheld until inference succeeds again.
+- A Developer ID–signed and notarized public GitHub beta path for Hearth
+  Monitor, with separate product-specific release tags and universal DMG/ZIP
+  artifacts.
 
 ### Changed
 
@@ -23,6 +31,9 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Optional full Hearth recovery pairing remains available but is collapsed in
   unpaired runner Details and absent from the primary runner menu until paired.
 - The privacy policy now matches the shipped feature set.
+- The repository front page is now a concise product and installation guide;
+  operational, integration, release, and maintainer material is organized
+  through a dedicated documentation index.
 
 ### Removed
 

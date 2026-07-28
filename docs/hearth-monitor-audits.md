@@ -100,7 +100,9 @@ review before App Review.
 Machine-specific dogfood logs remain local and are never committed. A release
 record should distinguish automated coverage, one-machine functional evidence,
 and behavior that still requires external review. Passing one does not imply the
-others passed.
+others passed. Passive dogfood may end when additional successful samples no
+longer change the decision; controlled outage, notification, and recovery
+exercises remain separate evidence and must not be inferred from a clean run.
 
 ## Review questions for future changes
 

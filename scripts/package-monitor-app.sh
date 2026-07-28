@@ -91,4 +91,8 @@ if [[ "${HEARTH_MONITOR_APPLE_MODEL_SELF_TEST:-0}" == "1" ]]; then
   fi
 fi
 
+if [[ "${HEARTH_MONITOR_RUNNER_SELF_TEST:-0}" == "1" ]]; then
+  "$APP/Contents/MacOS/HearthMonitor" --self-test-runner-incident
+fi
+
 echo "Built sandboxed app: $APP"

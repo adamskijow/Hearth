@@ -1,0 +1,69 @@
+name: Hearth Monitor beta report
+description: Report confusing setup, a missed failure, a false alert, or an accessibility problem
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing Hearth Monitor. Copy Diagnostics from the affected Details view when possible. It contains no bearer credential or generated model text, but review it before posting.
+  - type: input
+    id: monitor-version
+    attributes:
+      label: Hearth Monitor version
+      description: Include both version and build when shown, for example 0.2.0 (6).
+      placeholder: "0.2.0 (6)"
+    validations:
+      required: true
+  - type: dropdown
+    id: distribution
+    attributes:
+      label: Installed from
+      options:
+        - GitHub public beta
+        - TestFlight
+        - Built from source
+    validations:
+      required: true
+  - type: input
+    id: mac
+    attributes:
+      label: Mac and macOS
+      description: Include the Mac model/chip and exact macOS version.
+      placeholder: "Mac mini (M4), macOS 26.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - First launch or setup
+        - Apple on-device model
+        - Local AI runner
+        - Alerts or incident history
+        - Login item or relaunch
+        - Accessibility or keyboard use
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Say what you expected and what Hearth Monitor did instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: false
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Copied diagnostics
+      description: Paste Copy Diagnostics output if available. Review it and never include a bearer credential.
+      render: text
+    validations:
+      required: false

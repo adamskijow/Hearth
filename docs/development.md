@@ -136,6 +136,14 @@ run builds its universal sandbox bundle and runs
 ./scripts/audit-monitor-boundary.sh
 ```
 
+For a public GitHub beta, `scripts/release-monitor.sh` preserves that sandbox
+boundary while Developer ID signing, notarizing, and stapling a universal DMG
+and ZIP. It accepts the same notarization variables as `scripts/release.sh` and
+uses `HEARTH_MONITOR_SIGN_IDENTITY`, falling back to
+`HEARTH_SIGN_IDENTITY`. Use a product-specific tag such as
+`hearth-monitor-v0.2.0`; full Hearth already owns the historical `v*` version
+line.
+
 For longer real-device evidence, install the signed local Monitor build and run
 the privacy-safe canary recorder once or in a bounded developer loop:
 
@@ -157,6 +165,20 @@ tokens. Results live at `~/Library/Logs/Hearth Monitor/dogfood.tsv`; scheduler
 diagnostics live beside them in `dogfood-launchd.log`. Remove the scheduler with
 `./scripts/install-dogfood-monitor-agent.sh --uninstall`; existing evidence is
 preserved.
+
+Long-running dogfood is success-path evidence, not a substitute for failure
+testing. End it when additional clean samples no longer change the release
+decision, then separately exercise a controlled outage, notification, and
+inference-verified recovery. Record only a bounded summary in release notes;
+keep the raw machine log local.
+
+For the isolated runner failure gate, start `scripts/fake-runner.py` on a
+dedicated loopback port and package with
+`HEARTH_MONITOR_RUNNER_SELF_TEST=1`. The signed app uses its production
+URLSession transport to prove healthy inference, one provisional miss, a
+confirmed second miss with actionable alert content, and recovery only after
+inference succeeds. Set `HEARTH_MONITOR_SELF_TEST_PORT` on both processes when
+using a port other than `44144`; never point this gate at a real runner.
 
 The default loop interval is 15 minutes. Results go to the ignored,
 user-readable `.dogfood/hearth-monitor.tsv` with mode `0600` and contain only

@@ -11,16 +11,14 @@
   <img src="https://img.shields.io/badge/macOS-14%2B-black?logo=apple&logoColor=white" alt="macOS 14+">
 </p>
 
-**Keep Ollama alive on an always-on Mac.** Hearth is a small macOS supervisor that
-restarts your local model runner when it crashes and, unlike `launchd` or `brew
-services`, also when it is still running but has quietly stopped answering. It keeps
-the runner native rather than in Docker, which on macOS is CPU-only, so you keep the
-Mac's GPU. It also keeps the Mac awake while serving and alerts you, including on your
-phone, when something breaks. LM Studio and mlx_lm work alongside Ollama.
+**Keep local AI runners alive on an always-on Mac.** Hearth supervises Ollama,
+LM Studio, and `mlx_lm`, catching both ordinary crashes and runners that are still
+running but no longer answering. It preserves native Metal GPU use, keeps the Mac
+awake while serving, and alerts you when something breaks.
 
-Built for any Apple Silicon Mac that serves models unattended: a Mac mini in a
-closet, a home-lab server, or a desktop left on overnight. Your apps keep talking to
-the runner exactly as before. *Independent project, not affiliated with Ollama.*
+Built for an unattended Mac mini, home-lab server, or desktop left on overnight.
+Your apps keep talking to the runner exactly as before. *Independent project, not
+affiliated with Ollama.*
 
 <p align="center">
   <img src="assets/wedge-recovery.gif" alt="Hearth catching a runner that is still running but stuck, and recovering it hands-off" width="820">
@@ -30,97 +28,62 @@ the runner exactly as before. *Independent project, not affiliated with Ollama.*
 
 ## Why
 
-`launchd` and `brew services` relaunch a runner that has *exited*. They cannot see
-the failure that actually strands you: a runner still running but no longer
-answering, like a [GPU hang](https://community.frame.work/t/ollama-model-runner-unexpectedly-stopped-gpu-hang/76220),
-a [silent revert to CPU](https://github.com/ollama/ollama/issues/8594), or a
-[hang after a few requests](https://github.com/ollama/ollama/issues/6616). Hearth
-checks **readiness** (does the API answer?), not just **liveness** (is the PID
-alive?), so it catches the wedge, not just the crash. And it stays native instead of
-putting Ollama in Docker, which on macOS is
-[CPU-only](https://github.com/ollama/ollama/blob/main/docs/faq.mdx#how-do-i-use-ollama-with-gpu-acceleration-in-docker)
-and throws away the Metal GPU. The full story, with a live GPU-crash recovery, is in
-[How it works](docs/how-it-works.md).
+`launchd` and `brew services` can relaunch an exited process, but cannot detect a
+runner that is alive while its API or inference engine is wedged. Hearth checks
+readiness and can run a tiny generation probe, then performs bounded recovery
+without moving the runner into CPU-only Docker. See [how Hearth works](docs/how-it-works.md)
+for the mechanism and live GPU-crash evidence.
 
-## Getting started
+## Choose the right app
 
-Hearth now has two deliberately separate Mac products:
+| | Best for | Recovery |
+|---|---|---|
+| **Hearth** | Unattended local runners | Starts and restarts runners, keeps the Mac awake, and can escalate persistent GPU/driver wedges |
+| **[Hearth Monitor](docs/hearth-monitor.md)** | Apple’s on-device model and attached local runners | Detects and reports failures; optionally shows recovery coverage from a separate full Hearth installation |
 
-- **Hearth** is the full recovery supervisor documented on this page. It starts
-  and restarts runners, keeps the serving Mac awake, and can escalate a persistent
-  GPU/driver wedge to a reboot when configured. Those powers require a Developer
-  ID build outside App Sandbox.
-- **[Hearth Monitor](docs/hearth-monitor.md)** is the sandboxed, universal
-  menu-bar companion for the Mac App Store. Its Apple Intelligence mode checks
-  whether the on-device system model is available and actually completes a tiny
-  private response. Its Local AI Runners mode watches Ollama, LM Studio, mlx_lm,
-  and Osaurus,
-  keeps inference-aware history and alerts, and never controls a process. An
-  optional read-only connection can show whether a separately installed full
-  Hearth is providing managed recovery.
+Full Hearth uses Developer ID distribution because process supervision cannot fit
+inside App Sandbox. Hearth Monitor is the sandboxed companion built for the Mac
+App Store. Both can detect an inference-level runner wedge; only full Hearth
+controls the runner.
 
-The runner probe catches an inference/GPU wedge in both products. Full Hearth can
-recover it; Monitor reports it. For Apple Intelligence, Monitor can recreate its
-own model session and verify recovery, but macOS owns the underlying service.
+Hearth Monitor 0.2.0 is also available as a
+[public GitHub beta](https://github.com/adamskijow/Hearth/releases/tag/hearth-monitor-v0.2.0)
+while real-world use informs the App Store release.
 
-### Full Hearth
+## Install full Hearth
 
 If you already run Ollama on this Mac:
 
-```
+```sh
 brew install --cask adamskijow/tap/hearth
 open /Applications/Hearth.app
 ```
 
 A flame appears in the menubar; Hearth auto-detects Ollama, starts supervising it,
-and keeps the Mac awake. **It is working when** the flame has no warning badge and
-the menu says **Healthy**. From a terminal, `hearth doctor` checks your setup and
-`hearth status` shows health, uptime, and loaded models.
+and keeps the Mac awake. It is working when the flame has no warning badge and
+the menu says **Healthy**. `hearth doctor` checks the setup; `hearth status` shows
+health, uptime, and loaded models.
 
-- **Homebrew Ollama:** run `brew services stop ollama` first so it does not fight
-  Hearth over the runner, then let Hearth manage it.
-- **Ollama.app:** it starts its own server, so have Hearth watch that one (attached
-  mode); Hearth offers this as a one-click switch when it sees the collision.
-
-To remove: `brew uninstall --cask hearth` (add `--zap` to delete config and logs
-too). Ollama is untouched.
-
-## Configure
-
-Set options in **Preferences** (Cmd-comma) or `~/Library/Application Support/Hearth/config.json`;
-notification, alert, heartbeat, and phone-control changes apply without cycling
-the runner. Preferences labels changes that need to restart it before you save.
-The keys most people touch are `runner`/`mode`, the binary path and `host`/`port`, `ntfyTopic` for phone alerts, and
-`controlEnabled`/`controlToken` for the [control endpoint](docs/remote-control.md).
-
-**managed** mode means Hearth starts and restarts the runner; **attached** means
-something else starts it and Hearth only watches. Switch with `hearth mode managed` /
-`hearth mode attached`, or let `hearth setup` pick for a clean install. Every key,
-with a full example, is in the [configuration reference](docs/configuration.md).
+If you use Ollama.app or `brew services`, read the
+[Ollama setup guide](docs/ollama.md) before choosing managed or attached mode.
+Most options live in **Preferences**; every advanced setting is in the
+[configuration reference](docs/configuration.md).
 
 ## Security
 
-Full Hearth runs unsandboxed (supervising another process is exactly what the App
-Sandbox forbids) as a Developer ID signed and notarized build, and sends only
-short status text to notifiers, never prompts or model content. The separate
-Hearth Monitor has only App Sandbox and outbound network-client entitlements,
-stores optional runner and status credentials in separate Keychain items, and
-contains no analytics or tracking. See the [privacy policy](PRIVACY.md).
+Full Hearth is signed, notarized, and unsandboxed only because it must supervise
+another process. Hearth sends notifier status, not prompts or model output, and
+Hearth Monitor contains no analytics or tracking. Runners remain bound to
+`127.0.0.1` by default. See the [privacy policy](PRIVACY.md) and
+[network exposure guide](docs/reverse-proxy.md).
 
-The runner stays on `127.0.0.1` by default; do not expose it raw, since it has no
-authentication of its own. Exposure and reverse-proxy setup are in the
-[reverse-proxy guide](docs/reverse-proxy.md).
+## Learn more
 
-## Docs and links
+- [Documentation index](docs/README.md)
+- [FAQ](docs/faq.md) and [troubleshooting](docs/troubleshooting.md)
+- [How Hearth works](docs/how-it-works.md)
+- [Hearth Monitor guide](docs/hearth-monitor.md)
+- [Running headless](docs/running-headless.md)
 
-- **[Keeping Ollama running on macOS](docs/keep-ollama-running-on-macos.md)**: why it stops responding, what to try, and where Hearth fits
-- **[FAQ](docs/faq.md)** and **[Troubleshooting](docs/troubleshooting.md)**: is Hearth for you, which mode, and the common fixes
-- **[How it works](docs/how-it-works.md)**: the wedge problem, the evidence, and the mechanism
-- **[Configuration](docs/configuration.md)**: every config key and default
-- **[Ollama setup](docs/ollama.md)**, **[Remote control](docs/remote-control.md)**, **[Running headless](docs/running-headless.md)**
-- **[Integrating](docs/integrating.md)**, **[Reverse proxy](docs/reverse-proxy.md)**, **[Stability](docs/stability.md)**, **[Limitations](docs/limitations.md)**, **[Development](docs/development.md)**
-- **[Hearth Monitor guide](docs/hearth-monitor.md)** and **[Mac App Store release checklist](docs/hearth-monitor-app-store.md)**
-
-Contributions are welcome: run `make test` before sending a change, and see the
-[development guide](docs/development.md). Released under the MIT License; see
-[LICENSE](LICENSE). No third-party dependencies.
+Contributions are welcome; start with the [development guide](docs/development.md).
+Released under the [MIT License](LICENSE) with no third-party dependencies.

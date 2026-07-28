@@ -20,6 +20,21 @@ runner restart, keep-awake behavior, and optional GPU/driver reboot recovery.
 Monitor works without full Hearth; an optional read-only connection can show
 whether full Hearth is providing that recovery.
 
+## Install the public beta
+
+Download the signed and notarized DMG from the
+[Hearth Monitor 0.2.0 GitHub release](https://github.com/adamskijow/Hearth/releases/tag/hearth-monitor-v0.2.0),
+open it, and drag **Hearth Monitor** to Applications. This public beta is the
+same sandboxed product boundary as the Mac App Store build and contains no
+analytics. Report confusing setup, false alerts, missed failures, and
+accessibility problems through
+[GitHub Issues](https://github.com/adamskijow/Hearth/issues).
+
+If you later replace this Developer ID beta with TestFlight or the Mac App Store
+edition, macOS may ask whether the new copy can access Hearth Monitor's existing
+sandbox data. This is an operating-system check caused by the distribution
+signature changing. Allow it to retain settings and incident history.
+
 ## Requirements
 
 - macOS 14 or later on Apple silicon or Intel for Local AI Runner monitoring.

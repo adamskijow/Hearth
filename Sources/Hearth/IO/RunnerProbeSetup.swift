@@ -64,9 +64,14 @@ enum RunnerProbeSetup {
             throw SetupError.unsupportedProbe
         }
         let started = Date()
+        let timeout = DeepProbeConfig(
+            model: model,
+            interval: config.deepProbeIntervalSeconds,
+            timeout: config.deepProbeTimeoutSeconds
+        ).effectiveTimeout(modelIsConfirmedResident: false)
         let outcome = await URLSessionHTTPClient().post(
             request.url, body: request.body,
-            timeout: max(1, config.deepProbeTimeoutSeconds))
+            timeout: timeout)
         switch outcome {
         case .ok:
             return TestResult(elapsed: Date().timeIntervalSince(started))

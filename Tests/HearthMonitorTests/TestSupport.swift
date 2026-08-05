@@ -8,6 +8,7 @@ final class MonitorFakeHTTPClient: HTTPClient, @unchecked Sendable {
     private var outcomes: [String: HTTPOutcome] = [:]
     private var fallback: HTTPOutcome
     private var posts: [String] = []
+    private var postTimeouts: [TimeInterval] = []
     private var gets: [String] = []
     private var delayNanoseconds: UInt64 = 0
 
@@ -35,12 +36,21 @@ final class MonitorFakeHTTPClient: HTTPClient, @unchecked Sendable {
     func post(_ url: URL, body: Data, timeout: TimeInterval) async -> HTTPOutcome {
         lock.withLock {
             posts.append(url.absoluteString)
+            postTimeouts.append(timeout)
             return outcomes[url.absoluteString] ?? fallback
         }
     }
 
     func postCount(_ url: URL) -> Int {
         lock.withLock { posts.filter { $0 == url.absoluteString }.count }
+    }
+
+    func recordedPostTimeouts(_ url: URL) -> [TimeInterval] {
+        lock.withLock {
+            zip(posts, postTimeouts).compactMap { postedURL, timeout in
+                postedURL == url.absoluteString ? timeout : nil
+            }
+        }
     }
 
     func getCount(_ url: URL) -> Int {

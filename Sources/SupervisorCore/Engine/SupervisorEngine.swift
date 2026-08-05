@@ -450,13 +450,21 @@ public actor SupervisorEngine {
             return .busy
         }
         let wasResident = residentModels.contains { $0.name == deep.model }
+        // Only trust residency when /api/ps answered during this probe. A stale
+        // cached model list must not make a possible cold load inherit the much
+        // shorter steady-state inference timeout.
+        let modelIsConfirmedResident = residencyIsCurrent && wasResident
         guard let request = runner.deepReadinessRequest(
             model: deep.model,
             unloadAfter: residencyIsCurrent && !wasResident) else {
             consecutiveDeepProbeFailures = 0
             return .serving
         }
-        let outcome = await http.post(request.url, body: request.body, timeout: deep.timeout)
+        let outcome = await http.post(
+            request.url,
+            body: request.body,
+            timeout: deep.effectiveTimeout(
+                modelIsConfirmedResident: modelIsConfirmedResident))
         switch outcome {
         case .ok:
             lastDeepProbeAt = now

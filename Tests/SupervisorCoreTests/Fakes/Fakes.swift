@@ -137,14 +137,24 @@ final class FakeHTTPClient: HTTPClient, @unchecked Sendable {
     func post(_ url: URL, body: Data, timeout: TimeInterval) async -> HTTPOutcome {
         lock.withLock {
             _postedURLs.append(url.absoluteString)
+            _postTimeouts.append(timeout)
             return outcomes[url.absoluteString] ?? _default
         }
     }
 
     private var _postedURLs: [String] = []
+    private var _postTimeouts: [TimeInterval] = []
     /// How many POSTs have been sent to `url`, for asserting on warm-up traffic.
     func postCount(to url: URL) -> Int {
         lock.withLock { _postedURLs.filter { $0 == url.absoluteString }.count }
+    }
+
+    func postTimeouts(to url: URL) -> [TimeInterval] {
+        lock.withLock {
+            zip(_postedURLs, _postTimeouts).compactMap { postedURL, timeout in
+                postedURL == url.absoluteString ? timeout : nil
+            }
+        }
     }
 }
 

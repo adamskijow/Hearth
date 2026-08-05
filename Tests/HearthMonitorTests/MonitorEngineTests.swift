@@ -71,6 +71,24 @@ struct MonitorEngineTests {
         #expect(snapshot.modelsNote != nil)
     }
 
+    @Test("A nonresident probe model gets a cold-load timeout")
+    func coldDeepProbeTimeout() async throws {
+        let target = MonitorTarget(
+            probeModel: "tiny",
+            deepProbeTimeoutSeconds: 20,
+            failureThreshold: 1)
+        let api = MonitorRunnerAPI(target: target)
+        let request = try #require(api.deepReadinessRequest(model: "tiny"))
+        let http = MonitorFakeHTTPClient(default: .ok(Data()))
+        http.set(api.modelsEndpoint, outcome: .ok(Data(#"{"models":[]}"#.utf8)))
+        let engine = MonitorEngine(target: target, http: http, now: now)
+
+        let snapshot = await engine.check(now: now)
+
+        #expect(snapshot.phase == .healthy)
+        #expect(http.recordedPostTimeouts(request.url) == [60])
+    }
+
     @Test("Deep probes obey their slower cadence")
     func deepProbeCadence() async throws {
         let target = MonitorTarget(

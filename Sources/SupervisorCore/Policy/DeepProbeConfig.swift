@@ -9,6 +9,12 @@ import Foundation
 /// the shallow `/api/version` probe stays the default. The probe sends no
 /// `keep_alive`, so model residency follows the runner's own policy, not the probe's.
 public struct DeepProbeConfig: Sendable, Equatable {
+    /// Loading even a small model can take substantially longer than generating
+    /// a token once it is resident. In particular, cancelling Ollama while it is
+    /// loading also aborts that load, so repeatedly applying a short inference
+    /// timeout can create the very failure loop the probe is meant to detect.
+    public static let minimumColdLoadTimeout: TimeInterval = 60
+
     public var model: String
     /// How often to run the deep probe (separate from, and slower than, the shallow
     /// probe interval, because it is expensive).
@@ -21,5 +27,16 @@ public struct DeepProbeConfig: Sendable, Equatable {
         self.model = model
         self.interval = interval
         self.timeout = timeout
+    }
+
+    /// Keep the configured timeout for an already-resident model, where it
+    /// measures inference responsiveness. Give a cold or uncertain model load a
+    /// separate floor so ordinary startup latency is not classified as a GPU
+    /// wedge and cancelled over and over.
+    public func effectiveTimeout(modelIsConfirmedResident: Bool) -> TimeInterval {
+        let configured = max(1, timeout)
+        return modelIsConfirmedResident
+            ? configured
+            : max(configured, Self.minimumColdLoadTimeout)
     }
 }

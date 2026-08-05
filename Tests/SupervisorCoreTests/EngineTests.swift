@@ -663,6 +663,37 @@ struct EngineTests {
         #expect(h.processes.terminateCount == 0)
     }
 
+    @Test func coldDeepProbeGetsModelLoadBudget() async {
+        let h = makeHarness(
+            deepProbe: DeepProbeConfig(model: "probe:tiny", interval: 30, timeout: 20))
+        // The probe model is installed but not resident: this is the state that
+        // previously let a 20-second timeout repeatedly cancel Ollama's load.
+        makeServing(h, models: #"{"models":[]}"#)
+        let deepURL = h.runner.deepReadinessRequest(model: "probe:tiny")!.url
+        h.http.set(deepURL, .ok(Data("{}".utf8)))
+
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+
+        #expect(await h.engine.snapshot().phase == .healthy)
+        #expect(h.http.postTimeouts(to: deepURL) == [60])
+        #expect(h.processes.terminateCount == 0)
+    }
+
+    @Test func residentDeepProbeKeepsConfiguredInferenceTimeout() async {
+        let h = makeHarness(
+            deepProbe: DeepProbeConfig(model: "probe:tiny", interval: 30, timeout: 20))
+        makeServing(h, models: #"{"models":[{"name":"probe:tiny","size":42}]}"#)
+        let deepURL = h.runner.deepReadinessRequest(model: "probe:tiny")!.url
+        h.http.set(deepURL, .ok(Data("{}".utf8)))
+
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+
+        #expect(await h.engine.snapshot().phase == .healthy)
+        #expect(h.http.postTimeouts(to: deepURL) == [20])
+    }
+
     @Test func deepProbeDefersWhileClientTrafficIsObserved() async {
         final class Traffic: @unchecked Sendable {
             let lock = NSLock()

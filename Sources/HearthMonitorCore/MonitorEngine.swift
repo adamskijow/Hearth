@@ -125,7 +125,12 @@ public actor MonitorEngine {
             let deep = await http.post(
                 request.url,
                 body: request.body,
-                timeout: checkedTarget.clampedDeepProbeTimeout)
+                timeout: DeepProbeConfig(
+                    model: model,
+                    interval: checkedTarget.clampedDeepProbeInterval,
+                    timeout: checkedTarget.clampedDeepProbeTimeout
+                ).effectiveTimeout(
+                    modelIsConfirmedResident: residencyIsCurrent && wasResident))
             guard generation == checkedGeneration else { return snapshot }
             switch deep {
             case .ok:

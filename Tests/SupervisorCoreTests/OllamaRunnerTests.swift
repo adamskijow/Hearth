@@ -35,11 +35,17 @@ struct OllamaRunnerTests {
         #expect(json?["model"] as? String == "llama3:8b")
         #expect(json?["stream"] as? Bool == false)
         #expect(json?["keep_alive"] == nil)
+        let options = try #require(json?["options"] as? [String: Any])
+        #expect(options["num_predict"] as? Int == 1)
+        #expect(options["num_ctx"] == nil)
         let disposable = try #require(
             runner.deepReadinessRequest(model: "llama3:8b", unloadAfter: true))
         let disposableJSON = try #require(
             JSONSerialization.jsonObject(with: disposable.body) as? [String: Any])
         #expect(disposableJSON["keep_alive"] as? Int == 0)
+        let disposableOptions = try #require(disposableJSON["options"] as? [String: Any])
+        #expect(disposableOptions["num_predict"] as? Int == 1)
+        #expect(disposableOptions["num_ctx"] as? Int == 2048)
         // An empty or blank model means no deep probe.
         #expect(runner.deepReadinessRequest(model: "   ") == nil)
     }

@@ -25,10 +25,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Deep inference checks now give cold or uncertain model loads at least 60
-  seconds while preserving the configured timeout for resident-model inference.
-  This prevents a slow Ollama load from being cancelled and misclassified as a
-  wedge in a repeating down/recovered restart loop.
+- Deep inference checks now make cold-load misses strictly non-destructive and
+  pace retries from completion. Disposable Ollama probes use a 2K context and a
+  generous load budget, avoiding expensive automatic context fitting while
+  preserving the configured timeout and strict wedge recovery for resident
+  models.
 - Hearth Monitor and its Store listing now name the checked surface precisely as
   Apple's on-device language model through Foundation Models, rather than
   implying that one canary verifies every Apple Intelligence feature.

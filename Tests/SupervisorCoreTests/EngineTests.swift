@@ -680,6 +680,24 @@ struct EngineTests {
         #expect(h.processes.terminateCount == 0)
     }
 
+    @Test func repeatedColdLoadTimeoutsNeverRestartTheRunner() async {
+        let h = makeHarness(
+            deepProbe: DeepProbeConfig(model: "probe:tiny", interval: 30, timeout: 20))
+        makeServing(h, models: #"{"models":[]}"#)
+        let deepURL = h.runner.deepReadinessRequest(model: "probe:tiny")!.url
+        h.http.set(deepURL, .timedOut)
+
+        await h.engine.start()
+        for _ in 0..<4 {
+            _ = await h.engine.stepOnce()
+            h.clock.advance(by: 31)
+        }
+
+        #expect(await h.engine.snapshot().phase == .healthy)
+        #expect(h.http.postCount(to: deepURL) == 4)
+        #expect(h.processes.terminateCount == 0)
+    }
+
     @Test func residentDeepProbeKeepsConfiguredInferenceTimeout() async {
         let h = makeHarness(
             deepProbe: DeepProbeConfig(model: "probe:tiny", interval: 30, timeout: 20))

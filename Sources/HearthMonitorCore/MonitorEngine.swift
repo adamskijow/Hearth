@@ -113,6 +113,7 @@ public actor MonitorEngine {
             snapshot.deepProbeDeferredReason = nil
             let wasResident = snapshot.residentModels.contains { $0.name == model }
             let residencyIsCurrent = snapshot.modelsUpdatedAt == now
+            let modelIsConfirmedResident = residencyIsCurrent && wasResident
             guard let request = api.deepReadinessRequest(
                 model: model,
                 unloadAfter: residencyIsCurrent && !wasResident) else {
@@ -130,7 +131,7 @@ public actor MonitorEngine {
                     interval: checkedTarget.clampedDeepProbeInterval,
                     timeout: checkedTarget.clampedDeepProbeTimeout
                 ).effectiveTimeout(
-                    modelIsConfirmedResident: residencyIsCurrent && wasResident))
+                    modelIsConfirmedResident: modelIsConfirmedResident))
             guard generation == checkedGeneration else { return snapshot }
             switch deep {
             case .ok:
@@ -144,6 +145,14 @@ public actor MonitorEngine {
                 return recordFailure(.inferenceHTTP(status), target: checkedTarget, at: now)
             case .timedOut:
                 snapshot.deepProbeLastSucceeded = false
+                if !modelIsConfirmedResident {
+                    // The API is healthy and the model was not resident when the
+                    // request began. Surface the missed check without declaring
+                    // an attached runner outage for ordinary cold-load latency.
+                    snapshot.deepProbeDeferredReason =
+                        "Probe model did not finish loading; the runner API remains healthy."
+                    break
+                }
                 return recordFailure(.inferenceTimedOut, target: checkedTarget, at: now)
             case .refused:
                 snapshot.deepProbeLastSucceeded = false

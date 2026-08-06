@@ -90,7 +90,8 @@ struct AttachedModeTests {
         let (engine, clock, _, http, _, notifier, runner) = makeEngine(
             deepProbe: DeepProbeConfig(model: "llama3", interval: 60, timeout: 30))
         http.set(runner.readinessEndpoint, .ok(Data(#"{"version":"x"}"#.utf8)))
-        http.set(runner.modelsEndpoint, .ok(Data(#"{"models":[]}"#.utf8)))
+        http.set(runner.modelsEndpoint, .ok(Data(
+            #"{"models":[{"name":"llama3"}]}"#.utf8)))
         let deepURL = runner.deepReadinessRequest(model: "llama3")!.url
         http.set(deepURL, .ok(Data("{}".utf8)))   // inference works at first
 

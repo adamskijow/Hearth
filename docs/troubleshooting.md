@@ -71,10 +71,10 @@ also shows a "config issues" line when it finds any.
   [Ollama setup guide](ollama.md) covers deep probes, and a recurring hang after
   heavy load is usually the runner or GPU, not Hearth.
 - **"Runner down" and "Runner recovered" alternate while an Ollama probe model
-  loads.** Update Hearth. Current releases distinguish cold model loading from
-  steady-state inference and give cold loads at least 60 seconds; older builds
-  could cancel a slow load at the configured inference timeout, abort the load,
-  and then mistake the repeated cancellation for a wedge.
+  loads.** Update Hearth. Current releases make cold-load misses non-destructive,
+  pace retries from completion, and use a small context for disposable Ollama
+  probes. Older builds could cancel a slow load, abort it, and then mistake the
+  repeated cancellation for a wedge.
 - **A big model keeps crashing the runner (or the GPU) on load.** A model too
   large for the Mac's unified memory dies as it loads, often as an
   out-of-memory kill. Hearth restarts it, but if `warmModelsAfterRestart` is on

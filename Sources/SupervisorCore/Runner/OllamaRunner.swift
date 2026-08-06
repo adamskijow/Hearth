@@ -84,19 +84,24 @@ public struct OllamaRunner: Runner {
     }
 
     /// A one-token `/api/generate` against the named model. This actually runs the
-    /// model, so it catches a wedged runner that still answers `/api/version`. It
+    /// model, so it catches a wedged runner that still answers `/api/version`.
     /// When the model was not resident before the check, `keep_alive: 0` unloads
     /// it immediately afterward so a one-minute health cadence cannot pin a
-    /// probe-only model in unified memory forever. Existing resident models keep
-    /// the runner's normal policy.
+    /// probe-only model in unified memory forever. That disposable load also uses
+    /// a small context: the request generates one token and must not spend a
+    /// minute fitting a 32K context merely because a high-memory Mac caused Ollama
+    /// to choose an oversized automatic default. Existing resident models keep
+    /// the runner's normal policy and context.
     public func deepReadinessRequest(model: String, unloadAfter: Bool) -> DeepProbeRequest? {
         let trimmed = model.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return nil }
+        var options: [String: Any] = ["num_predict": 1]
+        if unloadAfter { options["num_ctx"] = 2048 }
         var payload: [String: Any] = [
             "model": trimmed,
             "prompt": "ping",
             "stream": false,
-            "options": ["num_predict": 1],
+            "options": options,
         ]
         if unloadAfter { payload["keep_alive"] = 0 }
         guard let body = try? JSONSerialization.data(withJSONObject: payload) else { return nil }

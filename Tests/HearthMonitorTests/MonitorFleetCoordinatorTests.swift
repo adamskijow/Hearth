@@ -85,6 +85,8 @@ struct MonitorFleetCoordinatorTests {
         let api = MonitorRunnerAPI(target: target)
         let request = try #require(api.deepReadinessRequest(model: "tiny"))
         let http = MonitorFakeHTTPClient(default: .ok(Data()))
+        http.set(api.modelsEndpoint, outcome: .ok(Data(
+            #"{"models":[{"name":"tiny","size":42}]}"#.utf8)))
         let fleet = MonitorFleetCoordinator(http: http, automaticallySchedules: false)
         fleet.apply([target])
         await fleet.checkNow(targetID: target.id, forceDeepProbe: false)

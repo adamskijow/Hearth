@@ -47,6 +47,8 @@ struct MonitorEngineTests {
         let request = try #require(api.deepReadinessRequest(model: "tiny"))
         let http = MonitorFakeHTTPClient()
         http.set(api.readinessEndpoint, outcome: .ok(Data()))
+        http.set(api.modelsEndpoint, outcome: .ok(Data(
+            #"{"models":[{"name":"tiny","size":42}]}"#.utf8)))
         http.set(request.url, outcome: .timedOut)
         let engine = MonitorEngine(target: target, http: http, now: now)
 
@@ -71,7 +73,7 @@ struct MonitorEngineTests {
         #expect(snapshot.modelsNote != nil)
     }
 
-    @Test("A nonresident probe model gets a cold-load timeout")
+    @Test("A nonresident probe timeout does not declare an outage")
     func coldDeepProbeTimeout() async throws {
         let target = MonitorTarget(
             probeModel: "tiny",
@@ -81,11 +83,15 @@ struct MonitorEngineTests {
         let request = try #require(api.deepReadinessRequest(model: "tiny"))
         let http = MonitorFakeHTTPClient(default: .ok(Data()))
         http.set(api.modelsEndpoint, outcome: .ok(Data(#"{"models":[]}"#.utf8)))
+        http.set(request.url, outcome: .timedOut)
         let engine = MonitorEngine(target: target, http: http, now: now)
 
         let snapshot = await engine.check(now: now)
 
         #expect(snapshot.phase == .healthy)
+        #expect(snapshot.failure == nil)
+        #expect(snapshot.deepProbeLastSucceeded == false)
+        #expect(snapshot.deepProbeDeferredReason?.contains("did not finish loading") == true)
         #expect(http.recordedPostTimeouts(request.url) == [60])
     }
 
@@ -136,6 +142,8 @@ struct MonitorEngineTests {
         let api = MonitorRunnerAPI(target: target)
         let request = try #require(api.deepReadinessRequest(model: "tiny"))
         let http = MonitorFakeHTTPClient(default: .ok(Data()))
+        http.set(api.modelsEndpoint, outcome: .ok(Data(
+            #"{"models":[{"name":"tiny","size":42}]}"#.utf8)))
         http.set(request.url, outcome: .timedOut)
         let engine = MonitorEngine(target: target, http: http, now: now)
 
@@ -211,6 +219,8 @@ struct MonitorEngineTests {
         let api = MonitorRunnerAPI(target: target)
         let request = try #require(api.deepReadinessRequest(model: "tiny"))
         let http = MonitorFakeHTTPClient(default: .ok(Data()))
+        http.set(api.modelsEndpoint, outcome: .ok(Data(
+            #"{"models":[{"name":"tiny","size":42}]}"#.utf8)))
         http.set(request.url, outcome: .timedOut)
         let engine = MonitorEngine(target: target, http: http, now: now)
 

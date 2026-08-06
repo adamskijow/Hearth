@@ -431,10 +431,12 @@ public actor SupervisorEngine {
     }
 
     /// The optional deep readiness probe, run on its own slower cadence. Deep
-    /// timeouts are ambiguous because a legitimate long generation may occupy
-    /// the queue. Hearth therefore refuses to probe while proxy-observed client
-    /// work is active, treats HTTP 503 as busy, and requires two failures spaced
-    /// by the configured deep interval before recovery may become destructive.
+    /// timeouts are ambiguous because a legitimate long generation or model load
+    /// may occupy the queue. Hearth therefore refuses to probe while
+    /// proxy-observed client work is active, treats HTTP 503 as busy, never
+    /// restarts for a cold-load miss, and requires two failures against a model
+    /// confirmed resident at the start of each check before recovery may become
+    /// destructive.
     private func deepProbeVerdict(
         now: Date,
         residentModels: [ResidentModel],
@@ -465,17 +467,30 @@ public actor SupervisorEngine {
             body: request.body,
             timeout: deep.effectiveTimeout(
                 modelIsConfirmedResident: modelIsConfirmedResident))
+        // Pace from completion, not request start. A cold load can consume the
+        // entire timeout; using its start timestamp made the next expensive
+        // check immediately overdue and could keep the GPU in a retry loop.
+        let completedAt = clock.now
         switch outcome {
         case .ok:
-            lastDeepProbeAt = now
+            lastDeepProbeAt = completedAt
             consecutiveDeepProbeFailures = 0
             return .serving
         case .http(status: 503, body: _):
-            lastDeepProbeAt = now
+            lastDeepProbeAt = completedAt
             consecutiveDeepProbeFailures = 0
             return .busy
         default:
-            lastDeepProbeFailedAt = now
+            lastDeepProbeFailedAt = completedAt
+            lastDeepProbeAt = completedAt
+            guard modelIsConfirmedResident else {
+                // /api/version still answered and /api/ps did not show this
+                // model as resident when the inference began. The miss proves
+                // only that a cold load was slow or failed, not that serving
+                // inference wedged. Keep monitoring without killing Ollama.
+                consecutiveDeepProbeFailures = 0
+                return .unconfirmedFailure
+            }
             consecutiveDeepProbeFailures += 1
             if consecutiveDeepProbeFailures >= 2 {
                 // Do not cache a confirmed failure. Attached mode has no spawn
@@ -484,7 +499,6 @@ public actor SupervisorEngine {
                 lastDeepProbeAt = nil
                 return .confirmedFailure
             }
-            lastDeepProbeAt = now
             return .unconfirmedFailure
         }
     }

@@ -84,10 +84,10 @@ OS-owned service and never claims it did.
    enter its credential. The credential is stored only in the login Keychain.
 5. Choose **Test Connection**. You can still save a temporarily offline address
    after confirming that it is unverified.
-6. Optionally enable **Run a one-token inference check**, choose a small model,
-   select a cadence, and test it. The default is five minutes. For Ollama, a
-   model loaded only for an automatic check is unloaded immediately afterward;
-   a model that was already resident keeps its normal residency policy.
+6. Optionally enable **Run a one-token inference check**, choose a model used by
+   the workload, select a cadence, and test it. The default is five minutes.
+   Automatic checks run only while that model is already resident, so passive
+   monitoring never cold-loads it. **Check Now** may explicitly load it once.
 
 The default scheduled API check is frequent and lightweight. The optional
 one-token check runs more slowly, pauses during sleep, Low Power Mode, and serious

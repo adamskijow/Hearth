@@ -663,7 +663,7 @@ struct EngineTests {
         #expect(h.processes.terminateCount == 0)
     }
 
-    @Test func coldDeepProbeGetsModelLoadBudget() async {
+    @Test func scheduledDeepProbeNeverColdLoadsAnIdleModel() async {
         let h = makeHarness(
             deepProbe: DeepProbeConfig(model: "probe:tiny", interval: 30, timeout: 20))
         // The probe model is installed but not resident: this is the state that
@@ -676,11 +676,11 @@ struct EngineTests {
         _ = await h.engine.stepOnce()
 
         #expect(await h.engine.snapshot().phase == .healthy)
-        #expect(h.http.postTimeouts(to: deepURL) == [60])
+        #expect(h.http.postCount(to: deepURL) == 0)
         #expect(h.processes.terminateCount == 0)
     }
 
-    @Test func repeatedColdLoadTimeoutsNeverRestartTheRunner() async {
+    @Test func repeatedScheduledChecksNeverStartAColdProbe() async {
         let h = makeHarness(
             deepProbe: DeepProbeConfig(model: "probe:tiny", interval: 30, timeout: 20))
         makeServing(h, models: #"{"models":[]}"#)
@@ -694,8 +694,45 @@ struct EngineTests {
         }
 
         #expect(await h.engine.snapshot().phase == .healthy)
-        #expect(h.http.postCount(to: deepURL) == 4)
+        #expect(h.http.postCount(to: deepURL) == 0)
         #expect(h.processes.terminateCount == 0)
+    }
+
+    @Test func aRecoveryLoopSendsOneDownAlertUntilRecovery() async {
+        let h = makeHarness(policy: RestartPolicyConfig(
+            startupGrace: 0,
+            initialBackoff: 1,
+            backoffMultiplier: 1,
+            crashLoopThreshold: 10))
+        makeServing(h)
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+
+        h.http.set(h.runner.readinessEndpoint, .timedOut)
+        var wait = await h.engine.stepOnce()
+        h.clock.advance(by: wait + 0.01)
+        _ = await h.engine.stepOnce()
+        wait = await h.engine.stepOnce()
+
+        var downAlerts = await h.notifier.received.filter {
+            if case .down? = $0.event { return true }
+            return false
+        }.count
+        #expect(downAlerts == 1)
+
+        makeServing(h)
+        h.clock.advance(by: wait + 0.01)
+        _ = await h.engine.stepOnce()
+        _ = await h.engine.stepOnce()
+        #expect(await h.notifier.received.filter { $0.event == .recovered }.count == 1)
+
+        h.http.set(h.runner.readinessEndpoint, .timedOut)
+        _ = await h.engine.stepOnce()
+        downAlerts = await h.notifier.received.filter {
+            if case .down? = $0.event { return true }
+            return false
+        }.count
+        #expect(downAlerts == 2)
     }
 
     @Test func residentDeepProbeKeepsConfiguredInferenceTimeout() async {

@@ -73,8 +73,29 @@ struct MonitorEngineTests {
         #expect(snapshot.modelsNote != nil)
     }
 
-    @Test("A nonresident probe timeout does not declare an outage")
-    func coldDeepProbeTimeout() async throws {
+    @Test("A scheduled check does not cold-load a nonresident probe model")
+    func scheduledColdDeepProbeIsSkipped() async throws {
+        let target = MonitorTarget(
+            probeModel: "tiny",
+            deepProbeTimeoutSeconds: 20,
+            failureThreshold: 1)
+        let api = MonitorRunnerAPI(target: target)
+        let request = try #require(api.deepReadinessRequest(model: "tiny"))
+        let http = MonitorFakeHTTPClient(default: .ok(Data()))
+        http.set(api.modelsEndpoint, outcome: .ok(Data(#"{"models":[]}"#.utf8)))
+        let engine = MonitorEngine(target: target, http: http, now: now)
+
+        let snapshot = await engine.check(now: now)
+
+        #expect(snapshot.phase == .healthy)
+        #expect(snapshot.failure == nil)
+        #expect(snapshot.deepProbeLastSucceeded == nil)
+        #expect(snapshot.deepProbeDeferredReason?.contains("not resident") == true)
+        #expect(http.postCount(request.url) == 0)
+    }
+
+    @Test("Check Now may explicitly test a cold model without declaring an outage")
+    func forcedColdDeepProbeTimeout() async throws {
         let target = MonitorTarget(
             probeModel: "tiny",
             deepProbeTimeoutSeconds: 20,
@@ -86,7 +107,7 @@ struct MonitorEngineTests {
         http.set(request.url, outcome: .timedOut)
         let engine = MonitorEngine(target: target, http: http, now: now)
 
-        let snapshot = await engine.check(now: now)
+        let snapshot = await engine.check(now: now, forceDeepProbe: true)
 
         #expect(snapshot.phase == .healthy)
         #expect(snapshot.failure == nil)
@@ -104,6 +125,8 @@ struct MonitorEngineTests {
         let api = MonitorRunnerAPI(target: target)
         let request = try #require(api.deepReadinessRequest(model: "tiny"))
         let http = MonitorFakeHTTPClient(default: .ok(Data()))
+        http.set(api.modelsEndpoint, outcome: .ok(Data(
+            #"{"models":[{"name":"tiny","size":42}]}"#.utf8)))
         let engine = MonitorEngine(target: target, http: http, now: now)
 
         _ = await engine.check(now: now)

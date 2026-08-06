@@ -108,62 +108,76 @@ public actor MonitorEngine {
             snapshot.deepProbeDeferredReason =
                 "Inference check paused to reduce energy or thermal impact."
         } else if let model = checkedTarget.normalizedProbeModel, deepProbeDue {
-            lastDeepProbeAt = now
-            snapshot.deepProbeLastAt = now
-            snapshot.deepProbeDeferredReason = nil
             let wasResident = snapshot.residentModels.contains { $0.name == model }
             let residencyIsCurrent = snapshot.modelsUpdatedAt == now
             let modelIsConfirmedResident = residencyIsCurrent && wasResident
-            guard let request = api.deepReadinessRequest(
-                model: model,
-                unloadAfter: residencyIsCurrent && !wasResident) else {
-                snapshot.deepProbeLastSucceeded = false
-                return recordFailure(
-                    .inferenceTransport("This runner could not build the configured probe."),
-                    target: checkedTarget,
-                    at: now)
-            }
-            let deep = await http.post(
-                request.url,
-                body: request.body,
-                timeout: DeepProbeConfig(
-                    model: model,
-                    interval: checkedTarget.clampedDeepProbeInterval,
-                    timeout: checkedTarget.clampedDeepProbeTimeout
-                ).effectiveTimeout(
-                    modelIsConfirmedResident: modelIsConfirmedResident))
-            guard generation == checkedGeneration else { return snapshot }
-            switch deep {
-            case .ok:
-                snapshot.deepProbeLastSucceeded = true
-            case .http(let status, _) where status == 503:
-                snapshot.deepProbeLastSucceeded = nil
-                snapshot = recordBusy(at: now)
-                return snapshot
-            case .http(let status, _):
-                snapshot.deepProbeLastSucceeded = false
-                return recordFailure(.inferenceHTTP(status), target: checkedTarget, at: now)
-            case .timedOut:
-                snapshot.deepProbeLastSucceeded = false
-                if !modelIsConfirmedResident {
-                    // The API is healthy and the model was not resident when the
-                    // request began. Surface the missed check without declaring
-                    // an attached runner outage for ordinary cold-load latency.
-                    snapshot.deepProbeDeferredReason =
-                        "Probe model did not finish loading; the runner API remains healthy."
-                    break
+            if !modelIsConfirmedResident && !forceDeepProbe {
+                // Passive monitoring must stay passive. Loading an idle model on
+                // a timer creates GPU work and a timed-out load can destabilize
+                // the runner being observed. Check Now remains an explicit way
+                // to test a cold model when the user wants that cost.
+                lastDeepProbeAt = now
+                snapshot.deepProbeDeferredReason =
+                    "Probe model is not resident; scheduled inference was skipped."
+                if snapshot.failure?.isInferenceLevel == true {
+                    snapshot.checkedAt = now
+                    return snapshot
                 }
-                return recordFailure(.inferenceTimedOut, target: checkedTarget, at: now)
-            case .refused:
-                snapshot.deepProbeLastSucceeded = false
-                return recordFailure(
-                    .inferenceTransport("The runner stopped accepting connections."),
-                    target: checkedTarget,
-                    at: now)
-            case .failure(let message):
-                snapshot.deepProbeLastSucceeded = false
-                return recordFailure(
-                    .inferenceTransport(message), target: checkedTarget, at: now)
+            } else {
+                lastDeepProbeAt = now
+                snapshot.deepProbeLastAt = now
+                snapshot.deepProbeDeferredReason = nil
+                guard let request = api.deepReadinessRequest(
+                    model: model,
+                    unloadAfter: residencyIsCurrent && !wasResident) else {
+                    snapshot.deepProbeLastSucceeded = false
+                    return recordFailure(
+                        .inferenceTransport("This runner could not build the configured probe."),
+                        target: checkedTarget,
+                        at: now)
+                }
+                let deep = await http.post(
+                    request.url,
+                    body: request.body,
+                    timeout: DeepProbeConfig(
+                        model: model,
+                        interval: checkedTarget.clampedDeepProbeInterval,
+                        timeout: checkedTarget.clampedDeepProbeTimeout
+                    ).effectiveTimeout(
+                        modelIsConfirmedResident: modelIsConfirmedResident))
+                guard generation == checkedGeneration else { return snapshot }
+                switch deep {
+                case .ok:
+                    snapshot.deepProbeLastSucceeded = true
+                case .http(let status, _) where status == 503:
+                    snapshot.deepProbeLastSucceeded = nil
+                    snapshot = recordBusy(at: now)
+                    return snapshot
+                case .http(let status, _):
+                    snapshot.deepProbeLastSucceeded = false
+                    return recordFailure(.inferenceHTTP(status), target: checkedTarget, at: now)
+                case .timedOut:
+                    snapshot.deepProbeLastSucceeded = false
+                    if !modelIsConfirmedResident {
+                        // The API is healthy and the model was not resident when
+                        // the user explicitly requested this check. Surface the
+                        // missed load without declaring a runner outage.
+                        snapshot.deepProbeDeferredReason =
+                            "Probe model did not finish loading; the runner API remains healthy."
+                        break
+                    }
+                    return recordFailure(.inferenceTimedOut, target: checkedTarget, at: now)
+                case .refused:
+                    snapshot.deepProbeLastSucceeded = false
+                    return recordFailure(
+                        .inferenceTransport("The runner stopped accepting connections."),
+                        target: checkedTarget,
+                        at: now)
+                case .failure(let message):
+                    snapshot.deepProbeLastSucceeded = false
+                    return recordFailure(
+                        .inferenceTransport(message), target: checkedTarget, at: now)
+                }
             }
         }
         snapshot = MonitorStateReducer.success(snapshot, phase: .healthy, at: now)

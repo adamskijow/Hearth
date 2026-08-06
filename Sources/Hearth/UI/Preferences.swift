@@ -260,7 +260,7 @@ struct PreferencesView: View {
     private var inferenceHealthSection: some View {
         Section {
             Toggle("Check real inference, not only the API", isOn: deepProbeEnabled)
-                .help("Periodically generate one token to catch a GPU or model hang even when the runner's lightweight API still answers.")
+                .help("Periodically generate one token while the selected model is already resident. This catches a GPU or model hang without loading an idle model just for monitoring.")
             if deepProbeEnabled.wrappedValue {
                 if model.availableProbeModels.isEmpty {
                     TextField("Probe model", text: optional(\.probeModel),

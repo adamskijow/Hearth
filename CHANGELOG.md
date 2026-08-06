@@ -25,11 +25,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Deep inference checks now make cold-load misses strictly non-destructive and
-  pace retries from completion. Disposable Ollama probes use a 2K context and a
-  generous load budget, avoiding expensive automatic context fitting while
-  preserving the configured timeout and strict wedge recovery for resident
-  models.
+- Scheduled deep inference checks now run only while their model is already
+  resident. They never cold-load an idle model merely to monitor it, preserving
+  strict wedge recovery without creating GPU churn. Explicit user-requested
+  checks can still test a cold model with a small context and a generous load
+  budget.
+- One runner outage now produces one down alert even when several replacement
+  processes fail. The event log retains every retry, the crash-loop escalation
+  remains distinct, and a fresh down alert is armed after recovery.
 - Hearth Monitor and its Store listing now name the checked surface precisely as
   Apple's on-device language model through Foundation Models, rather than
   implying that one canary verifies every Apple Intelligence feature.

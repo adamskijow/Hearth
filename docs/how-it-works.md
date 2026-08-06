@@ -44,8 +44,9 @@ reliable way to use LM Studio.
 ## Readiness and the deep probe
 
 Readiness probing is the shallow layer; the optional deep probe (`probeModel`) adds a
-one-token generation on a slower interval to catch a model or GPU hang while the HTTP
-server still answers. This is not hypothetical: a real GPU crash (image generation
+one-token generation on a slower interval while that model is already resident. It
+never cold-loads an idle model merely to monitor it. This catches a model or GPU hang
+while the HTTP server still answers. This is not hypothetical: a real GPU crash (image generation
 exhausting unified memory) was caught this way live, `/api/version` answering in
 under a millisecond while a one-token generation hung for 40 seconds, then a heavier
 repeat driving a memory-pressure kill, crash loop, and recovery. The run is in the
@@ -71,7 +72,7 @@ pays no multi-gigabyte cold start.
 Along the way it holds an IOKit power assertion so the Mac does not idle-sleep out
 from under a service meant to be up, classifies how the child exited (clean stop,
 crash, or out-of-memory kill, which matters on a unified-memory Mac), and notifies
-you on the transitions that matter (down, recovered, failing) over local
+you on the transitions that matter (one down alert per incident, recovered, failing) over local
 notifications, ntfy to your phone, and an optional webhook. Opt-in settings cover
 slow degradation too: scheduled maintenance restarts, adopting an upgraded binary,
 and memory and thermal pressure alerts.

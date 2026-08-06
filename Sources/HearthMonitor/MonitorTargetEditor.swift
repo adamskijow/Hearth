@@ -559,7 +559,7 @@ struct MonitorTargetEditorView: View {
             VStack(alignment: .leading, spacing: 11) {
                 Toggle("Run a one-token inference check", isOn: $model.deepProbeEnabled)
                     .accessibilityLabel("Run a one-token inference check")
-                Text("Optional. On the selected cadence, Monitor asks the model for one token. This catches a GPU or inference engine that is wedged even when HTTP still answers. For Ollama, a model loaded only for this check is unloaded immediately afterward; an already-resident model keeps its normal policy.")
+                Text("Optional. On the selected cadence, Monitor asks an already-resident model for one token. This catches a GPU or inference engine that is wedged even when HTTP still answers, without loading an idle model in the background. Test One-Token Inference may explicitly load the selected model once.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

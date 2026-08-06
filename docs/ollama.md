@@ -91,16 +91,18 @@ catch that, set `probeModel` to a small model you have already pulled:
 }
 ```
 
-Hearth then runs a one-token generation on a slower interval. It does not set
-`keep_alive`, so Ollama's own `OLLAMA_KEEP_ALIVE` policy controls how long the
-model remains resident.
+Hearth then runs a one-token generation on a slower interval whenever that model
+is already resident from real use. It does not load an idle model on a timer, so
+monitoring cannot create a cold-load or GPU-churn loop. It does not set
+`keep_alive` for a resident model, so Ollama's own `OLLAMA_KEEP_ALIVE` policy
+continues to control residency.
 
 In Preferences, **Inference health** can discover installed models, put the
 smallest reported model first, and run the one-token test before you save. The
 free-form config remains available for headless setups.
 
-Good probe models are small, already pulled, and cheap to load. You can list
-models with:
+Good probe models are models your workload actually keeps resident. Smaller
+models make the optional Test Now setup check cheaper. You can list models with:
 
 ```sh
 ollama list

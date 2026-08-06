@@ -88,6 +88,10 @@ public actor SupervisorEngine {
     private let busyTimeout: TimeInterval
     /// When the deep probe last failed, surfaced in status and metrics.
     private var lastDeepProbeFailedAt: Date?
+    /// A recovery incident can include many failed replacement processes. The
+    /// event log keeps every attempt, but phone and local alerts should announce
+    /// the outage once, then stay quiet until recovery or a fresh healthy run.
+    private var outageNotificationOpen = false
     /// The models resident before the most recent teardown, captured at the kill
     /// or down transition so a warm-up after recovery can restore them.
     private var modelsToRestore: [String] = []
@@ -170,6 +174,7 @@ public actor SupervisorEngine {
     public func start() async {
         guard machine.phase == .stopped else { return }
         controlGeneration &+= 1
+        outageNotificationOpen = false
         // A fresh session warms nothing: whatever was resident before an
         // explicit stop is stale intent, not a recovery to hide.
         modelsToRestore = []
@@ -184,6 +189,7 @@ public actor SupervisorEngine {
     /// Stop supervising: kill the child and release power immediately.
     public func stop() async {
         controlGeneration &+= 1
+        outageNotificationOpen = false
         busySince = nil
         drainDeadline = nil
         consecutiveDeepProbeFailures = 0
@@ -431,12 +437,11 @@ public actor SupervisorEngine {
     }
 
     /// The optional deep readiness probe, run on its own slower cadence. Deep
-    /// timeouts are ambiguous because a legitimate long generation or model load
-    /// may occupy the queue. Hearth therefore refuses to probe while
-    /// proxy-observed client work is active, treats HTTP 503 as busy, never
-    /// restarts for a cold-load miss, and requires two failures against a model
-    /// confirmed resident at the start of each check before recovery may become
-    /// destructive.
+    /// timeouts are ambiguous because a legitimate long generation may occupy
+    /// the queue. Hearth therefore refuses to probe while proxy-observed client
+    /// work is active, treats HTTP 503 as busy, never loads an idle model on a
+    /// timer, and requires two failures against a model confirmed resident at
+    /// the start of each check before recovery may become destructive.
     private func deepProbeVerdict(
         now: Date,
         residentModels: [ResidentModel],
@@ -456,17 +461,26 @@ public actor SupervisorEngine {
         // cached model list must not make a possible cold load inherit the much
         // shorter steady-state inference timeout.
         let modelIsConfirmedResident = residencyIsCurrent && wasResident
+        guard modelIsConfirmedResident else {
+            // A scheduled health check must not create GPU work by loading an
+            // idle model. Besides being expensive, cancelling a slow load can
+            // wedge Ollama's model scheduler and make Hearth cause the outage it
+            // is meant to detect. Once real client work makes this model
+            // resident, the next due check verifies inference normally.
+            lastDeepProbeAt = now
+            consecutiveDeepProbeFailures = 0
+            return .serving
+        }
         guard let request = runner.deepReadinessRequest(
             model: deep.model,
-            unloadAfter: residencyIsCurrent && !wasResident) else {
+            unloadAfter: false) else {
             consecutiveDeepProbeFailures = 0
             return .serving
         }
         let outcome = await http.post(
             request.url,
             body: request.body,
-            timeout: deep.effectiveTimeout(
-                modelIsConfirmedResident: modelIsConfirmedResident))
+            timeout: deep.effectiveTimeout(modelIsConfirmedResident: true))
         // Pace from completion, not request start. A cold load can consume the
         // entire timeout; using its start timestamp made the next expensive
         // check immediately overdue and could keep the GPU in a retry loop.
@@ -483,14 +497,6 @@ public actor SupervisorEngine {
         default:
             lastDeepProbeFailedAt = completedAt
             lastDeepProbeAt = completedAt
-            guard modelIsConfirmedResident else {
-                // /api/version still answered and /api/ps did not show this
-                // model as resident when the inference began. The miss proves
-                // only that a cold load was slow or failed, not that serving
-                // inference wedged. Keep monitoring without killing Ollama.
-                consecutiveDeepProbeFailures = 0
-                return .unconfirmedFailure
-            }
             consecutiveDeepProbeFailures += 1
             if consecutiveDeepProbeFailures >= 2 {
                 // Do not cache a confirmed failure. Attached mode has no spawn
@@ -640,7 +646,18 @@ public actor SupervisorEngine {
             break
         }
         eventContinuation.yield(event)
-        if event.isNotable, let notification = Self.notification(
+        let shouldNotify: Bool
+        switch event {
+        case .down:
+            shouldNotify = !outageNotificationOpen
+            outageNotificationOpen = true
+        case .recovered, .becameHealthy:
+            shouldNotify = event.isNotable
+            outageNotificationOpen = false
+        default:
+            shouldNotify = event.isNotable
+        }
+        if shouldNotify, let notification = Self.notification(
             for: event,
             logTail: includeLogTail ? Self.sanitizedLogTail(lastStderrTail) : []) {
             await notifier.notify(notification)

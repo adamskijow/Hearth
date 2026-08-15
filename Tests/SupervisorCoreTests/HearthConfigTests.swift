@@ -152,6 +152,16 @@ struct HearthConfigTests {
         #expect(decoded.normalizedRunnerUser == "daemon")
     }
 
+    @Test func mlxModelRoundTripsAndNormalizes() throws {
+        let original = HearthConfig(
+            runner: "mlx", mlxModel: " mlx-community/Qwen2.5-0.5B-Instruct-4bit \n", port: 8080)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(HearthConfig.self, from: data)
+        #expect(decoded.mlxModel == original.mlxModel)
+        #expect(decoded.normalizedMLXModel == "mlx-community/Qwen2.5-0.5B-Instruct-4bit")
+        #expect(HearthConfig(mlxModel: "  ").normalizedMLXModel == nil)
+    }
+
     @Test func controlFieldsDecode() throws {
         let json = Data("""
         {"controlEnabled": true, "controlHost": "100.64.0.2", "controlPort": 8443, "controlToken": "abc123", "controlStatusTokens": {"hearth-monitor":"read-only"}}

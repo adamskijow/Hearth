@@ -20,7 +20,7 @@ struct ConfigUnknownKeysTests {
     }
 
     @Test func knownKeysAreSilent() {
-        #expect(warnings(#"{"probeModel": "x", "port": 11434, "controlTokens": {"a": "b"}, "controlStatusTokens": {"monitor": "c"}}"#).isEmpty)
+        #expect(warnings(#"{"probeModel": "x", "mlxModel": "mlx-community/test", "port": 11434, "controlTokens": {"a": "b"}, "controlStatusTokens": {"monitor": "c"}}"#).isEmpty)
         #expect(warnings("{}").isEmpty)
     }
 
@@ -78,7 +78,7 @@ struct ConfigUnknownKeysTests {
     @Test func knownKeysCoversTheWholeSchema() {
         let keys = HearthConfig.knownKeys
         // Spot-check across every config section, including all the optionals.
-        for expected in ["runner", "mode", "port", "probeModel", "maintenanceWindow",
+        for expected in ["runner", "mode", "port", "mlxModel", "probeModel", "maintenanceWindow",
                          "ntfyTopic", "webhookURL", "heartbeatURL", "controlToken",
                          "controlTokens", "controlStatusTokens", "runnerUser", "metricsProxyEnabled",
                          "rebootViaHelper", "busyTimeoutSeconds", "runnerMemoryLimitMB"] {

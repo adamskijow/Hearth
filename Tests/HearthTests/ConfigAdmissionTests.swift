@@ -34,4 +34,27 @@ struct ConfigAdmissionTests {
         #expect(warningOnly.blockingDiagnostics().isEmpty)
         #expect(!warningOnly.blockingDiagnostics(runningAsRoot: true).isEmpty)
     }
+
+    @Test func managedMLXWithoutAStartupModelIsBlockedBeforeLaunch() {
+        let missing = ConfigLoad(
+            config: HearthConfig(runner: "mlx", mode: "managed", port: 8080),
+            note: nil,
+            isProblem: false,
+            createdDefault: false)
+        #expect(missing.blockingDiagnostics().contains { $0.message.contains("requires mlxModel") })
+
+        let attached = ConfigLoad(
+            config: HearthConfig(runner: "mlx", mode: "attached", port: 8080),
+            note: nil,
+            isProblem: false,
+            createdDefault: false)
+        #expect(attached.blockingDiagnostics().isEmpty)
+
+        let configured = ConfigLoad(
+            config: HearthConfig(runner: "mlx", mlxModel: "mlx-community/test", port: 8080),
+            note: nil,
+            isProblem: false,
+            createdDefault: false)
+        #expect(configured.blockingDiagnostics().isEmpty)
+    }
 }

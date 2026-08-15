@@ -304,21 +304,38 @@ Both were later run against real servers, not just captured payloads.
 
 ### mlx_lm (managed, validated)
 
-`pip install mlx-lm`, then Hearth in managed mode (`mlxBinaryPath` pointed at the
-installed `mlx_lm.server`):
+Revalidated on 2026-08-15 against a fully isolated current install:
+
+- MLX-LM 0.31.3 and MLX 0.32.0 in a Python 3.12 virtual environment.
+- `mlx-community/Qwen2.5-0.5B-Instruct-4bit` in a new, empty `HF_HOME` (282 MB).
+- macOS 26.6.1 on Apple silicon.
+- A separate `HEARTH_CONFIG`, `HEARTH_DATA_DIR`, and port 18080, leaving the
+  installed Hearth instance untouched.
+
+The live runner log proves the exact launch contract:
 
 ```
-final /status: {"models":["mlx-community/Qwen2.5-0.5B-Instruct-4bit"],"phase":"healthy","restartCount":0,"runnerResidentBytes":100319232,...}
-SIGKILL the mlx server -> phase healthy, restarts 1   (Hearth detected and restarted it)
-clean stop -> no mlx_lm.server strays
+=== spawn mlx_lm.server --model mlx-community/Qwen2.5-0.5B-Instruct-4bit --host 127.0.0.1 --port 18080 ===
 ```
 
-Managed mlx_lm works: cold start to Healthy, resident model parsed from
-`/v1/models`, restart on external kill, clean teardown. One caveat: with an empty
-HuggingFace cache (no MLX model ever downloaded), `mlx_lm.server`'s `/v1/models`
-returns 200 then throws `CacheNotFound`, so readiness never passes. Any real mlx
-user has a model, so the cache exists; the empty-cache state is a non-issue in
-practice but is documented.
+The server downloaded the model into the empty cache, `/v1/models` returned its
+ID, and an OpenAI-compatible chat request completed on Metal with fingerprint
+`0.31.3-0.32.0-macOS-26.6.1-arm64-arm-64bit-applegpu_g17s`. After an external
+SIGKILL, Hearth recorded the failure, scheduled a bounded restart, spawned a new
+PID, restored the same model, and completed a second real inference request.
+Clean Hearth shutdown left no MLX process or listener behind.
+
+A second configuration omitted `mlxModel`. `hearth doctor` exited 1 with the
+actionable error, headless Hearth exited 2 before constructing supervision, and
+no process bound the test port. This proves the new incomplete-config path fails
+closed rather than entering a crash loop.
+
+MLX-LM itself printed its upstream warning that the server is not recommended
+for production because it implements only basic security checks. Hearth mirrors
+that warning for every non-loopback MLX bind. One remaining semantic boundary is
+intentional: `/v1/models` can answer while a first-time model download is still
+finishing, so shallow health proves the API is reachable, not that inference has
+completed. Enable `probeModel` for ongoing one-token inference checks.
 
 ### LM Studio (attached validated; managed does not work)
 

@@ -71,6 +71,8 @@ If you use Ollama.app or `brew services`, read the
 [Ollama setup guide](docs/ollama.md) before choosing managed or attached mode.
 Most options live in **Preferences**; every advanced setting is in the
 [configuration reference](docs/configuration.md).
+Managed `mlx_lm` requires a startup model in Preferences (`mlxModel` in JSON);
+attached MLX servers need no Hearth-side model setting.
 
 ## Security
 

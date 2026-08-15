@@ -150,6 +150,31 @@ struct ConfigDiagnosticsTests {
                 .contains { $0.contains("usually serves on port 8080") })
     }
 
+    @Test func managedMLXRequiresAnExplicitStartupModel() {
+        let missing = HearthConfig(runner: "mlx", mode: "managed", mlxModel: " \n", port: 8080)
+        #expect(errors(missing).contains { $0.message.contains("requires mlxModel") })
+
+        let configured = HearthConfig(
+            runner: "mlx", mode: "managed", mlxModel: " mlx-community/test \n", port: 8080)
+        #expect(!errors(configured).contains { $0.message.contains("mlxModel") })
+        #expect(configured.normalizedMLXModel == "mlx-community/test")
+
+        let attached = HearthConfig(runner: "mlx", mode: "attached", mlxModel: nil, port: 8080)
+        #expect(!errors(attached).contains { $0.message.contains("mlxModel") })
+    }
+
+    @Test func mlxBeyondLoopbackWarnsAboutItsSecurityBoundary() {
+        let local = HearthConfig(
+            runner: "mlx", mode: "managed", mlxModel: "mlx-community/test", host: "::1", port: 8080)
+        #expect(!messages(local).contains { $0.contains("basic security checks") })
+
+        for host in ["0.0.0.0", "::", "192.168.1.10"] {
+            let exposed = HearthConfig(
+                runner: "mlx", mode: "managed", mlxModel: "mlx-community/test", host: host, port: 8080)
+            #expect(messages(exposed).contains { $0.contains("basic security checks") })
+        }
+    }
+
     @Test func rebootOnWedgeWarnsAboutTheRootRequirement() {
         let issues = ConfigDiagnostics.check(HearthConfig(rebootOnWedge: true))
         #expect(issues.contains { $0.severity == .warning && $0.message.contains("runs as root") })

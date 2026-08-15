@@ -46,10 +46,36 @@ reminder after a change.
 | `ollamaBinaryPath` | string | `"/opt/homebrew/bin/ollama"` | Path to the `ollama` binary (managed Ollama). |
 | `lmStudioBinaryPath` | string | `"/usr/local/bin/lms"` | Path to the `lms` CLI (managed LM Studio). |
 | `mlxBinaryPath` | string | `"/opt/homebrew/bin/mlx_lm.server"` | Path to `mlx_lm.server` (managed mlx_lm). |
+| `mlxModel` | string or null | `null` | Hugging Face repository ID or local model directory passed to `mlx_lm.server --model`. Required for managed mlx_lm; unused in attached mode. |
 | `osaurusBinaryPath` | string | `"/Applications/Osaurus.app/Contents/MacOS/osaurus"` | Path to the `osaurus` CLI. Osaurus usually serves on port 1337; attached mode (start it with `osaurus serve`, let Hearth watch) is the recommended path, like LM Studio. |
 | `host` | string | `"127.0.0.1"` | Address the runner binds to. `127.0.0.1` keeps it on this machine; `0.0.0.0` opens it to your LAN so another computer can reach it (`hearth doctor` reports the URL and the firewall caveat). |
 | `port` | int | `11434` | Port the runner serves on (Ollama's default is 11434). |
 | `runnerEnv` | object | `{}` | Extra environment variables for a managed runner, so a hand-tuned setup is a config key rather than a launchd plist edit. Example: `{"OLLAMA_LOAD_TIMEOUT": "10m", "OLLAMA_KEEP_ALIVE": "30m"}`. Merged into the child's environment at spawn. Hearth derives `OLLAMA_HOST` from `host`/`port`, so a value for it here is ignored (and `hearth doctor` warns). |
+
+### Managed mlx_lm
+
+Current `mlx_lm.server` releases require a model when the server starts. Set a
+Hugging Face repository ID or an existing local model directory; Hearth passes
+the value as one argument, so local paths containing spaces are supported:
+
+```json
+{
+  "runner": "mlx",
+  "mode": "managed",
+  "mlxModel": "mlx-community/Qwen2.5-0.5B-Instruct-4bit",
+  "host": "127.0.0.1",
+  "port": 8080
+}
+```
+
+Hearth refuses to start managed mlx_lm when `mlxModel` is missing or blank and
+reports the fix in Preferences and `hearth doctor`. Attached mode remains useful
+for a server you start yourself and does not require this setting.
+
+Keep mlx_lm on loopback unless an authenticated private proxy protects it. The
+[official server documentation](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/SERVER.md)
+says the server implements only basic security checks; `hearth doctor` warns for
+every non-loopback MLX bind.
 
 ### Common Ollama setups
 

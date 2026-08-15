@@ -106,6 +106,12 @@ final class PreferencesModel: ObservableObject {
         self.probeEnabled = !(config.probeModel ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+
+    var blockingDiagnostics: [Diagnostic] {
+        ConfigDiagnostics.check(config).filter { $0.severity == .error }
+    }
+
+    var canSave: Bool { blockingDiagnostics.isEmpty }
 }
 
 struct PreferencesView: View {
@@ -131,6 +137,9 @@ struct PreferencesView: View {
 
             Divider()
             VStack(alignment: .leading, spacing: 6) {
+                if let error = footerBlockingDiagnostic {
+                    Text(error.message).foregroundStyle(.red).font(.callout)
+                }
                 if saveImpact == .restart {
                     Text(model.config.isManaged
                          ? "These changes restart the runner and unload its models."
@@ -150,6 +159,7 @@ struct PreferencesView: View {
                             : impact == .none ? "No changes to save." : "Saved and reloaded."
                     }
                     .keyboardShortcut(.defaultAction)
+                    .disabled(!model.canSave)
                 }
             }
             .padding(12)
@@ -189,6 +199,18 @@ struct PreferencesView: View {
 
     private var saveImpact: ConfigReloadImpact {
         ConfigReloadImpact.between(model.baseline, model.config)
+    }
+
+    /// The missing managed MLX model is already highlighted beside its field.
+    /// Keep the footer for any other blocking problem instead of repeating the
+    /// same long message at opposite ends of the window.
+    private var footerBlockingDiagnostic: Diagnostic? {
+        model.blockingDiagnostics.first { diagnostic in
+            !(model.config.runnerKind == .mlx
+              && model.config.isManaged
+              && model.config.normalizedMLXModel == nil
+              && diagnostic.message.contains("requires mlxModel"))
+        }
     }
 
     private var saveButtonTitle: String {
@@ -243,6 +265,16 @@ struct PreferencesView: View {
                 Button("Choose\u{2026}") { chooseBinary() }
             }
             .help("Path to the runner executable. Detect searches the usual install locations.")
+            if model.config.runnerKind == .mlx, model.config.isManaged {
+                TextField("Startup model", text: optional(\.mlxModel),
+                          prompt: Text("mlx-community/Qwen2.5-0.5B-Instruct-4bit"))
+                    .help("Required in managed mode. Enter a Hugging Face repository ID or a local model directory; Hearth passes it to mlx_lm.server as --model.")
+                if model.config.normalizedMLXModel == nil {
+                    Text("Required in managed mode. Watch existing runner does not need it.")
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                }
+            }
             TextField("Host", text: $model.config.host)
                 .help("Address the runner serves on. 127.0.0.1 keeps it on this machine.")
             TextField("Port", value: $model.config.port, format: .number.grouping(.never))

@@ -34,6 +34,10 @@ struct ConfigReloadImpactTests {
         probe.probeModel = "qwen2.5:0.5b"
         #expect(ConfigReloadImpact.between(original, probe) == .restart)
 
+        var mlx = original
+        mlx.mlxModel = "mlx-community/Qwen2.5-0.5B-Instruct-4bit"
+        #expect(ConfigReloadImpact.between(original, mlx) == .restart)
+
         var logging = original
         logging.logMaxBytes += 1
         #expect(ConfigReloadImpact.between(original, logging) == .restart)

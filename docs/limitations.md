@@ -16,9 +16,11 @@ does not reimplement the operating system.
   [VALIDATION-REPORT.md](../VALIDATION-REPORT.md)): cold start, external kill, the
   alive-but-wedged case via SIGSTOP, clean process group teardown with no
   orphaned `llama-server`, attached mode, and hard-crash orphan recovery (a
-  SIGKILLed Hearth's leaked runner group is swept on the next launch). mlx_lm has
-  since been validated in managed mode against a live `mlx_lm.server`, and LM
-  Studio in attached mode against a live server (the report has the details).
+  SIGKILLed Hearth's leaked runner group is swept on the next launch). Managed
+  mlx_lm was revalidated against MLX-LM 0.31.3 and MLX 0.32.0 with a genuinely
+  cold model download, real inference, external SIGKILL, restart, and inference
+  after model reload. LM Studio was validated in attached mode (the report has
+  the details).
 - Out of memory classification is a heuristic and is UNVERIFIED against a real
   out of memory kill, which could not be induced on the 128 GiB unified-memory
   development hardware: no downloaded model is large enough to exhaust it, and

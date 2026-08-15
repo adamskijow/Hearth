@@ -49,7 +49,10 @@ if [ ! -d "$FWDIR/Testing.framework" ]; then
   exec swift test "$@"
 fi
 
-exec swift test "${SWIFT_ARGS[@]}" --disable-xctest --enable-swift-testing \
+# Swift Testing still uses the XCTest bundle host on current Apple toolchains.
+# Disabling that host can produce a successful build followed by zero executed
+# tests, so enable both explicitly and let SwiftPM route each test framework.
+exec swift test "${SWIFT_ARGS[@]}" --enable-xctest --enable-swift-testing \
   -Xswiftc -F -Xswiftc "$FWDIR" \
   -Xlinker -F -Xlinker "$FWDIR" \
   -Xlinker -rpath -Xlinker "$FWDIR" \

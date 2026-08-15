@@ -86,8 +86,9 @@ public enum ConfigDiagnostics {
         if host.isEmpty {
             issues.append(.init(.error, "Host is empty."))
         } else {
-            if host == "0.0.0.0" || host == "::" {
-                issues.append(.init(.warning, "Runner is bound to \(host) (all interfaces). Ollama has no built-in authentication; use this only on a trusted LAN or behind a private reverse proxy."))
+            if (host == "0.0.0.0" || host == "::") && config.runnerKind != .mlx {
+                let runner = config.runnerKind == .ollama ? "Ollama" : config.runnerKind.displayName
+                issues.append(.init(.warning, "Runner is bound to \(host) (all interfaces). \(runner) is exposed beyond this Mac; use this only on a trusted LAN or behind an authenticated private reverse proxy."))
             }
             // Bracket an IPv6 literal the same way the probe endpoints do, so a
             // host like ::1 that supervision handles fine is not flagged invalid.
@@ -104,6 +105,12 @@ public enum ConfigDiagnostics {
         let mode = config.mode.lowercased()
         if !ModeKind.knownConfigStrings.contains(mode) {
             issues.append(.init(.error, "Unknown mode \"\(config.mode)\"; expected managed or attached."))
+        }
+        if config.runnerKind == .mlx, mode == "managed", config.normalizedMLXModel == nil {
+            issues.append(.init(.error, "Managed mlx_lm requires mlxModel. Set it to a Hugging Face repository ID or local model path in Preferences or config.json. Attached mode does not require mlxModel."))
+        }
+        if config.runnerKind == .mlx, !host.isEmpty, !isLoopbackHost(host) {
+            issues.append(.init(.warning, "mlx_lm is exposed beyond this Mac at \(host). Its official server documentation says it implements only basic security checks; bind to 127.0.0.1 or ::1, or place it behind an authenticated private proxy."))
         }
         // LM Studio's `lms server start` exits immediately (the server runs in LM
         // Studio's own background process), so a managed runner thrashes. Use
@@ -274,6 +281,13 @@ public enum ConfigDiagnostics {
         }
 
         return issues
+    }
+
+    private static func isLoopbackHost(_ host: String) -> Bool {
+        switch host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "localhost", "127.0.0.1", "::1", "[::1]": return true
+        default: return false
+        }
     }
 
     private static func isValidPort(_ port: Int) -> Bool {

@@ -6,24 +6,28 @@ import Foundation
 /// `mlx_lm.server` and reads its OpenAI compatible endpoints. As with the other
 /// runners, nothing outside this file knows anything mlx_lm specific.
 ///
-/// Hearth never picks a model: the server is launched with only a host and port,
-/// and clients name the model per request. If a given mlx_lm version insists on a
-/// model at launch, that is a choice you make in your own wrapper, not here.
+/// Current mlx_lm releases require a model when the server starts. Hearth passes
+/// the configured Hugging Face repository ID or local model path as one process
+/// argument, preserving spaces in a local path. Config admission prevents a
+/// managed launch when it is absent; attached mode never launches this spec.
 public struct MLXRunner: Runner {
     public let name = "mlx_lm"
 
     private let binaryPath: String
+    private let model: String?
     private let host: String
     private let port: Int
     private let extraEnvironment: [String: String]
     private let oomSignatures: [String]
 
     public init(binaryPath: String,
+                model: String? = nil,
                 host: String = "127.0.0.1",
                 port: Int = 8080,
                 extraEnvironment: [String: String] = [:],
                 oomSignatures: [String] = RunnerHeuristics.oomSignatures) {
         self.binaryPath = binaryPath
+        self.model = model
         self.host = host
         self.port = port
         self.extraEnvironment = extraEnvironment
@@ -31,9 +35,12 @@ public struct MLXRunner: Runner {
     }
 
     public func processSpec() -> ProcessSpec {
-        ProcessSpec(
+        var arguments: [String] = []
+        if let model { arguments += ["--model", model] }
+        arguments += ["--host", host, "--port", "\(port)"]
+        return ProcessSpec(
             executableURL: URL(fileURLWithPath: binaryPath),
-            arguments: ["--host", host, "--port", "\(port)"],
+            arguments: arguments,
             environmentOverrides: extraEnvironment
         )
     }

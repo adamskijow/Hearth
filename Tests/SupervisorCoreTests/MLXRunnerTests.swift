@@ -6,10 +6,27 @@ import Foundation
 
 struct MLXRunnerTests {
     @Test func processSpecLaunchesTheServer() {
-        let runner = MLXRunner(binaryPath: "/opt/homebrew/bin/mlx_lm.server", host: "127.0.0.1", port: 8080)
+        let runner = MLXRunner(binaryPath: "/opt/homebrew/bin/mlx_lm.server",
+                               model: "mlx-community/Qwen2.5-0.5B-Instruct-4bit",
+                               host: "127.0.0.1", port: 8080)
         let spec = runner.processSpec()
         #expect(spec.executableURL.path == "/opt/homebrew/bin/mlx_lm.server")
-        #expect(spec.arguments == ["--host", "127.0.0.1", "--port", "8080"])
+        #expect(spec.arguments == [
+            "--model", "mlx-community/Qwen2.5-0.5B-Instruct-4bit",
+            "--host", "127.0.0.1", "--port", "8080",
+        ])
+    }
+
+    @Test func localModelPathWithSpacesRemainsOneArgument() {
+        let runner = MLXRunner(binaryPath: "/x", model: "/Users/me/Models/My Model", port: 8080)
+        #expect(runner.processSpec().arguments == [
+            "--model", "/Users/me/Models/My Model", "--host", "127.0.0.1", "--port", "8080",
+        ])
+    }
+
+    @Test func attachedCompatibilityCanConstructWithoutAModel() {
+        let runner = MLXRunner(binaryPath: "/x", port: 8080)
+        #expect(runner.processSpec().arguments == ["--host", "127.0.0.1", "--port", "8080"])
     }
 
     @Test func deepReadinessRequestIsAnOpenAIChatCompletion() throws {
@@ -51,9 +68,10 @@ struct MLXRunnerTests {
     }
 
     @Test func configSelectsMLX() {
-        let config = HearthConfig(runner: "mlx", port: 8080)
+        let config = HearthConfig(runner: "mlx", mlxModel: "mlx-community/test", port: 8080)
         let runner = config.makeRunner()
         #expect(runner.name == "mlx_lm")
         #expect(config.selectedBinaryPath == HearthConfig.defaultMLXBinaryPath)
+        #expect(runner.processSpec().arguments.prefix(2) == ["--model", "mlx-community/test"])
     }
 }

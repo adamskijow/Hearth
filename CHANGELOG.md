@@ -7,6 +7,21 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## [1.5.1] - 2026-08-15
+
+### Fixed
+
+- Managed mlx_lm now requires an explicit `mlxModel` and launches
+  `mlx_lm.server` with `--model`, matching current MLX-LM releases. Incomplete
+  managed configurations fail closed with an actionable Preferences and
+  `hearth doctor` error; attached mlx_lm remains unchanged.
+
+### Security
+
+- Hearth warns whenever mlx_lm is bound beyond loopback because the upstream
+  server documents only basic security checks. The warning recommends loopback
+  or an authenticated private proxy.
+
 ## [1.5.0] - 2026-08-15
 
 ### Added

@@ -15,6 +15,9 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     public var ollamaBinaryPath: String
     public var lmStudioBinaryPath: String
     public var mlxBinaryPath: String
+    /// Hugging Face repository ID or local model path passed to
+    /// `mlx_lm.server --model` in managed mode. Attached mode does not use it.
+    public var mlxModel: String?
     public var osaurusBinaryPath: String
     public var host: String
     public var port: Int
@@ -170,6 +173,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
                 ollamaBinaryPath: String = HearthConfig.defaultOllamaBinaryPath,
                 lmStudioBinaryPath: String = HearthConfig.defaultLMStudioBinaryPath,
                 mlxBinaryPath: String = HearthConfig.defaultMLXBinaryPath,
+                mlxModel: String? = nil,
                 osaurusBinaryPath: String = HearthConfig.defaultOsaurusBinaryPath,
                 host: String = "127.0.0.1",
                 port: Int = 11434,
@@ -229,6 +233,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         self.ollamaBinaryPath = ollamaBinaryPath
         self.lmStudioBinaryPath = lmStudioBinaryPath
         self.mlxBinaryPath = mlxBinaryPath
+        self.mlxModel = mlxModel
         self.osaurusBinaryPath = osaurusBinaryPath
         self.host = host
         self.port = port
@@ -313,6 +318,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         ollamaBinaryPath = try value(.ollamaBinaryPath, defaults.ollamaBinaryPath)
         lmStudioBinaryPath = try value(.lmStudioBinaryPath, defaults.lmStudioBinaryPath)
         mlxBinaryPath = try value(.mlxBinaryPath, defaults.mlxBinaryPath)
+        mlxModel = try c.decodeIfPresent(String.self, forKey: .mlxModel)
         osaurusBinaryPath = try value(.osaurusBinaryPath, defaults.osaurusBinaryPath)
         host = try value(.host, defaults.host)
         port = try value(.port, defaults.port)
@@ -381,6 +387,15 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     /// Empty strings are treated the same as an unset `runnerUser`.
     public var normalizedRunnerUser: String? {
         guard let trimmed = runnerUser?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else { return nil }
+        return trimmed
+    }
+
+    /// The managed mlx_lm startup model after surrounding whitespace is removed.
+    /// Empty strings are treated as missing so supervision fails closed before
+    /// launching a server that cannot start.
+    public var normalizedMLXModel: String? {
+        guard let trimmed = mlxModel?.trimmingCharacters(in: .whitespacesAndNewlines),
               !trimmed.isEmpty else { return nil }
         return trimmed
     }
@@ -475,6 +490,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     static var fullyPopulated: HearthConfig {
         var config = HearthConfig()
         config.maintenanceWindow = "02:00-05:00"
+        config.mlxModel = "mlx-community/placeholder"
         config.probeModel = "placeholder"
         config.ntfyTopic = "placeholder"
         config.webhookURL = "https://example.invalid"
@@ -503,7 +519,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         case .lmStudio:
             return LMStudioRunner(binaryPath: lmStudioBinaryPath, host: host, port: port, extraEnvironment: runnerEnv)
         case .mlx:
-            return MLXRunner(binaryPath: mlxBinaryPath, host: host, port: port, extraEnvironment: runnerEnv)
+            return MLXRunner(binaryPath: mlxBinaryPath, model: normalizedMLXModel,
+                             host: host, port: port, extraEnvironment: runnerEnv)
         case .osaurus:
             return OsaurusRunner(binaryPath: osaurusBinaryPath, host: host, port: port, extraEnvironment: runnerEnv)
         case .ollama:

@@ -15,8 +15,15 @@ also shows a "config issues" line when it finds any.
 - **I use the official Ollama app.** The app already starts Ollama's server. Set
   `runner` to `ollama` and run `hearth mode attached` so Hearth watches that server
   instead of launching a second one. See [Ollama setup with Hearth](ollama.md).
-- **mlx_lm never reaches healthy.** `mlx_lm.server`'s `/v1/models` errors until at
-  least one MLX model is in your HuggingFace cache. Download any model once.
+- **Managed mlx_lm does not start and Hearth reports `mlxModel`.** Current
+  `mlx_lm.server` releases require `--model` at startup. In Preferences, select
+  mlx_lm and **Full Hearth**, then enter a Hugging Face repository ID or local
+  model directory in **Model or Hugging Face repo**. In JSON, set `mlxModel`.
+  Hearth deliberately refuses to launch an incomplete managed configuration;
+  attached mode does not require the setting.
+- **mlx_lm downloads a model on first start.** A Hugging Face repository ID may
+  need a one-time network download and can take longer than a warm restart. Use
+  a local model directory when the machine must start without network access.
 - **Login item or notifications do nothing.** Those need the packaged, signed app
   (`make install` or the cask), not `swift run Hearth`. Unbundled, they degrade
   gracefully and the menu says so.

@@ -97,6 +97,13 @@ monitoring cannot create a cold-load or GPU-churn loop. It does not set
 `keep_alive` for a resident model, so Ollama's own `OLLAMA_KEEP_ALIVE` policy
 continues to control residency.
 
+If the inference check fails repeatedly but Hearth has not observed client
+traffic through its optional metrics proxy, it alerts without restarting. A long
+queued generation and a wedge are otherwise indistinguishable. For automatic
+inference-wedge recovery, enable the metrics proxy and point clients at its port;
+Hearth then defers checks while a client request is in flight. Ordinary process
+crashes and shallow API wedges still recover without the proxy.
+
 In Preferences, **Inference health** can discover installed models, put the
 smallest reported model first, and run the one-token test before you save. The
 free-form config remains available for headless setups.

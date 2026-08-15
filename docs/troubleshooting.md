@@ -48,7 +48,9 @@ also shows a "config issues" line when it finds any.
 - **The HTTP server answers but generations hang.** The shallow probe only proves
   the API answers. Set `probeModel` to a small model you have already pulled so
   Hearth periodically runs a one-token deep probe and catches inference-level
-  wedges too.
+  failures too. For automatic restart after a confirmed inference failure, enable
+  the metrics proxy and point every client at its port. Without that traffic
+  visibility Hearth alerts but does not risk interrupting an unseen long request.
 - **The menu says "Crash loop" (or you got a "Runner failing" alert).** The runner
   failed several times in a row right after starting, so Hearth stopped restarting
   it rapidly and now retries slowly. Hearth has not given up: the moment the

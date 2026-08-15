@@ -108,10 +108,10 @@ Enable it in the config. It is off by default and needs Hearth running as root
 
 Running the whole supervisor as root exists only because of that one reboot.
 `hearth-reboot-helper` inverts it: a tiny root LaunchDaemon whose entire API is
-"reboot, if you are the configured uid and not too often", offered on a
-root-owned unix socket (mode 600, chowned to the allowed uid, with the peer
-re-verified on every connection and a rate limit enforced in the helper
-itself). With it installed, a NON-root headless Hearth keeps the full recovery
+"reboot, if you are the configured uid, the live client matches the installed
+Hearth signature, and not too often", offered on a root-owned unix socket (mode
+600, chowned to the allowed uid, with the peer re-verified on every connection
+and a rate limit enforced in the helper itself). With it installed, a NON-root headless Hearth keeps the full recovery
 ladder:
 
 ```
@@ -119,6 +119,13 @@ sudo ./scripts/install-reboot-helper.sh     # builds and installs the helper
 # then, in the non-root daemon's config:
 { "rebootOnWedge": true, "rebootViaHelper": true }
 ```
+
+Installation authorizes the Developer ID signed, Hardened Runtime Hearth binary
+at `/Applications/Hearth.app/Contents/MacOS/Hearth`. The helper verifies both the
+live socket peer's kernel audit token and that installed code requirement; another
+app running under your login cannot request a reboot merely because it shares your
+UID. Ad-hoc development builds are intentionally refused. If the signed executable
+is elsewhere, pass its absolute path as `HEARTH_HELPER_CLIENT` while installing.
 
 The helper logs to `/var/log/hearth-reboot-helper.log` and is removed with
 `scripts/uninstall-reboot-helper.sh`. Experimental: the classic root daemon

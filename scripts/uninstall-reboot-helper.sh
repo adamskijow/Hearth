@@ -11,6 +11,7 @@ LABEL="com.hearth.reboot-helper"
 launchctl bootout "system/${LABEL}" 2>/dev/null || true
 rm -f "/Library/LaunchDaemons/${LABEL}.plist"
 rm -f "/Library/PrivilegedHelperTools/${LABEL}"
+rm -f "/Library/PrivilegedHelperTools/${LABEL}.requirement"
 rm -f /var/run/hearth-reboot.sock
 
 echo "Removed ${LABEL}. Turn off rebootViaHelper in the Hearth config."

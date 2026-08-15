@@ -62,6 +62,17 @@ struct ConfigLoad {
     var createdDefault: Bool
     /// Unknown/misspelled keys the lenient decoder ignored, for doctor and menu.
     var keyDiagnostics: [Diagnostic] = []
+
+    /// Errors that make applying this configuration unsafe. A parse failure is
+    /// already one complete error and must not be diluted with diagnostics from
+    /// the fallback object used only to keep the UI representable.
+    func blockingDiagnostics(runningAsRoot: Bool = false) -> [Diagnostic] {
+        if isProblem {
+            return [Diagnostic(.error, note ?? "Config could not be read.")]
+        }
+        return (keyDiagnostics + ConfigDiagnostics.check(config, runningAsRoot: runningAsRoot))
+            .filter { $0.severity == .error }
+    }
 }
 
 enum ConfigStore {

@@ -82,5 +82,5 @@ echo "  $ZIP"
 echo "    sha256: $ZIP_SHA"
 echo "Version: $VERSION"
 echo
-echo "Next: set Casks/hearth.rb version and sha256 to the DMG's, and attach both"
-echo "artifacts to the GitHub release. The cask installs from the DMG."
+echo "Next: attach both artifacts to the GitHub release. The canonical cask in"
+echo "adamskijow/homebrew-tap syncs from the latest published release."

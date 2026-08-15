@@ -23,7 +23,8 @@ struct EngineTests {
                              warmModels: Bool = false,
                              memoryLimitBytes: Int64 = 0,
                              drainSeconds: TimeInterval = 0,
-                             inFlight: (@Sendable () -> Int)? = nil) -> Harness {
+                             inFlight: (@Sendable () -> Int)? = nil,
+                             clientTrafficObserved: (@Sendable () -> Bool)? = nil) -> Harness {
         let clock = ManualClock(now: Date(timeIntervalSince1970: 0))
         let processes = FakeProcessController()
         let http = FakeHTTPClient()
@@ -42,7 +43,8 @@ struct EngineTests {
             warmModels: warmModels,
             memoryLimitBytes: memoryLimitBytes,
             drainSeconds: drainSeconds,
-            inFlight: inFlight
+            inFlight: inFlight,
+            clientTrafficObserved: clientTrafficObserved
         )
         return Harness(engine: engine, clock: clock, processes: processes, http: http,
                        power: power, notifier: notifier, runner: runner)
@@ -624,7 +626,10 @@ struct EngineTests {
     /// the runner is treated as not ready and restarted after a paced confirmation,
     /// unlike the shallow case. One ambiguous miss never kills a valid long request.
     @Test func deepProbeCatchesAnInferenceWedge() async {
-        let h = makeHarness(deepProbe: DeepProbeConfig(model: "llama3:8b", interval: 60, timeout: 30))
+        let h = makeHarness(
+            deepProbe: DeepProbeConfig(model: "llama3:8b", interval: 60, timeout: 30),
+            inFlight: { 0 },
+            clientTrafficObserved: { true })
         makeServing(h)
         let deepURL = h.runner.deepReadinessRequest(model: "llama3:8b")!.url
         h.http.set(deepURL, .ok(Data("{}".utf8)))   // inference works at first
@@ -643,6 +648,30 @@ struct EngineTests {
         _ = await h.engine.stepOnce()                 // second paced miss confirms it
 
         #expect(await h.engine.snapshot().phase != .healthy)   // caught it
+    }
+
+    @Test func deepProbeWarnsButDoesNotRestartWithoutObservedClientTraffic() async {
+        let h = makeHarness(
+            deepProbe: DeepProbeConfig(model: "llama3:8b", interval: 60, timeout: 30))
+        makeServing(h)
+        let deepURL = h.runner.deepReadinessRequest(model: "llama3:8b")!.url
+        h.http.set(deepURL, .ok(Data("{}".utf8)))
+
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+        h.http.set(deepURL, .timedOut)
+
+        for _ in 0..<3 {
+            h.clock.advance(by: 61)
+            _ = await h.engine.stepOnce()
+        }
+
+        #expect(await h.engine.snapshot().phase == .healthy)
+        #expect(h.processes.terminateCount == 0)
+        let advisories = await h.notifier.received.filter {
+            $0.event == .inferenceRecoveryWithheld
+        }
+        #expect(advisories.count == 1)
     }
 
     @Test func deepProbeBusyNeverRestartsTheRunner() async {

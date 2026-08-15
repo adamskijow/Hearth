@@ -85,6 +85,8 @@ struct ControlRoutingTests {
         #expect(body.contains("fetch('/' + name"))
         #expect(body.contains("credentialAccess !== 'statusOnly'"))
         #expect(body.contains("confirm("))
+        #expect(body.contains("sessionStorage.getItem('hearthToken')"))
+        #expect(!body.contains("localStorage"))
         // /status without a token is still rejected.
         let status = ControlRouting.handle(
             method: "GET", path: "/status", authorization: nil,

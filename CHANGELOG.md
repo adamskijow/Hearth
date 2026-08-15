@@ -7,8 +7,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+## [1.5.0] - 2026-08-15
+
 ### Added
 
+- Traffic-aware inference recovery: repeated generation-probe failures remain
+  advisory until the metrics proxy has carried real client traffic and reports
+  no request in flight. Without that evidence Hearth alerts and withholds the
+  restart rather than killing a legitimately long generation.
+- Release provenance, artifact checksums, strict tag-to-version validation, and
+  an automatically synchronized external Homebrew tap.
 - Recommended next steps for every current Monitor failure class. Active
   incidents link directly to the relevant Details view, and selecting an outage
   notification opens the affected Apple model or runner.
@@ -25,6 +33,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Managed first launch now checks for an existing runner or competing manager
+  before spawning anything. The menu offers attached mode while keeping Start
+  and remote control blocked until ownership is resolved.
+- Full Hearth's supported platform is stated precisely as macOS 14 or later on
+  Apple silicon; the universal sandboxed Monitor retains Intel attached checks.
+- Malformed and error-level configurations fail closed instead of running with
+  fallback defaults that may supervise the wrong runner or endpoint.
 - Scheduled deep inference checks now run only while their model is already
   resident. They never cold-load an idle model merely to monitor it, preserving
   strict wedge recovery without creating GPU churn. Explicit user-requested
@@ -43,13 +58,25 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   operational, integration, release, and maintainer material is organized
   through a dedicated documentation index.
 
+### Security
+
+- The browser control page keeps bearer credentials in tab-scoped session
+  storage and sends no-store, content-security, anti-framing, referrer, MIME,
+  and permissions headers.
+- The control server caps concurrent connections and temporarily locks out
+  peers after repeated authentication failures.
+- The reboot helper authenticates the caller's audit token, exact executable,
+  and Apple code-signing requirement in addition to its configured user ID.
+- Release workflows use least-privilege permissions, pinned action commits,
+  protected concurrency, main-branch ancestry checks, and verifiable artifacts.
+
 ### Removed
 
 - The private Model Lab. Product review found that a generic prompt playground
   diluted Hearth's monitoring and recovery value without adding a defensible
   capability.
 
-## [1.4.0] - 2026-07-11
+## [1.4.0] - 2026-07-21
 
 ### Added
 

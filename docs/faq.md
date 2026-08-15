@@ -44,8 +44,9 @@ GPU-crash recovery.
 
 ## Does it work on a normal Mac, or only a server?
 
-Any Mac running macOS 14 or later: a desktop, a Mac mini in a closet, or a
-laptop. The docs sometimes say "headless," which just means a Mac nobody is
+Full Hearth requires an Apple silicon Mac running macOS 14 or later: a desktop,
+a Mac mini in a closet, or a laptop. Hearth Monitor's attached runner checks are
+also available on Intel. The docs sometimes say "headless," which just means a Mac nobody is
 logged into at the moment, not a special kind of machine. One thing to know on
 a laptop: while the runner is serving, Hearth deliberately keeps the Mac from
 idle-sleeping, which uses battery if it is unplugged.

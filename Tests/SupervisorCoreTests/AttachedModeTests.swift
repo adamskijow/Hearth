@@ -7,19 +7,33 @@ import Foundation
 /// Attached mode monitors a runner it does not own: it probes readiness, holds
 /// power, and notifies on transitions, but never spawns or kills a process.
 struct AttachedModeTests {
-    private func makeEngine(deepProbe: DeepProbeConfig? = nil) -> (SupervisorEngine, ManualClock, FakeProcessController, FakeHTTPClient, FakePowerManager, FakeNotifier, OllamaRunner) {
+    private func makeEngine(
+        deepProbe: DeepProbeConfig? = nil,
+        trafficVisible: Bool = false
+    ) -> (SupervisorEngine, ManualClock, FakeProcessController, FakeHTTPClient, FakePowerManager, FakeNotifier, OllamaRunner) {
         let clock = ManualClock(now: Date(timeIntervalSince1970: 0))
         let processes = FakeProcessController()
         let http = FakeHTTPClient()
         let power = FakePowerManager()
         let notifier = FakeNotifier()
         let runner = OllamaRunner(binaryPath: "/unused", host: "127.0.0.1", port: 11434)
+        let inFlight: (@Sendable () -> Int)?
+        let trafficObserved: (@Sendable () -> Bool)?
+        if trafficVisible {
+            inFlight = { @Sendable in 0 }
+            trafficObserved = { @Sendable in true }
+        } else {
+            inFlight = nil
+            trafficObserved = nil
+        }
         let engine = SupervisorEngine(
             clock: clock, processes: processes, http: http, runner: runner,
             power: power, notifier: notifier,
             policy: RestartPolicyConfig(startupGrace: 0, initialBackoff: 1),
             managed: false,
-            deepProbe: deepProbe
+            deepProbe: deepProbe,
+            inFlight: inFlight,
+            clientTrafficObserved: trafficObserved
         )
         return (engine, clock, processes, http, power, notifier, runner)
     }
@@ -88,7 +102,8 @@ struct AttachedModeTests {
     /// skip the deep probe and report a still-wedged runner as recovered.
     @Test func aWedgedRunnerStaysDownAndNeverFalselyRecovers() async {
         let (engine, clock, _, http, _, notifier, runner) = makeEngine(
-            deepProbe: DeepProbeConfig(model: "llama3", interval: 60, timeout: 30))
+            deepProbe: DeepProbeConfig(model: "llama3", interval: 60, timeout: 30),
+            trafficVisible: true)
         http.set(runner.readinessEndpoint, .ok(Data(#"{"version":"x"}"#.utf8)))
         http.set(runner.modelsEndpoint, .ok(Data(
             #"{"models":[{"name":"llama3"}]}"#.utf8)))

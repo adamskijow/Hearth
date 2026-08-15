@@ -39,6 +39,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var configDiagnostics: [Diagnostic] = []
     private var competingManagerWarning: String?
     private var preexistingRunnerWarning: String?
+    /// Managed supervision is intentionally stopped while another manager or
+    /// runner owns the configured endpoint. This also forces a later Reload
+    /// Config through the full preflight even when no setting changed.
+    private var supervisionStartBlocked = false
     private var binaryMissingPath: String?
     private var suggestedBinaryPath: String?
     private var signalSources: [DispatchSourceSignal] = []
@@ -97,14 +101,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// the problem is surfaced loudly instead.
     func reloadFromDisk(firstRun: Bool) async {
         let loaded = ConfigStore.load()
-        if loaded.isProblem, engine != nil {
-            configNote = loaded.note
+        let blocking = loaded.blockingDiagnostics()
+        if !blocking.isEmpty {
+            configNote = loaded.note ?? ("Config not applied: " + blocking.map(\.message).joined(separator: " "))
             configProblem = true
+            configDiagnostics = loaded.keyDiagnostics + ConfigDiagnostics.check(loaded.config)
             updateStatusButton()
-            LocalNotifier.post(title: "Hearth: config not applied", body: loaded.note ?? "The config could not be read.")
+            LocalNotifier.post(title: "Hearth: config not applied", body: configNote ?? "The config contains an error.")
             return
         }
-        if engine != nil, ConfigReloadImpact.between(config, loaded.config) != .restart {
+        if engine != nil, !supervisionStartBlocked,
+           ConfigReloadImpact.between(config, loaded.config) != .restart {
             await applyLiveConfig(loaded)
             if firstRun { firstRunGuidance(loaded) }
             return
@@ -204,13 +211,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         engine = assembly.engine
         coordinator = assembly.coordinator
         controlServer = assembly.controlServer
-        controlServer?.start()
         pressureMonitor = assembly.pressureMonitor
-        pressureMonitor?.start()
         heartbeat = assembly.heartbeat
-        heartbeat?.start()
         metricsProxy = assembly.metricsProxy
-        metricsProxy?.start()
         tokenMetrics = assembly.tokenMetrics
         notifier = assembly.notifier
 
@@ -228,15 +231,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         subscribeToState()
         subscribeToEvents()
-        updateStatusButton()
-        await coordinator.begin()
-
-        // After supervision starts, check whether a runner Hearth did not spawn
-        // already holds the port (the Ollama app is the common case). In managed
-        // mode that fights Hearth; the menu and the welcome surface the fix.
+        // Check ownership before managed supervision can spawn anything. The
+        // official Ollama app commonly owns this port already; starting first
+        // and warning afterward creates the collision the warning describes.
         let foreign = await RunnerCollision.foreignRunnerServing(config: config)
         preexistingRunnerWarning = PreexistingRunner.warning(
             runner: config.runner, mode: config.mode, foreignRunnerServing: foreign)
+        supervisionStartBlocked = ManagedStartAdmission.shouldBlock(
+            mode: config.mode,
+            hasPreexistingRunner: preexistingRunnerWarning != nil,
+            hasCompetingManager: competingManagerWarning != nil)
+        if !supervisionStartBlocked {
+            // No externally reachable or periodic service starts until ownership
+            // is settled. In particular, remote control cannot race the gate.
+            controlServer?.start()
+            pressureMonitor?.start()
+            heartbeat?.start()
+            metricsProxy?.start()
+            await coordinator.begin()
+        }
+        updateStatusButton()
     }
 
     private func updateConfigMetadata(_ loaded: ConfigLoad) {
@@ -269,7 +283,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             runner: config.runner,
             foundPath: foundPath,
             installHint: Self.installHint(for: config.runner),
-            collisionWarning: preexistingRunnerWarning,
+            collisionWarning: preexistingRunnerWarning ?? competingManagerWarning,
             onSwitchToAttached: { [weak self] in self?.switchToAttachedTapped() },
             onEnableNotifications: { LocalNotifier.requestAuthorization() },
             onOpenPreferences: { [weak self] in self?.openPreferencesTapped() }
@@ -343,7 +357,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func updateStatusButton() {
         guard let button = statusItem.button else { return }
         let phase = latestState.phase
-        let needsAttention = configProblem || binaryMissingPath != nil
+        let needsAttention = configProblem || binaryMissingPath != nil || supervisionStartBlocked
             || configDiagnostics.contains { $0.severity == .error }
         let symbol = needsAttention ? "exclamationmark.triangle.fill" : MenuFormat.symbolName(for: phase)
         let label = "Hearth: \(phase.rawValue)"
@@ -484,7 +498,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         menu.addItem(.separator())
-        addAction("Start", #selector(startTapped), enabled: latestState.phase == .stopped)
+        addAction("Start", #selector(startTapped), enabled: latestState.phase == .stopped && !supervisionStartBlocked)
         addAction("Stop", #selector(stopTapped), enabled: latestState.phase != .stopped)
         addAction("Restart", #selector(restartTapped), enabled: latestState.phase != .stopped)
         addAction("Open Logs", #selector(openLogsTapped), enabled: true)

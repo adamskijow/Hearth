@@ -52,6 +52,12 @@ under a millisecond while a one-token generation hung for 40 seconds, then a hea
 repeat driving a memory-pressure kill, crash loop, and recovery. The run is in the
 [validation report](../VALIDATION-REPORT.md#live-gpu-crash-test).
 
+A long client generation can look exactly like a queued probe timeout. Hearth
+therefore makes repeated deep-probe failures advisory unless its metrics proxy
+has actually carried client traffic and currently reports no request in flight.
+Without that evidence it alerts and withholds the restart. This safety boundary
+does not affect shallow API failure or process-exit recovery.
+
 <p align="center">
   <img src="../assets/state-machine.svg" alt="The supervisor state machine: Stopped to Starting to Healthy, with a failure cycle through Down, Restarting, and Failing" width="820">
 </p>

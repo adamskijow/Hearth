@@ -35,11 +35,20 @@ final class MetricsProxy: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.hearth.metrics-proxy")
     private let activeLock = NSLock()
     private var active = 0
+    private var observedClientTraffic = false
 
     /// Connections currently open through the proxy, for the graceful-drain
     /// gate on routine restarts.
     func inFlightConnections() -> Int {
         activeLock.withLock { active }
+    }
+
+    /// True after at least one client connection has crossed this proxy. Merely
+    /// enabling the proxy does not prove that applications were pointed at it;
+    /// destructive inference recovery needs evidence that the in-flight count
+    /// represents real client traffic rather than an unused listener.
+    func hasObservedClientTraffic() -> Bool {
+        activeLock.withLock { observedClientTraffic }
     }
 
     /// Listens on `host:port` and relays to the runner at `upstreamHost:upstreamPort`.
@@ -110,7 +119,10 @@ final class MetricsProxy: @unchecked Sendable {
             port: NWEndpoint.Port(rawValue: upstreamPort)!,
             using: .tcp
         )
-        activeLock.withLock { active += 1 }
+        activeLock.withLock {
+            active += 1
+            observedClientTraffic = true
+        }
         let pair = RelayPair { [weak self] in
             guard let self else { return }
             self.activeLock.withLock { self.active -= 1 }

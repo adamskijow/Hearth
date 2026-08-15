@@ -42,7 +42,16 @@ struct NotificationMappingTests {
         #expect(SupervisorEvent.down(.wedged).isNotable)
         #expect(SupervisorEvent.recovered.isNotable)
         #expect(SupervisorEvent.enteredFailing(restartsInWindow: 1, window: 1).isNotable)
+        #expect(SupervisorEvent.inferenceRecoveryWithheld.isNotable)
         #expect(!SupervisorEvent.becameHealthy.isNotable)
+    }
+
+    @Test func withheldInferenceRecoveryExplainsTheSafetyBoundary() throws {
+        let notification = try #require(
+            SupervisorEngine.notification(for: .inferenceRecoveryWithheld))
+        #expect(notification.level == .warning)
+        #expect(notification.body.contains("did not restart"))
+        #expect(notification.body.contains("metrics proxy"))
     }
 
     @Test func logTailIsAppendedOnlyWhereOptedInAndOnlyToFailureAlerts() throws {

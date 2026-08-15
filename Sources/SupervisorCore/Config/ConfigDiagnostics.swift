@@ -256,6 +256,10 @@ public enum ConfigDiagnostics {
                 issues.append(.init(.warning, "metricsProxyEnabled without controlEnabled: throughput is collected but nothing serves /metrics. Enable the control endpoint to read it."))
             }
         }
+        if let model = config.probeModel?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !model.isEmpty, !config.metricsProxyEnabled {
+            issues.append(.init(.warning, "Inference health is enabled without the metrics proxy. Hearth will detect and alert on repeated inference failures, but it will withhold an automatic restart because it cannot distinguish a wedge from a long client generation. Enable the proxy and route clients through it for traffic-aware recovery."))
+        }
         if config.drainSeconds > 0, !config.metricsProxyEnabled {
             issues.append(.init(.warning, "drainSeconds needs the metrics proxy (the only place in-flight work is observable); without metricsProxyEnabled routine restarts do not wait."))
         }

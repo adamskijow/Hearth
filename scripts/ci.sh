@@ -108,6 +108,17 @@ else
   ok
 fi
 
+section "Lint: shell syntax"
+SHELL_FAIL=0
+while IFS= read -r -d '' script; do
+  if ! bash -n "$script"; then SHELL_FAIL=1; fi
+done < <(find scripts -maxdepth 1 -type f -name '*.sh' -print0)
+if [ "$SHELL_FAIL" = "0" ]; then
+  ok
+else
+  bad "shell syntax errors found"
+fi
+
 if [ "$SMOKE" = "1" ]; then
   section "Smoke test (fake runner, needs a desktop session)"
   ./scripts/smoke-test.sh && ok || bad "smoke test failed"

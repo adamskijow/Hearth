@@ -11,6 +11,9 @@
 # with scripts/release.sh).
 name: CI
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]
@@ -22,7 +25,9 @@ jobs:
     # package still targets macOS 14 and cross-builds universal runner mode.
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # releases/v5
+        with:
+          persist-credentials: false
 
       - name: Swift version
         run: swift --version

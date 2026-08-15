@@ -5,35 +5,63 @@
 // The root LaunchDaemon form of Hearth runs the whole supervisor as root only
 // because the recovery ladder's last resort is a reboot. This helper inverts
 // that: it is a tiny root daemon whose entire API is "reboot", offered on a
-// root-owned unix socket that only one configured uid may use, rate limited in
-// process. A non-root Hearth (with rebootViaHelper on) asks it instead of
-// holding root itself.
+// root-owned unix socket to one configured uid and one installed Hearth code
+// requirement, rate limited in process. A non-root Hearth (with rebootViaHelper
+// on) asks it instead of holding root itself.
 //
 // Defense in depth, three layers: the socket file is chowned to the allowed
 // uid with mode 0600 (only that uid and root can connect at all), every
-// connection's peer is re-verified via LOCAL_PEERCRED, and reboots are rate
-// limited here regardless of what the client asks. The helper never reads more
-// than one short line and never writes anything but "ok" or "denied".
+// connection's uid is re-verified via LOCAL_PEERCRED, its exact process
+// incarnation and signature are verified from LOCAL_PEERTOKEN, and reboots are
+// rate limited here regardless of what the client asks. The helper never reads
+// more than one short line and never writes anything but "ok" or "denied".
 
 import Foundation
 import Darwin
+import Security
 
 func warn(_ message: String) {
     FileHandle.standardError.write(Data("hearth-reboot-helper: \(message)\n".utf8))
 }
 
 let arguments = CommandLine.arguments
-guard arguments.count >= 2, let allowedUID = UInt32(arguments[1]) else {
-    warn("usage: hearth-reboot-helper <allowed-uid> [socket-path]")
+guard arguments.count >= 4, let allowedUID = UInt32(arguments[1]) else {
+    warn("usage: hearth-reboot-helper <allowed-uid> <allowed-client-path> <requirement-file> [socket-path]")
     exit(2)
 }
-let socketPath = arguments.count >= 3 ? arguments[2] : "/var/run/hearth-reboot.sock"
+let allowedClientPath = URL(fileURLWithPath: arguments[2]).resolvingSymlinksInPath().path
+let requirementPath = arguments[3]
+let socketPath = arguments.count >= 5 ? arguments[4] : "/var/run/hearth-reboot.sock"
 guard geteuid() == 0 else {
     warn("must run as root (it exists to hold the reboot capability)")
     exit(1)
 }
 guard allowedUID != 0 else {
     warn("refusing an allowed-uid of root; the point is an unprivileged client")
+    exit(2)
+}
+
+// The installer snapshots the Developer ID designated requirement into a
+// root-owned file. Never derive trust from the live app path at helper startup:
+// an ordinary user may own /Applications/Hearth.app and could replace it before
+// launchd restarts this root process. The root-owned requirement remains the
+// authority across helper restarts.
+var requirementInfo = stat()
+guard lstat(requirementPath, &requirementInfo) == 0,
+      requirementInfo.st_uid == 0,
+      (requirementInfo.st_mode & (S_IWGRP | S_IWOTH)) == 0,
+      (requirementInfo.st_mode & S_IFMT) == S_IFREG,
+      let requirementText = try? String(contentsOfFile: requirementPath, encoding: .utf8)
+        .trimmingCharacters(in: .whitespacesAndNewlines),
+      !requirementText.isEmpty else {
+    warn("the client requirement must be a root-owned, non-writable regular file")
+    exit(2)
+}
+var allowedRequirement: SecRequirement?
+guard SecRequirementCreateWithString(
+    requirementText as CFString, SecCSFlags(rawValue: 0), &allowedRequirement) == errSecSuccess,
+      allowedRequirement != nil else {
+    warn("could not parse the installed client code requirement")
     exit(2)
 }
 
@@ -83,6 +111,42 @@ func peerUID(of fd: Int32) -> UInt32? {
     return credentials.cr_uid
 }
 
+/// The kernel-issued audit token is tied to this exact process incarnation, so
+/// code validation cannot race a PID exiting and being reused between accept and
+/// inspection.
+func peerAuditToken(of fd: Int32) -> audit_token_t? {
+    var token = audit_token_t()
+    var length = socklen_t(MemoryLayout<audit_token_t>.size)
+    guard getsockopt(fd, 0, 0x006, &token, &length) == 0,
+          length == MemoryLayout<audit_token_t>.size else { return nil }
+    return token
+}
+
+func peerExecutablePath(for token: inout audit_token_t) -> String? {
+    var path = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
+    let count = proc_pidpath_audittoken(&token, &path, UInt32(path.count))
+    guard count > 0 else { return nil }
+    return path.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
+}
+
+@MainActor
+func peerMatchesInstalledClient(_ token: inout audit_token_t) -> Bool {
+    guard let executable = peerExecutablePath(for: &token),
+          URL(fileURLWithPath: executable).resolvingSymlinksInPath().path == allowedClientPath else {
+        return false
+    }
+    let tokenData = withUnsafeBytes(of: &token) { Data($0) }
+    let attributes = [kSecGuestAttributeAudit as String: tokenData] as CFDictionary
+    var code: SecCode?
+    guard SecCodeCopyGuestWithAttributes(
+        nil, attributes, SecCSFlags(rawValue: 0), &code) == errSecSuccess,
+          let code, let allowedRequirement else { return false }
+    // Dynamic validation is secure against replacement of the on-disk app after
+    // this process launched and applies the root-owned designated requirement.
+    return SecCodeCheckValidity(
+        code, SecCSFlags(rawValue: 1 << 29), allowedRequirement) == errSecSuccess
+}
+
 func respond(_ fd: Int32, _ line: String) {
     _ = line.withCString { write(fd, $0, strlen($0)) }
 }
@@ -94,6 +158,12 @@ while true {
 
     guard let uid = peerUID(of: client), uid == allowedUID else {
         warn("denied: peer uid \(peerUID(of: client).map(String.init) ?? "unreadable")")
+        respond(client, "denied\n")
+        continue
+    }
+    guard var auditToken = peerAuditToken(of: client),
+          peerMatchesInstalledClient(&auditToken) else {
+        warn("denied: uid \(uid) client did not match the installed Hearth code requirement")
         respond(client, "denied\n")
         continue
     }

@@ -43,6 +43,7 @@ public enum WebhookPayload {
         case .warmupSkippedAfterCrash: return "warmup_skipped_after_crash"
         case .memoryLimitExceeded: return "memory_limit_exceeded"
         case .modelLikelyTooLarge: return "model_likely_too_large"
+        case .inferenceRecoveryWithheld: return "inference_recovery_withheld"
         case .stopped: return "stopped"
         }
     }

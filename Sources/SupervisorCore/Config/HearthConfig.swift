@@ -62,7 +62,8 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     /// Optional deep readiness probe. When `probeModel` is set, Hearth periodically
     /// runs a one-token generation against that model, on top of the cheap shallow
     /// probe, to catch a wedged model runner that still answers the shallow
-    /// endpoint. Off by default (no probe model).
+    /// endpoint. Destructive inference recovery also requires traffic visibility
+    /// through the metrics proxy. Off by default (no probe model).
     public var probeModel: String?
     public var deepProbeIntervalSeconds: Double
     public var deepProbeTimeoutSeconds: Double

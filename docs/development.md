@@ -116,16 +116,23 @@ export HEARTH_NOTARY_ISSUER="<issuer-uuid>"   # App Store Connect issuer ID
 ./scripts/release.sh
 ```
 
-Releasing can be local: run it on your Mac, attach the DMG (and zip) to a GitHub
-release, then set `Casks/hearth.rb` `version` and `sha256` to the DMG's. Once
-published from a tap, install with `brew install --cask adamskijow/tap/hearth`.
-For a quick local install without a release, `make install` ad-hoc signs and
-copies the app to `/Applications`.
+Releasing can be local: run it on your Mac, then attach the DMG and zip to a
+GitHub release. The canonical cask lives in `adamskijow/homebrew-tap`; its
+hourly and manually dispatchable sync workflow reads the latest published
+release, downloads the matching DMG, computes its sha256, and updates the tap.
+Install with `brew install --cask adamskijow/tap/hearth`. For a quick local
+install without a release, `make install` ad-hoc signs and copies the app to
+`/Applications`.
 
 It can also be hosted: pushing a `v*` tag runs `.github/workflows/release.yml`,
 which gates on CI and, when the signing secrets are configured (the workflow
 header lists them), signs, notarizes, and publishes the release automatically.
-Without those secrets the tag still gets a release gate and you publish locally.
+The job uses the GitHub `release` environment; configure required reviewers for
+that environment before enabling hosted signing. It refuses tags that do not
+exactly match the bundle version, tags not pointing at the checked-out
+commit, and commits not already on `origin/main`. Published artifacts include
+`SHA256SUMS` and a tag/commit/workflow provenance record. Without signing secrets
+the tag still gets a release gate and you publish locally.
 
 Hearth Monitor has a separate App Store boundary and release path. A normal CI
 run builds its universal sandbox bundle and runs

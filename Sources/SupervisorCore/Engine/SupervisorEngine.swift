@@ -45,6 +45,10 @@ public actor SupervisorEngine {
     /// Connections currently open through the metrics proxy, when it is
     /// enabled; nil means in-flight work is not observable and drain is a no-op.
     private let inFlight: (@Sendable () -> Int)?
+    /// Whether the proxy has actually carried client traffic. An enabled but
+    /// unused proxy cannot prove that a zero in-flight count covers the user's
+    /// real requests.
+    private let clientTrafficObserved: (@Sendable () -> Bool)?
     /// The point at which an ongoing drain gives up and restarts anyway.
     private var drainDeadline: Date?
 
@@ -88,6 +92,9 @@ public actor SupervisorEngine {
     private let busyTimeout: TimeInterval
     /// When the deep probe last failed, surfaced in status and metrics.
     private var lastDeepProbeFailedAt: Date?
+    /// Avoid repeating the same safety advisory every probe interval. A real
+    /// successful inference re-arms it for a later, distinct incident.
+    private var inferenceRecoveryWithheldOpen = false
     /// A recovery incident can include many failed replacement processes. The
     /// event log keeps every attempt, but phone and local alerts should announce
     /// the outage once, then stay quiet until recovery or a fresh healthy run.
@@ -135,6 +142,7 @@ public actor SupervisorEngine {
                 memoryLimitBytes: Int64 = 0,
                 drainSeconds: TimeInterval = 0,
                 inFlight: (@Sendable () -> Int)? = nil,
+                clientTrafficObserved: (@Sendable () -> Bool)? = nil,
                 includeLogTail: Bool = false,
                 busyTimeout: TimeInterval = 600,
                 modelFitThreshold: Int = 2,
@@ -152,6 +160,7 @@ public actor SupervisorEngine {
         self.memoryLimitBytes = memoryLimitBytes
         self.drainSeconds = drainSeconds
         self.inFlight = inFlight
+        self.clientTrafficObserved = clientTrafficObserved
         self.includeLogTail = includeLogTail
         self.busyTimeout = busyTimeout
         self.modelFit = ModelFitLedger(threshold: modelFitThreshold, window: modelFitWindow)
@@ -181,6 +190,7 @@ public actor SupervisorEngine {
         suppressWarmupAfterCrash = false
         lastWarmupStartedAt = nil
         consecutiveDeepProbeFailures = 0
+        inferenceRecoveryWithheldOpen = false
         let output = machine.start(now: clock.now)
         await apply(output, models: nil)
         nudgeLoop()
@@ -193,6 +203,7 @@ public actor SupervisorEngine {
         busySince = nil
         drainDeadline = nil
         consecutiveDeepProbeFailures = 0
+        inferenceRecoveryWithheldOpen = false
         let output = machine.stop(now: clock.now)
         await apply(output, models: nil)
         nudgeLoop()
@@ -441,7 +452,8 @@ public actor SupervisorEngine {
     /// the queue. Hearth therefore refuses to probe while proxy-observed client
     /// work is active, treats HTTP 503 as busy, never loads an idle model on a
     /// timer, and requires two failures against a model confirmed resident at
-    /// the start of each check before recovery may become destructive.
+    /// the start of each check. Recovery becomes destructive only after the
+    /// proxy has carried real client traffic and currently reports no work.
     private func deepProbeVerdict(
         now: Date,
         residentModels: [ResidentModel],
@@ -489,6 +501,7 @@ public actor SupervisorEngine {
         case .ok:
             lastDeepProbeAt = completedAt
             consecutiveDeepProbeFailures = 0
+            inferenceRecoveryWithheldOpen = false
             return .serving
         case .http(status: 503, body: _):
             lastDeepProbeAt = completedAt
@@ -499,6 +512,13 @@ public actor SupervisorEngine {
             lastDeepProbeAt = completedAt
             consecutiveDeepProbeFailures += 1
             if consecutiveDeepProbeFailures >= 2 {
+                guard inFlight != nil, clientTrafficObserved?() == true else {
+                    if !inferenceRecoveryWithheldOpen {
+                        inferenceRecoveryWithheldOpen = true
+                        await handleEvent(.inferenceRecoveryWithheld)
+                    }
+                    return .unconfirmedFailure
+                }
                 // Do not cache a confirmed failure. Attached mode has no spawn
                 // to clear the timestamp, so every recovery attempt must prove
                 // inference again rather than passing on cadence alone.
@@ -813,6 +833,13 @@ public actor SupervisorEngine {
                 level: .warning,
                 title: "Model likely too large",
                 body: "\(model) has repeatedly run this Mac out of memory as it loaded. It likely does not fit in this machine's unified memory. Use a smaller model or a lower context size; a quantized variant often fits.",
+                event: event
+            )
+        case .inferenceRecoveryWithheld:
+            return HearthNotification(
+                level: .warning,
+                title: "Inference check failed",
+                body: "The runner API still answers, but inference failed twice. Hearth did not restart it because client traffic has not been observed through the metrics proxy, so this could be a legitimate long generation. Inspect the runner, or route clients through the metrics proxy for traffic-aware recovery.",
                 event: event
             )
         default:

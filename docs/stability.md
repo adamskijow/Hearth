@@ -20,16 +20,17 @@ Loading is lenient by design, so config files travel across versions:
 
 - An unknown key (from a newer Hearth, or a typo) is ignored with a doctor and
   menu warning, never an error.
-- An unrecognized value for `runner` or `mode` falls back to the default with a
-  doctor warning.
+- An unrecognized value for `runner` or `mode` is an error and the configuration
+  is not applied. It never silently activates the default runner or mode.
 - A missing key means its documented default.
 
 ## Command line
 
 The subcommand names (`status`, `logs`, `events`, `metrics`, `doctor`,
 `doctor-daemon`, `mode`, `wait-ready`, `update`, `proxy-setup`, `setup`,
-`install-agent`, `uninstall-agent`) and their documented flags are stable, as
-are the exit codes: 0 for success, 1 for failure.
+`install-agent`, `uninstall-agent`) and their documented flags are stable. Exit
+code 0 means success, 1 means an operational failure, and 2 means invalid usage
+or a configuration that Hearth refused to apply.
 
 CLI output text is written for people and is NOT a stable interface; wording
 may improve in any release. A script that needs machine-readable state should

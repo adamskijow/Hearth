@@ -199,4 +199,14 @@ struct ConfigDiagnosticsTests {
             $0.message.contains("Max backoff is less")
         })
     }
+
+    @Test func deepRecoveryExplainsItsTrafficVisibilityBoundary() {
+        #expect(messages(HearthConfig(probeModel: "llama3:8b")).contains {
+            $0.contains("withhold an automatic restart") && $0.contains("metrics proxy")
+        })
+        #expect(!messages(HearthConfig(
+            probeModel: "llama3:8b", metricsProxyEnabled: true)).contains {
+                $0.contains("withhold an automatic restart")
+            })
+    }
 }

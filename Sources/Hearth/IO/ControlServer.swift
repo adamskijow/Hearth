@@ -4,6 +4,19 @@ import Foundation
 import Network
 import SupervisorCore
 
+/// Browser hardening applied to every control response. Keeping this as data
+/// makes the boundary testable without opening a real listener.
+enum ControlResponseSecurity {
+    static let headers: [(String, String)] = [
+        ("Cache-Control", "no-store"),
+        ("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"),
+        ("X-Frame-Options", "DENY"),
+        ("X-Content-Type-Options", "nosniff"),
+        ("Referrer-Policy", "no-referrer"),
+        ("Permissions-Policy", "camera=(), microphone=(), geolocation=()"),
+    ]
+}
+
 /// A tiny HTTP control endpoint so a phone (over Tailscale, a VPN, or the local
 /// network) can check status and start, stop, or restart the runner. The routing
 /// and auth decision is pure and tested in SupervisorCore (`ControlRouting`);
@@ -15,10 +28,37 @@ import SupervisorCore
 final class ControlServer: @unchecked Sendable {
     /// Network's connection type is not Sendable; box it so closures and tasks
     /// can carry it under Swift's concurrency checking. NWConnection is internally
-    /// thread safe, so the unchecked box is sound.
+    /// thread safe, so the unchecked box is sound. `finish` is exactly-once so
+    /// every close path releases the server's admission slot.
     private final class ConnectionBox: @unchecked Sendable {
+        let id = UUID()
         let connection: NWConnection
-        init(_ connection: NWConnection) { self.connection = connection }
+        let peer: String
+        private let finishLock = NSLock()
+        private var didFinish = false
+        private let onFinish: @Sendable (UUID) -> Void
+
+        init(_ connection: NWConnection,
+             peer: String,
+             onFinish: @escaping @Sendable (UUID) -> Void) {
+            self.connection = connection
+            self.peer = peer
+            self.onFinish = onFinish
+        }
+
+        func cancel() {
+            connection.cancel()
+            finish()
+        }
+
+        func finish() {
+            let first = finishLock.withLock { () -> Bool in
+                if didFinish { return false }
+                didFinish = true
+                return true
+            }
+            if first { onFinish(id) }
+        }
     }
 
     private let listener: NWListener
@@ -34,6 +74,10 @@ final class ControlServer: @unchecked Sendable {
     /// command and the name of the token that authorized it, for the audit log.
     private let onControlAction: (@Sendable (ControlCommand, String) -> Void)?
     private let queue = DispatchQueue(label: "com.hearth.control")
+    private let abuseGuard: ControlAbuseGuard
+    private let connectionsLock = NSLock()
+    private var connections: [UUID: ConnectionBox] = [:]
+    private var connectionBudget: ControlConnectionBudget
     /// Set once the server is torn down (a config reload replaces it). A request
     /// accepted before the teardown must not drive the now-replaced coordinator.
     private let stoppedLock = NSLock()
@@ -46,7 +90,9 @@ final class ControlServer: @unchecked Sendable {
           mode: String = "managed",
           rebootOnWedge: Bool = false,
           metrics: MetricsProviding? = nil, tokenMetrics: TokenMetricsStore? = nil,
-          onControlAction: (@Sendable (ControlCommand, String) -> Void)? = nil) {
+          onControlAction: (@Sendable (ControlCommand, String) -> Void)? = nil,
+          maximumConnections: Int = 64,
+          abuseGuard: ControlAbuseGuard = ControlAbuseGuard()) {
         guard !token.isEmpty,
               port > 0, port <= 65_535,
               let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else { return nil }
@@ -76,6 +122,8 @@ final class ControlServer: @unchecked Sendable {
         self.metrics = metrics
         self.tokenMetrics = tokenMetrics
         self.onControlAction = onControlAction
+        self.connectionBudget = ControlConnectionBudget(limit: maximumConnections)
+        self.abuseGuard = abuseGuard
     }
 
     func start() {
@@ -88,18 +136,49 @@ final class ControlServer: @unchecked Sendable {
     func stop() {
         stoppedLock.withLock { stoppedFlag = true }
         listener.cancel()
+        let open = connectionsLock.withLock { () -> [ConnectionBox] in
+            let current = Array(connections.values)
+            connections.removeAll()
+            connectionBudget.releaseAll()
+            return current
+        }
+        for box in open { box.cancel() }
     }
 
     // MARK: - Connection handling
 
     private func accept(_ connection: NWConnection) {
-        let box = ConnectionBox(connection)
+        let peer = Self.peerKey(connection.endpoint)
+        let box = ConnectionBox(connection, peer: peer) { [weak self] id in
+            guard let self else { return }
+            self.connectionsLock.withLock {
+                self.connections[id] = nil
+                self.connectionBudget.release(id)
+            }
+        }
+        let admitted = connectionsLock.withLock { () -> Bool in
+            guard connectionBudget.admit(box.id) else { return false }
+            connections[box.id] = box
+            return true
+        }
+        guard admitted, !isStopped else {
+            box.cancel()
+            return
+        }
+        connection.stateUpdateHandler = { [weak box] state in
+            switch state {
+            case .failed, .cancelled:
+                box?.finish()
+            default:
+                break
+            }
+        }
         connection.start(queue: queue)
         // Drop a connection that has not produced a complete request in time, so a
         // slow trickle cannot hold a connection and its pending receive open. A
         // completed request has already cancelled itself, making this a no-op.
         queue.asyncAfter(deadline: .now() + 10) { [weak box] in
-            box?.connection.cancel()
+            box?.cancel()
         }
         read(box, buffer: Data())
     }
@@ -113,7 +192,7 @@ final class ControlServer: @unchecked Sendable {
             if let request = HTTPRequestHead.parse(buffer) {
                 self.respond(box, request)
             } else if isComplete || error != nil || buffer.count > 65_536 {
-                box.connection.cancel()
+                box.cancel()
             } else {
                 self.read(box, buffer: buffer)
             }
@@ -129,7 +208,16 @@ final class ControlServer: @unchecked Sendable {
         let coordinator = self.coordinator
         let metrics = self.metrics
         Task { [weak self] in
+            guard let self else { box.cancel(); return }
             let authorization = request.value(for: "Authorization")
+            let requiresAuthorization = !ControlRouting.isHealthCheck(
+                method: request.method, path: request.path)
+                && !(request.method.uppercased() == "GET"
+                    && String(request.path.split(separator: "?").first ?? Substring(request.path)) == "/")
+            if requiresAuthorization, abuseGuard.shouldReject(peer: box.peer) {
+                send(box, status: 429, body: Self.errorJSON("too many failed authentication attempts"))
+                return
+            }
             // Answer the routes that need no supervisor state or metrics first, so
             // an unauthenticated /healthz poll (or a failed-auth request) does not
             // trigger a metrics sample and a coordinator hop.
@@ -152,7 +240,7 @@ final class ControlServer: @unchecked Sendable {
                     mode: mode,
                     rebootOnWedge: rebootOnWedge,
                     metrics: metrics?.sample(),
-                    tokens: self?.tokenMetrics?.snapshot(),
+                    tokens: tokenMetrics?.snapshot(),
                     recentEvents: EventLogStore.recent(10)
                 )
             }
@@ -162,15 +250,19 @@ final class ControlServer: @unchecked Sendable {
             var contentType = "application/json"
             switch outcome {
             case .unauthorized:
+                abuseGuard.recordFailure(peer: box.peer)
                 status = 401
                 body = Self.errorJSON("unauthorized")
             case .forbidden:
+                abuseGuard.recordSuccess(peer: box.peer)
                 status = 403
                 body = Self.errorJSON("status-only token cannot perform commands")
             case .notFound:
+                if requiresAuthorization { abuseGuard.recordSuccess(peer: box.peer) }
                 status = 404
                 body = Self.errorJSON("not found")
             case .status(let data):
+                if requiresAuthorization { abuseGuard.recordSuccess(peer: box.peer) }
                 status = 200
                 body = data
             case .html(let data):
@@ -178,11 +270,13 @@ final class ControlServer: @unchecked Sendable {
                 body = data
                 contentType = "text/html; charset=utf-8"
             case .prometheus(let data):
+                abuseGuard.recordSuccess(peer: box.peer)
                 status = 200
                 body = data
                 contentType = "text/plain; version=0.0.4; charset=utf-8"
             case .perform(let command):
-                if self?.isStopped ?? true {
+                abuseGuard.recordSuccess(peer: box.peer)
+                if isStopped {
                     // The server was torn down (a config reload) after this request
                     // was accepted; do not re-drive the replaced coordinator/engine.
                     status = 503
@@ -192,7 +286,7 @@ final class ControlServer: @unchecked Sendable {
                     // is written even if the command's own event is delayed.
                     if let actor = ControlRouting.authenticate(
                         authorization, token: token, namedTokens: namedTokens) {
-                        self?.onControlAction?(command, actor)
+                        onControlAction?(command, actor)
                     }
                     await coordinator.perform(command)
                     status = 202
@@ -201,11 +295,7 @@ final class ControlServer: @unchecked Sendable {
             }
             // If the server was torn down mid-request (the config-reload path),
             // close the connection now rather than leaving it for the deadline.
-            if let self {
-                self.send(box, status: status, body: body, contentType: contentType)
-            } else {
-                box.connection.cancel()
-            }
+            send(box, status: status, body: body, contentType: contentType)
         }
     }
 
@@ -213,11 +303,14 @@ final class ControlServer: @unchecked Sendable {
         var header = "HTTP/1.1 \(status) \(Self.reason(status))\r\n"
         header += "Content-Type: \(contentType)\r\n"
         header += "Content-Length: \(body.count)\r\n"
+        for (name, value) in ControlResponseSecurity.headers {
+            header += "\(name): \(value)\r\n"
+        }
         header += "Connection: close\r\n\r\n"
         var response = Data(header.utf8)
         response.append(body)
         box.connection.send(content: response, completion: .contentProcessed { _ in
-            box.connection.cancel()
+            box.cancel()
         })
     }
 
@@ -228,6 +321,7 @@ final class ControlServer: @unchecked Sendable {
         case 401: return "Unauthorized"
         case 403: return "Forbidden"
         case 404: return "Not Found"
+        case 429: return "Too Many Requests"
         case 503: return "Service Unavailable"
         default: return "OK"
         }
@@ -235,6 +329,18 @@ final class ControlServer: @unchecked Sendable {
 
     private static func errorJSON(_ message: String) -> Data {
         Data(#"{"error":"\#(message)"}"#.utf8)
+    }
+
+    private static func peerKey(_ endpoint: NWEndpoint) -> String {
+        switch endpoint {
+        case .hostPort(let host, _): return String(describing: host)
+        case .unix(let path): return "unix:\(path)"
+        case .service(let name, let type, let domain, _):
+            return "service:\(name).\(type).\(domain)"
+        case .url(let url): return "url:\(url.absoluteString)"
+        case .opaque(let value): return "opaque:\(String(describing: value))"
+        @unknown default: return String(describing: endpoint)
+        }
     }
 }
 

@@ -52,5 +52,12 @@ does not reimplement the operating system.
   server runs in LM Studio's own background process), so a managed runner thrashes;
   `hearth doctor` and the menu flag it. Start LM Studio's server yourself and let
   Hearth watch it.
-- The control endpoint is unauthenticated beyond a shared bearer token and is
-  meant to live behind a VPN, not on the open internet.
+- The control endpoint authenticates with bearer tokens rather than user accounts
+  and is meant to live behind a VPN, not on the open internet. It adds peer
+  lockouts, connection caps, and browser hardening, but it is not an internet-edge
+  identity service or TLS terminator.
+- An inference timeout alone cannot prove a wedge while client work is invisible:
+  a legitimately long generation can occupy the same queue. Deep-probe failures
+  therefore alert but do not restart until the metrics proxy has carried real
+  client traffic and reports the runner idle. Process exits and shallow API
+  failures retain automatic recovery without the proxy.

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import AppKit
+import Darwin
 import SupervisorCore
 
 // Ways to run:
@@ -67,7 +68,16 @@ default:
                 "Hearth: could not acquire the single-instance lock; exiting rather than fighting over the runner.\n".utf8))
             exit(1)
         }
-        HeadlessRunner(config: ConfigStore.load().config).run()
+        let loaded = ConfigStore.load()
+        let blocking = loaded.blockingDiagnostics(runningAsRoot: geteuid() == 0)
+        guard blocking.isEmpty else {
+            FileHandle.standardError.write(Data(
+                ("Hearth headless: refusing unsafe configuration:\n"
+                    + blocking.map { "  ERROR: \($0.message)" }.joined(separator: "\n")
+                    + "\nFix the config and run `hearth doctor` before restarting.\n").utf8))
+            exit(2)
+        }
+        HeadlessRunner(config: loaded.config).run()
     } else {
         // The menubar app must not hang waiting; if another Hearth already
         // supervises, bow out rather than starting a second instance that fights it.

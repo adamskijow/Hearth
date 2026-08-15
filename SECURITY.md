@@ -33,10 +33,16 @@ A few things worth knowing when assessing Hearth:
 - **The control endpoint is a control surface, not a public API.** It refuses to
   start without a bearer token, compares the token in constant time, and should be
   bound to localhost or a private interface (a Tailscale address is ideal), never
-  a public one. `GET /` and `GET /healthz` are intentionally unauthenticated and
-  reveal nothing about the runner.
+  a public one. Browser responses are non-cacheable and non-frameable, bearer
+  failures are throttled by peer, and simultaneous connections are capped.
+  `GET /` and `GET /healthz` are intentionally unauthenticated and reveal nothing
+  about the runner. The browser token lasts only for its current tab.
 - **Reboot escalation runs as root and can reboot the Mac.** It is opt-in and off
   by default, and only takes effect when Hearth runs as the headless
   LaunchDaemon. When enabled it is guarded against reboot loops by a minimum
   interval, a daily cap, and a kernel boot-time backstop. Review
   `RebootEscalation` before enabling it.
+- **The experimental reboot helper authenticates the actual client, not only its
+  login UID.** Installation snapshots a Developer ID designated requirement into
+  a root-owned file. Each request must come from the configured executable path
+  and a live audit token satisfying that requirement; ad-hoc clients are refused.

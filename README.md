@@ -8,7 +8,7 @@
   <a href="https://github.com/adamskijow/Hearth/actions/workflows/ci.yml"><img src="https://github.com/adamskijow/Hearth/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/adamskijow/Hearth/releases/latest"><img src="https://img.shields.io/github/v/release/adamskijow/Hearth?sort=semver" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/adamskijow/Hearth" alt="License: MIT"></a>
-  <img src="https://img.shields.io/badge/macOS-14%2B-black?logo=apple&logoColor=white" alt="macOS 14+">
+  <img src="https://img.shields.io/badge/macOS-14%2B%20Apple%20silicon-black?logo=apple&logoColor=white" alt="macOS 14+ on Apple silicon">
 </p>
 
 **Keep local AI runners alive on an always-on Mac.** Hearth supervises Ollama,
@@ -19,6 +19,9 @@ awake while serving, and alerts you when something breaks.
 Built for an unattended Mac mini, home-lab server, or desktop left on overnight.
 Your apps keep talking to the runner exactly as before. *Independent project, not
 affiliated with Ollama.*
+
+Full Hearth requires macOS 14 or later on Apple silicon. The sandboxed Hearth
+Monitor companion remains universal for attached runner monitoring.
 
 <p align="center">
   <img src="assets/wedge-recovery.gif" alt="Hearth catching a runner that is still running but stuck, and recovering it hands-off" width="820">

@@ -20,6 +20,13 @@
 #   NOTARY_ISSUER               the App Store Connect issuer ID (a UUID)
 name: Release
 
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 on:
   push:
     tags: ["v*"]
@@ -27,8 +34,15 @@ on:
 jobs:
   release:
     runs-on: macos-26
+    environment: release
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # releases/v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify release tag, version, and main ancestry
+        run: ./scripts/verify-release-ref.sh "$GITHUB_REF_NAME"
 
       - name: Run the CI gate (build, tests, lint)
         run: ./scripts/ci.sh
@@ -54,16 +68,17 @@ jobs:
           set -euo pipefail
           KEYCHAIN="$RUNNER_TEMP/hearth-signing.keychain-db"
           KEYCHAIN_PASSWORD="$(uuidgen)"
+          CERTIFICATE="$RUNNER_TEMP/cert.p12"
+          trap 'rm -f "$CERTIFICATE"' EXIT
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security set-keychain-settings -lut 21600 "$KEYCHAIN"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          echo "$MACOS_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
-          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
+          echo "$MACOS_CERTIFICATE_P12" | base64 --decode > "$CERTIFICATE"
+          security import "$CERTIFICATE" -k "$KEYCHAIN" \
             -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
           # Put the signing keychain first on the search list so codesign finds it.
           security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
-          rm -f "$RUNNER_TEMP/cert.p12"
 
       - name: Build, sign, notarize, and package
         if: steps.secrets.outputs.present == 'yes'
@@ -74,10 +89,23 @@ jobs:
           HEARTH_NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER }}
         run: |
           set -euo pipefail
-          echo "$NOTARY_KEY_P8" | base64 --decode > "$RUNNER_TEMP/notary.p8"
-          export HEARTH_NOTARY_KEY="$RUNNER_TEMP/notary.p8"
+          NOTARY_KEY="$RUNNER_TEMP/notary.p8"
+          trap 'rm -f "$NOTARY_KEY"' EXIT
+          echo "$NOTARY_KEY_P8" | base64 --decode > "$NOTARY_KEY"
+          export HEARTH_NOTARY_KEY="$NOTARY_KEY"
           ./scripts/release.sh
-          rm -f "$RUNNER_TEMP/notary.p8"
+
+      - name: Record artifact checksums and provenance
+        if: steps.secrets.outputs.present == 'yes'
+        run: |
+          set -euo pipefail
+          (
+            cd dist
+            shasum -a 256 -- *.dmg *.zip > SHA256SUMS
+            printf 'tag=%s\ncommit=%s\nworkflow=%s\n' \
+              "$GITHUB_REF_NAME" "$GITHUB_SHA" "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+              > RELEASE-PROVENANCE.txt
+          )
 
       - name: Publish the GitHub release
         if: steps.secrets.outputs.present == 'yes'
@@ -86,6 +114,7 @@ jobs:
         run: |
           set -euo pipefail
           gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
             --title "$GITHUB_REF_NAME" \
             --generate-notes \
-            dist/*.dmg dist/*.zip
+            dist/*.dmg dist/*.zip dist/SHA256SUMS dist/RELEASE-PROVENANCE.txt

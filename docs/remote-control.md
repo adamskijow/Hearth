@@ -43,16 +43,19 @@ is up, for an uptime monitor. Ready-made Prometheus, Grafana, and Uptime Kuma re
 (including a dashboard) are in [deploy/monitoring.md](../deploy/monitoring.md). The
 control endpoint is a control surface, not a public API: bind it to localhost or a
 private interface (a Tailscale address is ideal) and keep it behind a VPN. It refuses
-to start without a token, and rejects any request whose bearer token does not match.
+to start without a token, rejects any request whose bearer token does not match,
+temporarily locks out a peer after repeated failures, and caps simultaneous clients.
 
 Opening the control URL in a browser (`http://HOST:11435/`) serves a small status
-page for phones: paste your token once (it is stored in that browser only, never in
-the URL) and it polls `/status`, shows the phase, uptime, metrics, and recent
+page for phones: paste your token once (it is stored only for that browser tab,
+never persistently and never in the URL) and it polls `/status`, shows the phase, uptime, metrics, and recent
 activity, and provides Start, Stop, and Restart buttons. Stop and Restart require
 confirmation. With a status-only token the page shows status but hides those
 buttons. The page itself is unauthenticated but reveals nothing; status and
-control requests carry the token in their authorization header. Use Forget Token
-before leaving a shared phone or browser.
+control requests carry the token in their authorization header. Responses refuse
+framing, caching, content sniffing, and cross-origin resource loading. Closing the
+tab forgets the token; **Forget Token** clears it immediately. The built-in server
+is HTTP, so use this page only over Tailscale/a VPN or through an HTTPS reverse proxy.
 
 When Hearth detects a Tailscale address on the machine (an interface in the
 100.64.0.0/10 range), the menubar shows a "Phone access" line with the full control

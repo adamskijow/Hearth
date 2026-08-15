@@ -51,8 +51,10 @@ struct SupervisorAssembly {
         }
 
         var inFlight: (@Sendable () -> Int)?
+        var clientTrafficObserved: (@Sendable () -> Bool)?
         if let proxy = metricsProxy {
             inFlight = { [weak proxy] in proxy?.inFlightConnections() ?? 0 }
+            clientTrafficObserved = { [weak proxy] in proxy?.hasObservedClientTraffic() ?? false }
         }
         let engine = SupervisorEngine(
             clock: SystemClock(),
@@ -68,6 +70,7 @@ struct SupervisorAssembly {
             memoryLimitBytes: Int64(max(0, config.runnerMemoryLimitMB)) * 1_048_576,
             drainSeconds: max(0, config.drainSeconds),
             inFlight: inFlight,
+            clientTrafficObserved: clientTrafficObserved,
             includeLogTail: config.alertsIncludeLogTail,
             busyTimeout: max(30, config.busyTimeoutSeconds),
             modelFitThreshold: config.modelOOMThreshold,

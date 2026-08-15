@@ -4,9 +4,10 @@ import Foundation
 
 /// The HTML served at the control endpoint's `GET /`, so a phone browser can show
 /// status with no app. The page itself is an unauthenticated shell that leaks
-/// nothing; the token is entered by the user, kept in the browser's localStorage,
+/// nothing; the token is entered by the user, kept in the browser's sessionStorage,
 /// and sent only on the page's own authenticated `fetch('/status')`. The secret
-/// never goes in the URL or the server logs.
+/// never goes in the URL or the server logs, and closing the browser tab forgets
+/// it instead of leaving a full-control credential behind indefinitely.
 public enum ControlStatusPage {
     public static let html = #"""
     <!doctype html>
@@ -32,7 +33,7 @@ public enum ControlStatusPage {
     </style></head>
     <body>
       <h1>&#128293; Hearth</h1>
-      <p class="sub">Paste your control token. It stays in this browser only.</p>
+      <p class="sub">Paste your control token. It stays in this tab only. Use this page only over Tailscale, a VPN, or HTTPS.</p>
       <input id="token" type="password" placeholder="bearer token" autocomplete="off">
       <button id="forget" class="link" type="button">Forget token on this device</button>
       <p id="err"></p>
@@ -45,15 +46,15 @@ public enum ControlStatusPage {
       <div id="activity"></div>
     <script>
       const tok = document.getElementById('token');
-      tok.value = localStorage.getItem('hearthToken') || '';
-      tok.addEventListener('input', () => localStorage.setItem('hearthToken', tok.value));
+      tok.value = sessionStorage.getItem('hearthToken') || '';
+      tok.addEventListener('input', () => sessionStorage.setItem('hearthToken', tok.value));
       function clearPrivate() {
         document.getElementById('status').innerHTML = '';
         document.getElementById('activity').innerHTML = '';
         document.getElementById('actions').hidden = true;
       }
       document.getElementById('forget').addEventListener('click', () => {
-        localStorage.removeItem('hearthToken'); tok.value = '';
+        sessionStorage.removeItem('hearthToken'); tok.value = '';
         clearPrivate();
       });
       function esc(s) { return String(s).replace(/[&<>"']/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -64,7 +65,7 @@ public enum ControlStatusPage {
         if (!t) { clearPrivate(); return; }
         try {
           const r = await fetch('/status', { headers: { 'Authorization': 'Bearer ' + t } });
-          if (!r.ok) { clearPrivate(); document.getElementById('err').textContent = r.status === 401 ? 'Wrong token.' : ('Error ' + r.status); return; }
+          if (!r.ok) { clearPrivate(); document.getElementById('err').textContent = r.status === 401 ? 'Wrong token.' : (r.status === 429 ? 'Too many failed attempts. Try again in a minute.' : ('Error ' + r.status)); return; }
           document.getElementById('err').textContent = '';
           const s = await r.json();
           let h = row('phase', s.busy ? s.phase + ' (busy)' : s.phase, 'phase-' + s.phase);

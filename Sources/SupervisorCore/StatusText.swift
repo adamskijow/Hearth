@@ -112,6 +112,8 @@ public enum StatusText {
             return "Memory limit restart (\(byteString(resident)) resident, limit \(byteString(limit)))"
         case .modelLikelyTooLarge(let model):
             return "\(model) keeps running this Mac out of memory; it likely does not fit"
+        case .inferenceRecoveryWithheld:
+            return "Inference check failed; restart withheld because client traffic is not observable"
         case .stopped: return "Stopped"
         }
     }

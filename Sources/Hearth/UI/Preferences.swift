@@ -290,7 +290,7 @@ struct PreferencesView: View {
         } header: {
             Text("Inference health")
         } footer: {
-            Text("Opt in: the test loads the selected model and uses a small amount of GPU work. When sizes are available, the smallest installed model is listed first.")
+            Text("Opt in: scheduled checks only test a model already resident from real use. Without the metrics proxy carrying client traffic, repeated failures alert but never restart the runner; this prevents a long queued generation from being killed as a false wedge.")
         }
     }
 

@@ -77,6 +77,10 @@ public enum SupervisorEvent: Sendable, Equatable {
     /// loaded), so it likely does not fit on this machine. Advisory, so the user
     /// switches to a smaller model instead of living in a crash loop.
     case modelLikelyTooLarge(model: String)
+    /// Inference failed repeatedly, but Hearth deliberately withheld a restart
+    /// because it had not observed clients through the metrics proxy and could
+    /// not distinguish a wedge from a legitimately long queued generation.
+    case inferenceRecoveryWithheld
     /// Supervision stopped by request.
     case stopped
 
@@ -93,6 +97,8 @@ public enum SupervisorEvent: Sendable, Equatable {
         case .memoryLimitExceeded:
             return true
         case .modelLikelyTooLarge:
+            return true
+        case .inferenceRecoveryWithheld:
             return true
         default:
             return false

@@ -33,10 +33,19 @@ CLI prose may change. Scripts should use `/status` or `hearth status --json`.
 `lastRestartReason`, `lastDownCategory`, `lastRestartCategory`,
 `oversizedModels`, `deepProbeConfigured`, `thermal`, `memoryUsedPercent`,
 `runnerResidentBytes`, `tokensPerSecond`, `generationTokensTotal`,
-`recentEvents`, `rebootOnWedge`, `credentialAccess`. Optional fields may be absent (a field whose source is
+`recentEvents`, `rebootOnWedge`, `credentialAccess`, `healthy`, `headline`,
+`inferenceRecoveryWithheld`, `inferenceDeferredByProxy`, `inferenceNotice`.
+Optional fields may be absent (a field whose source is
 off, such as throughput without the metrics proxy); present fields keep their
 names and types. New fields may be added in minor releases, so consumers should
 ignore keys they do not know.
+
+The inference-status fields above are new in source after v1.5.1. `phase` remains
+the supervisor lifecycle. `healthy` is false when that lifecycle is unhealthy or
+a confirmed inference incident has recovery withheld. A true value does not
+prove a recent generation. `inferenceDeferredByProxy` means an open connection
+deferred the check; that connection may be idle. `headline` and optional
+`inferenceNotice` are display text; automate against the typed fields.
 
 The routes (`GET /healthz`, `GET /status`, `GET /metrics`, `POST /start`,
 `POST /stop`, `POST /restart`), their authentication (bearer token, all tokens

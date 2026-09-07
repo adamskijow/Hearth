@@ -16,6 +16,8 @@ public enum StatusText {
         case .starting:
             return "Starting\u{2026}"
         case .healthy:
+            if state.inferenceRecoveryWithheld { return "Inference check failed" }
+            if state.inferenceDeferredByProxy { return "Inference check deferred" }
             return state.busy ? "Healthy (busy)" : "Healthy"
         case .down:
             return "Down\(retrySuffix(state, now: now))"
@@ -54,6 +56,17 @@ public enum StatusText {
         "The runner keeps failing right after starting; Hearth is still retrying, more slowly.",
         "Open Logs below shows why it is failing; `hearth doctor` in Terminal checks the setup."
     ]
+
+    public static func inferenceNotice(_ state: SupervisorState) -> String? {
+        guard state.phase == .healthy else { return nil }
+        if state.inferenceRecoveryWithheld {
+            return "The API answers. Automatic restart is withheld because client activity cannot be ruled out."
+        }
+        if state.inferenceDeferredByProxy {
+            return "The API answers. Open proxy connections defer inference checks, even when idle."
+        }
+        return nil
+    }
 
     /// Shown when a watched (attached-mode) runner is down: in that mode nothing
     /// restarts it, and the user needs to know that plainly.
@@ -113,7 +126,7 @@ public enum StatusText {
         case .modelLikelyTooLarge(let model):
             return "\(model) keeps running this Mac out of memory; it likely does not fit"
         case .inferenceRecoveryWithheld:
-            return "Inference check failed; restart withheld because client traffic is not observable"
+            return "Inference check failed; restart withheld because client activity cannot be ruled out"
         case .stopped: return "Stopped"
         }
     }

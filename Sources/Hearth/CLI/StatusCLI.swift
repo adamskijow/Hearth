@@ -86,7 +86,7 @@ enum StatusCLI {
         var out = s
         out["source"] = "control"
         out["supervising"] = true
-        out["healthy"] = (s["phase"] as? String) == "healthy"
+        out["healthy"] = (s["healthy"] as? Bool) ?? ((s["phase"] as? String) == "healthy")
         out["recentEvents"] = EventLogStore.recent(6)
         emitJSON(out)
     }
@@ -125,10 +125,13 @@ enum StatusCLI {
 
     private static func printControlStatus(_ s: [String: Any]) {
         print("Hearth status (via control endpoint)")
-        if let phase = s["phase"] as? String {
+        if let headline = s["headline"] as? String {
+            print(row("status", headline))
+        } else if let phase = s["phase"] as? String {
             let busy = (s["busy"] as? Bool) == true
             print(row("phase", busy ? "\(phase) (busy)" : phase))
         }
+        if let notice = s["inferenceNotice"] as? String { print(row("inference", notice)) }
         if let up = s["uptimeSeconds"] as? Int { print(row("uptime", StatusText.duration(Double(up)))) }
         if let rc = s["restartCount"] as? Int { print(row("restarts", String(rc))) }
         if let cf = s["consecutiveFailures"] as? Int { print(row("failures", String(cf))) }

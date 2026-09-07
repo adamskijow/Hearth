@@ -117,6 +117,11 @@ final class FakeHTTPClient: HTTPClient, @unchecked Sendable {
     private let lock = NSLock()
     private var outcomes: [String: HTTPOutcome] = [:]
     private var _default: HTTPOutcome
+    private var postHandler: (@Sendable () async -> Void)?
+
+    func onPost(_ handler: @escaping @Sendable () async -> Void) {
+        lock.withLock { postHandler = handler }
+    }
 
     init(default defaultOutcome: HTTPOutcome = .refused) {
         _default = defaultOutcome
@@ -135,11 +140,13 @@ final class FakeHTTPClient: HTTPClient, @unchecked Sendable {
     }
 
     func post(_ url: URL, body: Data, timeout: TimeInterval) async -> HTTPOutcome {
-        lock.withLock {
+        let (outcome, handler) = lock.withLock {
             _postedURLs.append(url.absoluteString)
             _postTimeouts.append(timeout)
-            return outcomes[url.absoluteString] ?? _default
+            return (outcomes[url.absoluteString] ?? _default, postHandler)
         }
+        if let handler { await handler() }
+        return outcome
     }
 
     private var _postedURLs: [String] = []

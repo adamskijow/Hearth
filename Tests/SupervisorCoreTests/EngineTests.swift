@@ -8,6 +8,13 @@ import Foundation
 /// advanced by hand and the loop is pumped with `stepOnce`, so there is no real
 /// sleep and no Ollama.
 struct EngineTests {
+    private final class Traffic: @unchecked Sendable {
+        private let lock = NSLock()
+        private var count = 0
+        func current() -> Int { lock.withLock { count } }
+        func set(_ value: Int) { lock.withLock { count = value } }
+    }
+
     private struct Harness {
         let engine: SupervisorEngine
         let clock: ManualClock
@@ -672,9 +679,93 @@ struct EngineTests {
             $0.event == .inferenceRecoveryWithheld
         }
         #expect(advisories.count == 1)
+        #expect(await h.engine.snapshot().inferenceRecoveryWithheld)
+        #expect(await h.engine.snapshot().isHealthy == false)
+        #expect(StatusText.headline(await h.engine.snapshot(), now: h.clock.now) == "Inference check failed")
+
+        // Shallow success and a later deferred check must not erase this incident.
+        h.clock.advance(by: 5)
+        _ = await h.engine.stepOnce()
+        #expect(StatusText.headline(await h.engine.snapshot(), now: h.clock.now) == "Inference check failed")
+        makeServing(h, models: #"{"models":[]}"#)
+        h.clock.advance(by: 61)
+        _ = await h.engine.stepOnce()
+        #expect(StatusText.headline(await h.engine.snapshot(), now: h.clock.now) == "Inference check failed")
+
+        makeServing(h)
+        h.http.set(deepURL, .ok(Data("{}".utf8)))
+        h.clock.advance(by: 61)
+        _ = await h.engine.stepOnce()
+        #expect(StatusText.headline(await h.engine.snapshot(), now: h.clock.now) == "Healthy")
+        #expect(await h.engine.snapshot().isHealthy)
+        #expect(await h.engine.snapshot().inferenceRecoveryWithheld == false)
     }
 
-    @Test func deepProbeBusyNeverRestartsTheRunner() async {
+    @Test(arguments: [5.0, 61.0])
+    func openProxyConnectionCannotTriggerBusyTimeout(step: Double) async {
+        let h = makeHarness(
+            policy: RestartPolicyConfig(probeInterval: step, startupGrace: 30),
+            deepProbe: DeepProbeConfig(model: "llama3:8b", interval: 60, timeout: 30),
+            inFlight: { 1 },
+            clientTrafficObserved: { true })
+        makeServing(h)
+        let deepURL = h.runner.deepReadinessRequest(model: "llama3:8b")!.url
+        await h.engine.start()
+        // Cover both intervening shallow polls and every poll being deep-due.
+        for _ in stride(from: 0.0, through: 750.0, by: step) {
+            _ = await h.engine.stepOnce()
+            h.clock.advance(by: step)
+        }
+        #expect(h.processes.terminateCount == 0)
+        #expect(await h.engine.snapshot().phase == .healthy)
+        #expect(h.http.postCount(to: deepURL) == 0)
+    }
+
+    @Test func clientConnectingDuringFailedInferenceWithholdsRecovery() async {
+        let traffic = Traffic()
+        let h = makeHarness(
+            deepProbe: DeepProbeConfig(model: "llama3:8b", interval: 60, timeout: 30),
+            inFlight: { traffic.current() },
+            clientTrafficObserved: { true })
+        makeServing(h)
+        let deepURL = h.runner.deepReadinessRequest(model: "llama3:8b")!.url
+        h.http.set(deepURL, .timedOut)
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+        // The second timeout would authorize recovery, but a client connects
+        // after the preflight count and before the POST result is returned.
+        h.http.onPost { traffic.set(1) }
+        h.clock.advance(by: 61)
+        _ = await h.engine.stepOnce()
+        #expect(h.processes.terminateCount == 0)
+        #expect(await h.engine.snapshot().inferenceRecoveryWithheld)
+        #expect(await h.engine.snapshot().inferenceDeferredByProxy)
+    }
+
+    @Test func inferenceResultFromPreviousSessionCannotOpenAnIncident() async {
+        let h = makeHarness(deepProbe: DeepProbeConfig(model: "llama3:8b", interval: 60, timeout: 30))
+        makeServing(h)
+        let deepURL = h.runner.deepReadinessRequest(model: "llama3:8b")!.url
+        h.http.set(deepURL, .timedOut)
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+        h.http.onPost {
+            await h.engine.stop()
+            await h.engine.start()
+        }
+        h.clock.advance(by: 61)
+        _ = await h.engine.stepOnce()
+        #expect(await h.engine.snapshot().phase == .starting)
+        #expect(await h.engine.snapshot().inferenceRecoveryWithheld == false)
+        #expect(await h.notifier.received.filter { $0.event == .inferenceRecoveryWithheld }.isEmpty)
+        h.http.onPost {}
+        h.clock.advance(by: 61)
+        _ = await h.engine.stepOnce() // first failure belonging to the new session
+        #expect(await h.engine.snapshot().inferenceRecoveryWithheld == false)
+        #expect(await h.notifier.received.filter { $0.event == .inferenceRecoveryWithheld }.isEmpty)
+    }
+
+    @Test func deepProbeBusyDoesNotRestartWithinBusyTimeout() async {
         let h = makeHarness(deepProbe: DeepProbeConfig(model: "llama3:8b", interval: 60, timeout: 30))
         makeServing(h)
         let deepURL = h.runner.deepReadinessRequest(model: "llama3:8b")!.url
@@ -779,12 +870,8 @@ struct EngineTests {
     }
 
     @Test func deepProbeDefersWhileClientTrafficIsObserved() async {
-        final class Traffic: @unchecked Sendable {
-            let lock = NSLock()
-            var count = 1
-            func current() -> Int { lock.withLock { count } }
-        }
         let traffic = Traffic()
+        traffic.set(1)
         let h = makeHarness(
             deepProbe: DeepProbeConfig(model: "llama3:8b", interval: 60, timeout: 30),
             inFlight: { traffic.current() })
@@ -795,8 +882,14 @@ struct EngineTests {
         await h.engine.start()
         _ = await h.engine.stepOnce()
         #expect(await h.engine.snapshot().phase == .healthy)
-        #expect(await h.engine.snapshot().busy)
+        #expect(await h.engine.snapshot().busy == false)
+        #expect(await h.engine.snapshot().inferenceDeferredByProxy)
         #expect(h.http.postCount(to: deepURL) == 0)
         #expect(h.processes.terminateCount == 0)
+        traffic.set(0)
+        h.clock.advance(by: 61)
+        _ = await h.engine.stepOnce()
+        #expect(await h.engine.snapshot().inferenceDeferredByProxy == false)
+        #expect(h.http.postCount(to: deepURL) == 1)
     }
 }

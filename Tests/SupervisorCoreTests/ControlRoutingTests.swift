@@ -104,6 +104,7 @@ struct ControlRoutingTests {
                                    healthySince: now.addingTimeInterval(-60), lastRestartReason: "crash",
                                    restartCount: 1, busy: true, lastDownCategory: "crash",
                                    lastRestartCategory: "crash", deepProbeConfigured: true,
+                                   inferenceRecoveryWithheld: true,
                                    oversizedModels: ["big:70b"])
         let metrics = SystemMetrics(thermal: .nominal, memoryUsedFraction: 0.5, runnerResidentBytes: 1024)
         let tokens = TokenMetricsStore.Snapshot(
@@ -120,6 +121,7 @@ struct ControlRoutingTests {
             "lastRestartCategory", "oversizedModels", "deepProbeConfigured", "thermal",
             "memoryUsedPercent", "runnerResidentBytes", "tokensPerSecond", "generationTokensTotal",
             "recentEvents", "credentialAccess",
+            "healthy", "headline", "inferenceRecoveryWithheld", "inferenceDeferredByProxy", "inferenceNotice",
         ])
         #expect(object["runner"] as? String == "ollama")
         #expect(object["mode"] as? String == "managed")
@@ -132,6 +134,34 @@ struct ControlRoutingTests {
         let cleanObject = try #require(try JSONSerialization.jsonObject(with: clean) as? [String: Any])
         #expect(cleanObject["oversizedModels"] == nil)
         #expect(cleanObject["recentEvents"] == nil)
+    }
+
+    @Test func unresolvedInferenceFailureIsVisibleAcrossStatusAndMetrics() throws {
+        let state = SupervisorState(phase: .healthy, deepProbeConfigured: true,
+                                    inferenceRecoveryWithheld: true)
+        let object = try #require(try JSONSerialization.jsonObject(
+            with: ControlRouting.statusJSON(state, now: now)) as? [String: Any])
+        #expect(object["phase"] as? String == "healthy") // lifecycle remains compatible
+        #expect(object["healthy"] as? Bool == false)
+        #expect(object["headline"] as? String == "Inference check failed")
+        #expect(object["inferenceRecoveryWithheld"] as? Bool == true)
+        #expect((object["inferenceNotice"] as? String)?.contains("client activity cannot be ruled out") == true)
+        let metrics = String(decoding: ControlRouting.prometheusText(state, now: now), as: UTF8.self)
+        #expect(metrics.contains("hearth_healthy 0\n"))
+        #expect(metrics.contains("hearth_inference_recovery_withheld 1\n"))
+    }
+
+    @Test func proxyDeferralIsSeparateFromRunnerBusy() throws {
+        let state = SupervisorState(phase: .healthy, deepProbeConfigured: true,
+                                    inferenceDeferredByProxy: true)
+        let object = try #require(try JSONSerialization.jsonObject(
+            with: ControlRouting.statusJSON(state, now: now)) as? [String: Any])
+        #expect(object["busy"] as? Bool == false)
+        #expect(object["headline"] as? String == "Inference check deferred")
+        #expect(object["inferenceDeferredByProxy"] as? Bool == true)
+        let metrics = String(decoding: ControlRouting.prometheusText(state, now: now), as: UTF8.self)
+        #expect(metrics.contains("hearth_busy 0\n"))
+        #expect(metrics.contains("hearth_inference_deferred_by_proxy 1\n"))
     }
 
     @Test func statusCanCarryBoundedRecentActivityForThePhone() throws {

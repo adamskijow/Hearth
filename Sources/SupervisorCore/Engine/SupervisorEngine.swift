@@ -95,6 +95,7 @@ public actor SupervisorEngine {
     /// Avoid repeating the same safety advisory every probe interval. A real
     /// successful inference re-arms it for a later, distinct incident.
     private var inferenceRecoveryWithheldOpen = false
+    private var inferenceDeferredByProxy = false
     /// A recovery incident can include many failed replacement processes. The
     /// event log keeps every attempt, but phone and local alerts should announce
     /// the outage once, then stay quiet until recovery or a fresh healthy run.
@@ -191,6 +192,7 @@ public actor SupervisorEngine {
         lastWarmupStartedAt = nil
         consecutiveDeepProbeFailures = 0
         inferenceRecoveryWithheldOpen = false
+        inferenceDeferredByProxy = false
         let output = machine.start(now: clock.now)
         await apply(output, models: nil)
         nudgeLoop()
@@ -204,6 +206,7 @@ public actor SupervisorEngine {
         drainDeadline = nil
         consecutiveDeepProbeFailures = 0
         inferenceRecoveryWithheldOpen = false
+        inferenceDeferredByProxy = false
         let output = machine.stop(now: clock.now)
         await apply(output, models: nil)
         nudgeLoop()
@@ -350,6 +353,7 @@ public actor SupervisorEngine {
     // MARK: - Probing
 
     private func probe(now: Date) async -> HealthReport {
+        let generation = controlGeneration
         if !managed {
             // Attached mode: there is no child to inspect. Readiness is the whole
             // health signal. When unreachable, report not alive so the machine
@@ -359,7 +363,7 @@ public actor SupervisorEngine {
             var readiness = Readiness.from(outcome)
             let fetchedModels = readiness == .ready ? await fetchModels() : nil
             let models = fetchedModels ?? currentModels
-            if readiness == .ready {
+            if readiness == .ready, generation == controlGeneration {
                 readiness = await readinessAfterDeepProbe(
                     now: now,
                     residentModels: models,
@@ -399,7 +403,7 @@ public actor SupervisorEngine {
         if let fetched = fetchedModels {
             models = fetched
         }
-        if readiness == .ready {
+        if readiness == .ready, generation == controlGeneration {
             readiness = await readinessAfterDeepProbe(
                 now: now,
                 residentModels: models,
@@ -420,6 +424,7 @@ public actor SupervisorEngine {
 
     private enum DeepProbeVerdict {
         case serving
+        case deferred
         case busy
         case unconfirmedFailure
         case confirmedFailure
@@ -427,8 +432,8 @@ public actor SupervisorEngine {
 
     /// Translate the inference-specific result back into the existing readiness
     /// vocabulary. A first ambiguous miss remains serving while Hearth verifies
-    /// it; a queue-full response or observed client traffic is busy; only a
-    /// confirmed miss becomes a destructive wedge signal.
+    /// it; only a runner's queue-full response is busy. Proxy connections defer
+    /// inference without entering the runner's busy-timeout recovery path.
     private func readinessAfterDeepProbe(
         now: Date,
         residentModels: [ResidentModel],
@@ -438,7 +443,7 @@ public actor SupervisorEngine {
             now: now,
             residentModels: residentModels,
             residencyIsCurrent: residencyIsCurrent) {
-        case .serving, .unconfirmedFailure:
+        case .serving, .deferred, .unconfirmedFailure:
             return .ready
         case .busy:
             return .busy
@@ -460,13 +465,14 @@ public actor SupervisorEngine {
         residencyIsCurrent: Bool
     ) async -> DeepProbeVerdict {
         guard let deep = deepProbe else { return .serving }
-        if let last = lastDeepProbeAt, now.timeIntervalSince(last) < deep.interval {
-            return .serving
-        }
-        if let inFlight, inFlight() > 0 {
+        inferenceDeferredByProxy = (inFlight?() ?? 0) > 0
+        if inferenceDeferredByProxy {
             consecutiveDeepProbeFailures = 0
             lastDeepProbeAt = now
-            return .busy
+            return .deferred
+        }
+        if let last = lastDeepProbeAt, now.timeIntervalSince(last) < deep.interval {
+            return .serving
         }
         let wasResident = residentModels.contains { $0.name == deep.model }
         // Only trust residency when /api/ps answered during this probe. A stale
@@ -489,10 +495,12 @@ public actor SupervisorEngine {
             consecutiveDeepProbeFailures = 0
             return .serving
         }
+        let generation = controlGeneration
         let outcome = await http.post(
             request.url,
             body: request.body,
             timeout: deep.effectiveTimeout(modelIsConfirmedResident: true))
+        guard generation == controlGeneration else { return .serving }
         // Pace from completion, not request start. A cold load can consume the
         // entire timeout; using its start timestamp made the next expensive
         // check immediately overdue and could keep the GPU in a retry loop.
@@ -512,7 +520,11 @@ public actor SupervisorEngine {
             lastDeepProbeAt = completedAt
             consecutiveDeepProbeFailures += 1
             if consecutiveDeepProbeFailures >= 2 {
-                guard inFlight != nil, clientTrafficObserved?() == true else {
+                // A client may have connected while the inference POST awaited
+                // its response. Re-check before authorizing a restart.
+                inferenceDeferredByProxy = (inFlight?() ?? 0) > 0
+                guard inFlight != nil, clientTrafficObserved?() == true,
+                      !inferenceDeferredByProxy else {
                     if !inferenceRecoveryWithheldOpen {
                         inferenceRecoveryWithheldOpen = true
                         await handleEvent(.inferenceRecoveryWithheld)
@@ -773,6 +785,8 @@ public actor SupervisorEngine {
             lastRestartCategory: machine.lastRestartCategory,
             deepProbeConfigured: deepProbe != nil,
             deepProbeLastFailedAt: lastDeepProbeFailedAt,
+            inferenceRecoveryWithheld: inferenceRecoveryWithheldOpen,
+            inferenceDeferredByProxy: inferenceDeferredByProxy,
             oversizedModels: oversized
         )
         current = state
@@ -839,7 +853,7 @@ public actor SupervisorEngine {
             return HearthNotification(
                 level: .warning,
                 title: "Inference check failed",
-                body: "The runner API still answers, but inference failed twice. Hearth did not restart it because client traffic has not been observed through the metrics proxy, so this could be a legitimate long generation. Inspect the runner, or route clients through the metrics proxy for traffic-aware recovery.",
+                body: "The runner API still answers, but inference failed twice. Hearth did not restart it because client activity cannot be ruled out. Inspect the runner and clients, including those bypassing the metrics proxy; a long generation can resemble an inference timeout.",
                 event: event
             )
         default:

@@ -175,7 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             urlString: config.heartbeatURL,
             intervalSeconds: config.heartbeatIntervalSeconds,
             isHealthy: { [weak engine = self.engine] in
-                await engine?.snapshot().phase == .healthy
+                await engine?.snapshot().isHealthy == true
             })
         heartbeat?.start()
         updateStatusButton()
@@ -359,8 +359,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let phase = latestState.phase
         let needsAttention = configProblem || binaryMissingPath != nil || supervisionStartBlocked
             || configDiagnostics.contains { $0.severity == .error }
+            || (latestState.phase == .healthy && latestState.inferenceRecoveryWithheld)
         let symbol = needsAttention ? "exclamationmark.triangle.fill" : MenuFormat.symbolName(for: phase)
-        let label = "Hearth: \(phase.rawValue)"
+        let label = "Hearth: \(StatusText.headline(latestState, now: Date()))"
         button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
             ?? NSImage(systemSymbolName: "flame", accessibilityDescription: label)
         let tint = needsAttention ? NSColor.systemYellow : MenuFormat.tint(for: phase)
@@ -438,7 +439,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         // Health: a bright, color-coded headline, then a couple of detail lines.
-        let phaseColor = MenuFormat.tint(for: latestState.phase) ?? .labelColor
+        let phaseColor = (latestState.phase == .healthy && latestState.inferenceRecoveryWithheld) ? NSColor.systemOrange
+            : MenuFormat.tint(for: latestState.phase) ?? .labelColor
         let headlineItem = infoRow(headlineAttr(StatusText.headline(latestState, now: now), color: phaseColor))
         menu.addItem(headlineItem)
         // The down and failing headlines carry a retry countdown; hold the field so
@@ -448,6 +450,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             ? headlineItem.view?.subviews.first as? NSTextField : nil
         menu.addItem(infoRow(detailAttr(StatusText.contextLine(
             latestState, runnerName: runner.name, managed: config.isManaged, now: now))))
+        if let notice = StatusText.inferenceNotice(latestState) {
+            menu.addItem(infoRow(detailAttr(notice)))
+        }
         if latestState.phase != .healthy, let reason = latestState.lastRestartReason {
             menu.addItem(infoRow(detailAttr("Last: \(reason)")))
         }
@@ -557,7 +562,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func tickHeadline() {
         guard let field = liveHeadlineField else { return }
-        let color = MenuFormat.tint(for: latestState.phase) ?? .labelColor
+        let color = (latestState.phase == .healthy && latestState.inferenceRecoveryWithheld) ? NSColor.systemOrange
+            : MenuFormat.tint(for: latestState.phase) ?? .labelColor
         field.attributedStringValue = headlineAttr(StatusText.headline(latestState, now: Date()), color: color)
     }
 
@@ -670,6 +676,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         lines.append("Hearth \(version)")
         lines.append("Runner: \(config.runner), mode \(config.mode) (\(config.modeKind.statusPhrase)) at \(config.host):\(config.port)")
         lines.append("Status: \(StatusText.headline(latestState, now: now))")
+        if let notice = StatusText.inferenceNotice(latestState) { lines.append(notice) }
         lines.append(StatusText.contextLine(latestState, runnerName: runner.name, managed: config.isManaged, now: now))
         let metrics = metricsProvider.sample()
         if let summary = MetricsFormat.summary(metrics) {

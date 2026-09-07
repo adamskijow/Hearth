@@ -111,7 +111,7 @@ struct StatusTextTests {
         #expect(StatusText.describe(.modelLikelyTooLarge(model: "llama3:70b"))
                 == "llama3:70b keeps running this Mac out of memory; it likely does not fit")
         #expect(StatusText.describe(.inferenceRecoveryWithheld)
-                == "Inference check failed; restart withheld because client traffic is not observable")
+                == "Inference check failed; restart withheld because client activity cannot be ruled out")
         #expect(StatusText.describe(.stopped) == "Stopped")
     }
 

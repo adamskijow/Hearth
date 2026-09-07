@@ -208,6 +208,11 @@ public enum ControlRouting {
                                   credentialAccess: ControlToken.Access? = nil) -> Data {
         let payload = StatusPayload(
             phase: state.phase.rawValue,
+            healthy: state.isHealthy,
+            headline: StatusText.headline(state, now: now),
+            inferenceRecoveryWithheld: state.inferenceRecoveryWithheld,
+            inferenceDeferredByProxy: state.inferenceDeferredByProxy,
+            inferenceNotice: StatusText.inferenceNotice(state),
             runner: runnerKind,
             mode: mode,
             rebootOnWedge: rebootOnWedge,
@@ -250,7 +255,9 @@ public enum ControlRouting {
         // Static identity: which runner this Hearth supervises, as a
         // low-cardinality info metric to join on in queries.
         metric("hearth_runner_info", "The runner Hearth supervises, always 1.", "gauge", "1", labels: "{runner=\"\(runnerKind)\"}")
-        metric("hearth_healthy", "Whether the runner is healthy (1) or not (0).", "gauge", state.phase == .healthy ? "1" : "0")
+        metric("hearth_healthy", "Shallow readiness with no unresolved inference incident; not proof of verified inference.", "gauge", state.isHealthy ? "1" : "0")
+        metric("hearth_inference_recovery_withheld", "Unresolved inference failure with automatic recovery withheld.", "gauge", state.inferenceRecoveryWithheld ? "1" : "0")
+        metric("hearth_inference_deferred_by_proxy", "Open proxy connections defer inference checks; connections may be idle.", "gauge", state.inferenceDeferredByProxy ? "1" : "0")
         metric("hearth_busy", "Whether the last probe answered busy (queue full).", "gauge", state.busy ? "1" : "0")
         metric("hearth_phase", "Current supervisor phase, 1 for the active one.", "gauge", "1", labels: "{phase=\"\(state.phase.rawValue)\"}")
         if let category = state.lastDownCategory {
@@ -306,6 +313,11 @@ public enum ControlRouting {
 
 private struct StatusPayload: Encodable {
     var phase: String
+    var healthy: Bool
+    var headline: String
+    var inferenceRecoveryWithheld: Bool
+    var inferenceDeferredByProxy: Bool
+    var inferenceNotice: String?
     var runner: String
     var mode: String
     var rebootOnWedge: Bool

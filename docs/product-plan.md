@@ -34,6 +34,11 @@ Each milestone produces one reviewable change or a small sequence of changes.
 Advance when its evidence is complete; elapsed time alone is not a completion
 condition. The 72-hour run is future validation work, not a scheduled task.
 
+The [first implementation](inference-recovery.md) reproduces the connection and
+health-reporting defects, adds persistent inference-failure status, and separates
+proxy deferral from runner busy-timeout recovery. The remaining state-model and
+traffic-visibility work is documented there; later milestones are still pending.
+
 ## 1. Reproduce before changing recovery policy
 
 Use an isolated fake runner and real HTTP clients, with dedicated config, data

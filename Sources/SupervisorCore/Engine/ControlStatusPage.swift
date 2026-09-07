@@ -68,7 +68,9 @@ public enum ControlStatusPage {
           if (!r.ok) { clearPrivate(); document.getElementById('err').textContent = r.status === 401 ? 'Wrong token.' : (r.status === 429 ? 'Too many failed attempts. Try again in a minute.' : ('Error ' + r.status)); return; }
           document.getElementById('err').textContent = '';
           const s = await r.json();
-          let h = row('phase', s.busy ? s.phase + ' (busy)' : s.phase, 'phase-' + s.phase);
+          const color = s.phase === 'healthy' && s.inferenceRecoveryWithheld ? 'phase-failing' : (s.phase === 'healthy' && s.inferenceDeferredByProxy ? 'phase-starting' : 'phase-' + s.phase);
+          let h = row('status', s.headline || (s.busy ? s.phase + ' (busy)' : s.phase), color);
+          if (s.inferenceNotice) h += row('inference', s.inferenceNotice);
           if (s.uptimeSeconds != null) h += row('uptime', dur(s.uptimeSeconds));
           h += row('restarts', s.restartCount);
           if (s.lastDownCategory) h += row('last failure', s.lastDownCategory);

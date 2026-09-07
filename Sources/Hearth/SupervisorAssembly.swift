@@ -111,7 +111,7 @@ struct SupervisorAssembly {
         let heartbeat = HeartbeatPinger(
             urlString: config.heartbeatURL,
             intervalSeconds: config.heartbeatIntervalSeconds,
-            isHealthy: { [weak engine] in await engine?.snapshot().phase == .healthy }
+            isHealthy: { [weak engine] in await engine?.snapshot().isHealthy == true }
         )
 
         return SupervisorAssembly(

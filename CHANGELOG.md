@@ -7,6 +7,16 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Fixed
+
+- Open metrics-proxy connections now defer inference checks without entering
+  the runner's HTTP 503 busy-timeout recovery path. Client connections are
+  checked again after a failed inference probe before recovery is authorized.
+- Confirmed inference failures remain visible when automatic recovery is
+  withheld. The menu, CLI, browser status, metrics, and heartbeat agree; shallow
+  API success does not clear the warning. Status fields are additive and the
+  lifecycle `phase` retains its existing meaning.
+
 ### Changed
 
 - Moved legacy Monitor packaging and its sandbox audit out of the default CI

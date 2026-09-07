@@ -6,6 +6,27 @@ M4 added scenarios 1 through 5; M5 added hard-crash orphan recovery.
 Reproduce with `./scripts/validate-real.sh` (requires a real Ollama and a small
 pulled model). The script exits non-zero on any failed scenario.
 
+## September 7, 2026: inference status and proxy deferral
+
+The [first implementation](docs/inference-recovery.md) adds regression coverage
+for withheld inference recovery, proxy connections across the busy timeout, a
+client arriving during a failed probe, and an old-session probe result.
+
+`python3 scripts/validate-inference.py` passed against the debug executable with
+an isolated fake HTTP/1.1 runner and real clients: API/CLI/metrics retained a
+confirmed inference failure, an idle pooled connection remained open beyond the
+30-second busy timeout without recovery, and successful inference cleared the
+incident after closure. Heartbeats paused during the unresolved incident and
+resumed after successful inference. Configuration and data were temporary.
+
+A separate isolated managed Ollama run used the installed `qwen2.5:0.5b` model
+and temporary runner, control, and proxy ports. Startup left the model unloaded;
+explicit proxied generation succeeded. A SIGKILL of that instance's recorded
+runner triggered automatic recovery, followed by successful real inference.
+Stopping supervision removed its recorded state and both owned process groups.
+No installed service was stopped or reconfigured. This was a bounded lifecycle
+check, not the planned 72-hour workload or a real Metal/GPU-wedge reproduction.
+
 ## Environment
 
 - macOS 26.5.1 (build 25F80), Darwin kernel 25.5.0.

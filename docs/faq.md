@@ -39,9 +39,11 @@ existing runner**.
 state. The default health check proves API responsiveness. Verify actual
 generation with your workload and the optional inference check in Preferences.
 
-In the current release, repeated inference failures can leave the phase
-**Healthy** while Hearth alerts that recovery was withheld. A green phase alone
-does not prove inference is working. See [known limitations](limitations.md).
+In v1.5.1, repeated inference failures can leave the phase **Healthy** while
+Hearth alerts that recovery was withheld. The next release adds a persistent
+**Inference check failed** status and a separate `healthy` field. Neither a
+shallow success nor the lifecycle phase proves recent inference. See
+[known limitations](limitations.md).
 
 For an isolated recovery demonstration, use `make demo`. It supplies its own fake
 runner, configuration, and data directory.

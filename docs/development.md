@@ -21,12 +21,18 @@ the desktop fake-runner test or `--real` for the Ollama lifecycle gate.
 ```sh
 ./scripts/smoke-test.sh       # fake runner; logged-in desktop required
 ./scripts/validate-real.sh    # real Ollama
+python3 scripts/validate-inference.py  # isolated fake runner and real HTTP clients
 make demo                     # isolated narrated wedge recovery
 ```
 
 The manual `real-ollama.yml` workflow runs the live Ollama gate on GitHub. Test
 evidence lives in [VALIDATION-REPORT.md](../VALIDATION-REPORT.md). The
 [product plan](product-plan.md) defines the next local validation milestones.
+
+The inference gate uses temporary config/data and loopback ports. It checks
+status agreement, an idle pooled HTTP connection across the busy timeout, and
+successful inference after closing that connection. Build first, or supply
+`--binary` with another Hearth executable.
 
 ## Full Hearth release
 

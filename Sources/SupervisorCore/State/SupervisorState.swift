@@ -67,6 +67,12 @@ public struct SupervisorState: Sendable, Equatable {
     public var deepProbeConfigured: Bool
     /// When the deep probe last failed, if it ever has this session.
     public var deepProbeLastFailedAt: Date?
+    /// Confirmed inference failures remain unresolved while automatic recovery
+    /// is withheld. Shallow API success does not clear this incident.
+    public var inferenceRecoveryWithheld: Bool
+    /// An open proxy connection deferred the inference check. It may be idle;
+    /// this is not a runner-reported busy response or evidence of progress.
+    public var inferenceDeferredByProxy: Bool
     /// Models that repeatedly ran the Mac out of memory and likely do not fit,
     /// for the status surfaces. Empty when none are flagged.
     public var oversizedModels: [String]
@@ -86,6 +92,8 @@ public struct SupervisorState: Sendable, Equatable {
                 lastRestartCategory: String? = nil,
                 deepProbeConfigured: Bool = false,
                 deepProbeLastFailedAt: Date? = nil,
+                inferenceRecoveryWithheld: Bool = false,
+                inferenceDeferredByProxy: Bool = false,
                 oversizedModels: [String] = []) {
         self.phase = phase
         self.residentModels = residentModels
@@ -102,8 +110,14 @@ public struct SupervisorState: Sendable, Equatable {
         self.lastRestartCategory = lastRestartCategory
         self.deepProbeConfigured = deepProbeConfigured
         self.deepProbeLastFailedAt = deepProbeLastFailedAt
+        self.inferenceRecoveryWithheld = inferenceRecoveryWithheld
+        self.inferenceDeferredByProxy = inferenceDeferredByProxy
         self.oversizedModels = oversizedModels
     }
+
+    /// Shallow readiness with no known unresolved inference incident. This does
+    /// not promise that inference was configured, checked, or recently verified.
+    public var isHealthy: Bool { phase == .healthy && !inferenceRecoveryWithheld }
 
     /// Uptime of the current healthy streak as of `reference`. Nil if not
     /// currently healthy.

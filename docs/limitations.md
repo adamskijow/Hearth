@@ -24,11 +24,13 @@
   Hearth alerts and leaves the runner in place.
 - The proxy counts open TCP connections, not active generation requests. A pooled
   connection or stalled request can defer inference checks; observed proxy traffic
-  does not establish visibility into direct clients. The interaction with probe
-  cadence and `busyTimeoutSeconds` needs targeted validation.
-- The current supervisor phase can remain **Healthy** after repeated inference
-  failures when automatic recovery is withheld. Inspect inference alerts and
-  verify generation; the phase alone does not prove recent inference success.
+  does not establish visibility into direct clients. Open connections now defer
+  checks without triggering the runner's HTTP 503 busy timeout.
+- The lifecycle `phase` can remain `healthy` after repeated inference failures
+  when automatic recovery is withheld. The separate `healthy` field becomes
+  false and status surfaces show **Inference check failed** until inference
+  succeeds. These additions are in source after v1.5.1. The phase alone does not
+  prove recent inference success, nor does a shallow success between probes.
 
 The [product plan](product-plan.md) prioritizes traffic visibility and accurate
 inference status.

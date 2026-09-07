@@ -31,8 +31,10 @@ The exposed series (all `gauge` unless noted):
 |--------|---------|
 | `hearth_up` | Hearth is up and answering (1). |
 | `hearth_runner_info{runner=...}` | Configured runner kind. |
-| `hearth_healthy` | Supervisor phase is healthy (1) or not (0); not proof of successful inference. |
-| `hearth_busy` | Last check reported busy through HTTP or proxy-observed connections (1). |
+| `hearth_healthy` | Shallow readiness with no unresolved inference incident (1); not proof of verified inference. |
+| `hearth_busy` | Last check returned a runner HTTP 503 busy response (1). |
+| `hearth_inference_recovery_withheld` | Confirmed inference failure remains unresolved with automatic recovery withheld (1). |
+| `hearth_inference_deferred_by_proxy` | Open proxy connections defer the inference check (1); connections may be idle. |
 | `hearth_phase{phase=...}` | Current supervisor phase; the active one is 1. |
 | `hearth_last_down{reason=...}` | Last failure category. |
 | `hearth_last_restart{category=...}` | Last restart category. |
@@ -49,9 +51,10 @@ The exposed series (all `gauge` unless noted):
 | `hearth_generation_tokens_total` (counter) | Generated tokens seen by the proxy. |
 | `hearth_tokens_per_second` | Most recent runner-reported throughput. |
 
-A basic alert watches supervisor health. Inference failures can remain advisory
-while this phase is healthy; inspect inference alerts and the last-failure
-timestamp as well. See [known limitations](../docs/limitations.md).
+The inference gauges and corrected `hearth_healthy` behavior are in source after
+v1.5.1. The alert below also catches confirmed inference failures with recovery
+withheld on that version of the code. Neither an unset failure gauge nor a
+shallow success proves recent inference. See [known limitations](../docs/limitations.md).
 
 ```yaml
 groups:
@@ -83,10 +86,11 @@ Two monitors give you liveness and readiness:
 1. **Hearth liveness**, type `HTTP(s)`, URL `http://YOUR_MAC_HOST:11435/healthz`,
    accepted status `200`. No auth needed. This catches Hearth itself being down.
 2. **Runner readiness**, type `HTTP(s) - Keyword`, URL
-   `http://YOUR_MAC_HOST:11435/status`, keyword `"phase":"healthy"`, with a request
-   header `Authorization: Bearer YOUR_CONTROL_TOKEN`. Match the phase field rather
-   than the word `healthy`, which may also appear in historical event text. This
-   checks the supervisor phase, not successful model generation. If your proxy
-   reformats JSON, use a JSON query for `phase` equal to `healthy` instead.
+   `http://YOUR_MAC_HOST:11435/status`, keyword `"healthy":true`, with a request
+   header `Authorization: Bearer YOUR_CONTROL_TOKEN`. This requires the status
+   additions after v1.5.1 and includes unresolved inference failures. It still
+   does not prove recent generation. If your proxy reformats JSON, use a JSON
+   query for boolean `healthy` instead. v1.5.1 exposes only the lifecycle check
+   `"phase":"healthy"`.
 
 Set the check interval to 60 seconds for both.

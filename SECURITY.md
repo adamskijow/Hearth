@@ -8,11 +8,6 @@ Security fixes land on the latest 1.x release line.
 |-----------------|-----------|
 | Full Hearth 1.x | yes |
 | Full Hearth < 1.0 | no |
-| Hearth Monitor, all versions | no; retired September 7, 2026 |
-
-Monitor artifacts remain available for historical reference. There are no
-planned Monitor releases or routine support. Report vulnerabilities in shared
-code through the private channel below so they can be assessed for full Hearth.
 
 ## Reporting a vulnerability
 

@@ -13,7 +13,7 @@ make hooks
 Xcode and Command Line Tools layouts. `make ci` builds debug and release, runs
 the tests, and lints source headers, whitespace, shell syntax, and the
 repository's no-em-dash rule. Retained Monitor source and regression tests still
-compile; retired-product packaging is outside the default gate.
+compile; prototype packaging is outside the default gate.
 
 The pre-push hook and GitHub Actions call the same CI script. Add `--smoke` for
 the desktop fake-runner test or `--real` for the Ollama lifecycle gate.
@@ -58,13 +58,12 @@ bundle version, points at the checked-out commit, and belongs to `origin/main`.
 Configured signing secrets enable hosted publication; otherwise the workflow
 runs only the release gate and artifacts must be published locally.
 
-## Retired Monitor source
+## Monitor prototype
 
-Standalone Hearth Monitor was retired on September 7, 2026. Its source, tests,
-and historical artifacts remain available. New features and App Store work are
-outside the active roadmap. See [retirement and migration](hearth-monitor.md).
+The sandboxed Monitor prototype's source and tests remain available for
+reference. See its [implementation notes](hearth-monitor.md).
 
-To inspect the archived universal sandbox app locally:
+To build and inspect the universal sandbox app locally:
 
 ```sh
 ./scripts/ci.sh --legacy-monitor
@@ -75,9 +74,7 @@ gate. It does not publish a release or contact App Store Connect.
 `--all` selects the supported product's smoke and real-runner checks; it does
 not implicitly select this legacy packaging step.
 
-Monitor Developer ID release, App Store packaging, and upload scripts exit with
-a retirement notice. Original release procedures are preserved in the
-[0.2.0 tagged source](https://github.com/adamskijow/Hearth/tree/hearth-monitor-v0.2.0).
+Monitor publishing and App Store upload scripts are disabled.
 
 Historical sampling scripts remain for reference. To remove an existing local
 sampling agent, use:

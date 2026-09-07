@@ -46,11 +46,6 @@ checks require a configured resident model. Automatic inference recovery also
 requires client traffic through the metrics proxy. See [known
 limitations](docs/limitations.md) for current traffic-visibility limits.
 
-**Hearth Monitor was retired on September 7, 2026.** The separate sandboxed app
-and its Apple-model checks are no longer under active development. Its source
-and beta downloads remain historical archives. Full Hearth's attached mode
-continues to be supported. See [retirement and migration](docs/hearth-monitor.md).
-
 ## Install full Hearth
 
 If you already run Ollama on this Mac:

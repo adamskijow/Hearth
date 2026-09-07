@@ -7,9 +7,7 @@
 import PackageDescription
 import Foundation
 
-// HearthMonitor and HearthMonitorCore are retired historical targets. Their
-// source and regression tests remain available; no new Monitor releases ship.
-// Full Hearth's attached mode is part of the supported Hearth executable.
+// Monitor prototype targets remain here for reference and regression coverage.
 
 // Swift Testing lives in a developer framework that is not on the default search
 // path when only the Command Line Tools are installed (no full Xcode). A headless

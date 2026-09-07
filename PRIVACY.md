@@ -1,8 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
 # Hearth privacy policy
 
-Updated September 7, 2026 to describe full Hearth and the retirement of
-standalone Hearth Monitor.
+Updated September 7, 2026.
 
 ## Full Hearth
 
@@ -49,15 +48,13 @@ Connections go directly to the selected services; the developer does not relay
 them. Those services can observe requests and network addresses. Review copied
 diagnostics and logs before sharing them through GitHub or another service.
 
-## Retired Hearth Monitor
+## Monitor prototype
 
-Standalone Hearth Monitor was retired on September 7, 2026. This description
-remains applicable to the historical beta.
-
-The beta has no analytics, advertising, tracking, developer account, or
-crash-reporting service. Its sandbox stores settings, runner addresses, check
-timing, recent latency samples, and up to 500 confirmed incidents. Runner
-credentials and optional full Hearth status tokens use separate Keychain items.
+The sandboxed Monitor prototype has no analytics, advertising, tracking,
+developer account, or crash-reporting service. Its sandbox stores settings,
+runner addresses, check timing, recent latency samples, and up to 500 confirmed
+incidents. Runner credentials and optional full Hearth status tokens use separate
+Keychain items.
 
 Monitor connects directly to configured runner and full Hearth endpoints for
 health, model-list, optional fixed inference, and authenticated status requests.
@@ -82,8 +79,6 @@ Keychain items, disable Open at Login, then quit the app and delete:
 ```text
 ~/Library/Containers/com.hearth.HearthMonitor
 ```
-
-Full instructions are in [Monitor retirement and removal](docs/hearth-monitor.md#remove-monitor).
 
 ## Contact
 

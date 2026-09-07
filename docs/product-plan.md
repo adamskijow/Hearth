@@ -1,8 +1,7 @@
 <!-- SPDX-License-Identifier: MIT -->
 # Hearth product plan
 
-Updated September 7, 2026. Full Hearth is the active product. Standalone
-[Hearth Monitor is retired](hearth-monitor.md).
+Updated September 7, 2026. This plan focuses on full Hearth.
 
 ## Objective
 
@@ -24,7 +23,7 @@ independent downloads is unknown.
 
 | Order | Work | Completion evidence |
 | --- | --- | --- |
-| 0 | Finish repository cleanup and retire Monitor | Clean, synchronized repository; public retirement notice; disabled Monitor publishing |
+| 0 | Finish repository cleanup | Clean, synchronized repository; documentation matches implemented behavior |
 | 1 | Reproduce traffic/recovery defects and define health states | Isolated scenario results and an additive status contract |
 | 2 | Fix recovery decisions and misleading health reports | Regression suite plus real-client behavior consistent across status surfaces |
 | 3 | Verify setup from a clean configuration | Recorded setup matrix with a real inference request through the configured client endpoint |
@@ -78,8 +77,7 @@ inference incident.
 
 Use additive fields to preserve the documented 1.x API/config contract. Update
 the menu, CLI, browser status page, metrics, and documentation consistently.
-Keep compatibility with existing status-only clients, including the archived
-Monitor beta, without adding new Monitor features.
+Keep compatibility with existing status-only clients.
 
 For traffic visibility, compare runner-native signals and a bounded
 protocol-aware approach before expanding the TCP relay. Test streaming,
@@ -170,7 +168,7 @@ Do not wait for user recruitment or a download-count target.
 If the local workload reveals little benefit, keep Hearth a focused utility and
 stop adding features. If recovery is useful but setup is cumbersome, prioritize
 setup. Defer new runner integrations, fleet management, model labs, paid
-packaging, and replacement Monitor products until the core milestones are done.
+packaging, and separate monitoring apps until the core milestones are done.
 
 ## First implementation session
 

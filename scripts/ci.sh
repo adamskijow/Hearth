@@ -9,7 +9,7 @@
 #   scripts/ci.sh --smoke    also run the fake-runner smoke test (needs a desktop)
 #   scripts/ci.sh --real     also run the real Ollama gate (needs ollama + a model)
 #   scripts/ci.sh --all      everything above
-#   scripts/ci.sh --legacy-monitor  also package/audit the retired Monitor target
+#   scripts/ci.sh --legacy-monitor  also package/audit the Monitor prototype
 #
 # Exits non-zero if any stage fails. Build failures stop early; test and lint
 # failures are collected so one run shows the full picture.
@@ -65,7 +65,7 @@ section "Build (release)"
 swift_build -c release && ok || die "release build failed"
 
 if [ "$LEGACY_MONITOR" = "1" ]; then
-  section "Retired Hearth Monitor sandbox archive"
+  section "Hearth Monitor sandbox prototype"
   if ./scripts/package-monitor-app.sh && ./scripts/audit-monitor-boundary.sh; then
     ok
   else

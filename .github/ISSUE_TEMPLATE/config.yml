@@ -6,6 +6,3 @@ contact_links:
   - name: Question or troubleshooting
     url: https://github.com/adamskijow/Hearth/blob/main/docs/troubleshooting.md
     about: Check the troubleshooting guide and run hearth doctor first.
-  - name: Hearth Monitor is retired
-    url: https://github.com/adamskijow/Hearth/blob/main/docs/hearth-monitor.md
-    about: Read the retirement notice and migration options for the historical beta.

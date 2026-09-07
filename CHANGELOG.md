@@ -9,9 +9,6 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Retired standalone Hearth Monitor on September 7, 2026. Its source and
-  historical beta remain available, but new releases and App Store uploads are
-  disabled. Full Hearth's attached monitoring mode remains supported.
 - Moved legacy Monitor packaging and its sandbox audit out of the default CI
   gate; maintainers can run them explicitly with `--legacy-monitor`.
 - Completed the pending documentation cleanup, corrected setup and monitoring

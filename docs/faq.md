@@ -12,8 +12,7 @@ Hearth serves people who rely on a local AI runner and want unattended recovery.
 It watches Ollama, LM Studio, `mlx_lm`, or Osaurus, keeps the Mac awake, and sends
 alerts. The runner still owns models and inference.
 
-Full Hearth requires Apple silicon and macOS 14 or later. Standalone
-[Hearth Monitor is retired](hearth-monitor.md), including its Intel support.
+Full Hearth requires Apple silicon and macOS 14 or later.
 
 ## What failures can it recover?
 

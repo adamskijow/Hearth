@@ -38,13 +38,6 @@ Start with the guide that matches what you are trying to do.
 - [Integrating with Hearth](integrating.md): guidance and examples for apps that
   consume Hearth state.
 
-## Retired Hearth Monitor
-
-- [Retirement and migration](hearth-monitor.md): product status, alternatives,
-  and removal of the historical beta.
-- [Historical design notes](hearth-monitor-audits.md): retained implementation
-  boundaries for the archived source.
-
 ## Development and maintenance
 
 - [Development](development.md): build, test, dogfood, and release workflows.

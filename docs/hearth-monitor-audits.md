@@ -1,15 +1,14 @@
 <!-- SPDX-License-Identifier: MIT -->
-# Hearth Monitor historical design decisions
+# Hearth Monitor design notes
 
-Standalone Hearth Monitor was retired on September 7, 2026. These notes describe
-the retained source, not an active roadmap. See [retirement and migration](hearth-monitor.md).
+Implementation notes for the [sandboxed Monitor prototype](hearth-monitor.md).
 
 ## Product boundary
 
 - **Hearth** owns runner processes, performs recovery, keeps the Mac awake, and
   can escalate persistent GPU failures. It ships outside App Sandbox.
 - **Hearth Monitor** observes attached runners and Apple's on-device language
-  model. It ships as a separate sandboxed executable.
+  model. It builds as a separate sandboxed executable.
 
 `scripts/audit-monitor-boundary.sh` checks dependencies and entitlements. Store
 requirements cannot weaken full Hearth recovery.

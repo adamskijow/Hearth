@@ -223,6 +223,61 @@ struct InferenceEvidenceTests {
         #expect(state.inference?.lastSuccessAt == success)
     }
 
+    @Test func requestActivityDistinguishesIdleConnectionsAndUnsettledCancellation() async throws {
+        let h = Harness()
+        let activity = ClientActivityStore()
+        activity.setAvailable(true)
+        let engine = SupervisorEngine(clock: h.clock, processes: h.processes, http: h.http,
+            runner: h.runner, power: FakePowerManager(), notifier: h.notifier,
+            policy: RestartPolicyConfig(), deepProbe: DeepProbeConfig(model: "model", interval: 60, timeout: 30),
+            clientActivity: { activity.snapshot() })
+        h.succeed()
+        await engine.start()
+        let id = UUID()
+        activity.open(id)
+        activity.ingest(Data("GET / HTTP/1.1\r\n\r\n".utf8), id: id, upstream: false)
+        _ = await engine.stepOnce()
+        #expect(h.http.postCount(to: h.url) == 0)
+        #expect(await engine.snapshot().inference?.deferredReason == .proxyRequests)
+        activity.ingest(Data("HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n".utf8), id: id, upstream: true)
+        h.clock.advance(by: 61)
+        _ = await engine.stepOnce()
+        #expect(h.http.postCount(to: h.url) == 1)
+        #expect(await engine.snapshot().recovery?.clientActivity?.openConnections == 1)
+        #expect(await engine.snapshot().inference?.isVerified(asOf: h.clock.now) == true)
+        activity.ingest(Data("POST / HTTP/1.1\r\nContent-Length: 1\r\n\r\nx".utf8), id: id, upstream: false)
+        activity.close(id)
+        h.clock.advance(by: 61)
+        _ = await engine.stepOnce()
+        #expect(h.http.postCount(to: h.url) == 1)
+        #expect(await engine.snapshot().inference?.deferredReason == .trafficUnknown)
+        #expect(await engine.snapshot().recovery?.inferenceRestartEligible == false)
+        await engine.restart()
+        #expect(activity.snapshot().uncertain) // no ownership witness means restart is not proof
+    }
+
+    @Test func requestBeginningDuringProbeWithholdsDestructiveRecovery() async {
+        let h = Harness()
+        let activity = ClientActivityStore()
+        activity.setAvailable(true)
+        let id = UUID()
+        activity.open(id)
+        activity.ingest(Data("GET / HTTP/1.1\r\n\r\n".utf8), id: id, upstream: false)
+        activity.ingest(Data("HTTP/1.1 204 No Content\r\n\r\n".utf8), id: id, upstream: true)
+        let engine = SupervisorEngine(clock: h.clock, processes: h.processes, http: h.http,
+            runner: h.runner, power: FakePowerManager(), notifier: h.notifier,
+            policy: RestartPolicyConfig(), deepProbe: DeepProbeConfig(model: "model", interval: 60, timeout: 30),
+            clientActivity: { activity.snapshot() })
+        h.http.set(h.url, .timedOut)
+        await engine.start()
+        _ = await engine.stepOnce()
+        h.http.onPost { activity.ingest(Data("P".utf8), id: id, upstream: false) }
+        h.clock.advance(by: 61)
+        _ = await engine.stepOnce()
+        #expect(h.processes.terminateCount == 0)
+        #expect(await engine.snapshot().inferenceRecoveryWithheld)
+    }
+
     @Test func completionAdaptersRequireBoundedFinishedGeneration() {
         #expect(InferenceCompletion.ollama(Data(#"{"done":true,"eval_count":1}"#.utf8)))
         #expect(!InferenceCompletion.ollama(Data(repeating: 32, count: 65537)))

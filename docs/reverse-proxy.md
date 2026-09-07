@@ -54,9 +54,9 @@ runner details.
 
 For traffic visibility through Hearth's metrics proxy, enable it and direct the
 runner reverse proxy upstream to `127.0.0.1:11436` (or your configured
-`metricsProxyPort`). The current `hearth proxy-setup` generator targets the runner
-port directly; edit that upstream when using the metrics proxy. Verify a request
-through the complete client path. See [recovery limits](limitations.md).
+`metricsProxyPort`). In source after v1.5.1, `hearth proxy-setup` selects that
+upstream automatically when enabled; v1.5.1 requires editing it manually. Verify
+a request through the complete client path. See [recovery limits](limitations.md).
 
 Avoid router port forwarding and public `0.0.0.0` binds. Local runner APIs and
 Hearth's control server are private-network services.

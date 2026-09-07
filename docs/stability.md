@@ -35,7 +35,7 @@ CLI prose may change. Scripts should use `/status` or `hearth status --json`.
 `runnerResidentBytes`, `tokensPerSecond`, `generationTokensTotal`,
 `recentEvents`, `rebootOnWedge`, `credentialAccess`, `healthy`, `headline`,
 `inferenceRecoveryWithheld`, `inferenceDeferredByProxy`, `inferenceNotice`,
-`api`, `inference`, `inferenceVerified`, `recovery`.
+`api`, `inference`, `inferenceVerified`, `recovery`, `trafficNotice`.
 Optional fields may be absent (a field whose source is
 off, such as throughput without the metrics proxy); present fields keep their
 names and types. New fields may be added in minor releases, so consumers should
@@ -44,9 +44,11 @@ ignore keys they do not know.
 The inference-status fields above are new in source after v1.5.1. `phase` remains
 the supervisor lifecycle. `healthy` is false when that lifecycle is unhealthy or
 an inference incident remains unresolved. A true value does not
-prove a recent generation. `inferenceDeferredByProxy` means an open connection
-deferred the check; that connection may be idle. `headline` and optional
-`inferenceNotice` are display text; automate against the typed fields.
+prove a recent generation. `inferenceDeferredByProxy` means active requests,
+unknown activity, or an unavailable proxy deferred the check. Completed idle
+connections no longer defer it. `headline`, `inferenceNotice`, and `trafficNotice`
+are display text; automate against typed fields. `recovery.clientActivity` adds
+request counts and uncertainty. See [request activity](request-activity.md).
 
 `api`, `inference`, and `recovery` separate observations from lifecycle and
 policy. Observation dates use ISO 8601 UTC. `inferenceVerified` expires at the

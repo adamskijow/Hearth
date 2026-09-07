@@ -281,6 +281,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.welcome = welcome
         welcome.show(
             runner: config.runner,
+            managed: config.isManaged,
             foundPath: foundPath,
             installHint: Self.installHint(for: config.runner),
             collisionWarning: preexistingRunnerWarning ?? competingManagerWarning,
@@ -453,6 +454,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if let notice = StatusText.inferenceNotice(latestState) {
             menu.addItem(infoRow(detailAttr(notice)))
         }
+        if let notice = StatusText.trafficNotice(latestState) {
+            menu.addItem(infoRow(detailAttr(notice)))
+        }
         if latestState.phase != .healthy, let reason = latestState.lastRestartReason {
             menu.addItem(infoRow(detailAttr("Last: \(reason)")))
         }
@@ -582,9 +586,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func infoRow(_ attributed: NSAttributedString) -> NSMenuItem {
         let item = NSMenuItem()
         let field = NSTextField(labelWithAttributedString: attributed)
-        field.lineBreakMode = .byTruncatingTail
+        field.lineBreakMode = .byWordWrapping
+        field.maximumNumberOfLines = 0
         field.sizeToFit()
-        let leftInset: CGFloat = 21, rightInset: CGFloat = 16, height: CGFloat = 19
+        let width = min(field.frame.width, 400)
+        let size = field.sizeThatFits(NSSize(width: width, height: .greatestFiniteMagnitude))
+        field.setFrameSize(NSSize(width: width, height: size.height))
+        let leftInset: CGFloat = 21, rightInset: CGFloat = 16
+        let height = max(19, size.height + 4)
         let container = NSView(frame: NSRect(
             x: 0, y: 0, width: field.frame.width + leftInset + rightInset, height: height))
         field.setFrameOrigin(NSPoint(x: leftInset, y: ((height - field.frame.height) / 2).rounded()))

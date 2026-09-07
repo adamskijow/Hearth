@@ -49,6 +49,21 @@ struct ProcessControllerTests {
         #expect(await eventually { !self.recordedPIDs().contains(pid) })
     }
 
+    @Test func terminationWitnessWaitsForAStoppedProcessGroup() async throws {
+        let controller = makeController(grace: 0.2)
+        let id = try controller.spawn(spec("/bin/sleep", ["30"]))
+        let pid = try #require(RunnerStateStore.loadRecorded().last?.pid)
+        let gone = try #require(controller.terminationWitness(id))
+        defer { controller.terminate(id) }
+        kill(pid, SIGSTOP) // cannot handle SIGTERM; the grace-period SIGKILL is required
+        #expect(!gone())
+        controller.terminate(id)
+        #expect(!gone())
+        #expect(await eventually { gone() })
+        #expect(groupIsGone(pid))
+        #expect(controller.terminationWitness(ProcessHandleID(raw: .max)) == nil)
+    }
+
     @Test func externallyKilledChildIsReapedAndItsExitReported() async throws {
         let controller = makeController(grace: 0.1)
         let id = try controller.spawn(spec("/bin/sleep", ["30"]))

@@ -139,9 +139,10 @@ See [ollama.md](ollama.md) for the full Ollama setup guide, including deep probe
 
 The optional proxy supplies traffic visibility for inference recovery and
 routine restart draining. Point clients at `metricsProxyPort` instead of the
-runner port. It currently counts open TCP connections; this is not a complete
-measure of active requests or proof that all clients use the proxy. See
-[known limitations](limitations.md) and the [product plan](product-plan.md).
+runner port, or copy the client address in Preferences > Health. Completed HTTP/1
+requests release the activity gate while pooled sockets stay open. Active,
+interrupted, or unsupported traffic defers checks; direct clients remain invisible.
+See [request activity and limits](request-activity.md).
 
 | Key | Type | Default | Meaning |
 |-----|------|---------|---------|

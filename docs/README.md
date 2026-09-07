@@ -25,6 +25,8 @@ Start with the guide that matches what you are trying to do.
   Hearth addresses and alternatives to try.
 - [Known limitations](limitations.md): intentional boundaries and unsupported
   cases.
+- [Request activity and setup](request-activity.md): pooled connections, cancellation,
+  process ownership, and the observed client endpoint.
 - [Stability contract](stability.md): compatibility promises for configuration,
   commands, API responses, and logs.
 - [Observability](observability-roadmap.md): metrics, model-state limits, and

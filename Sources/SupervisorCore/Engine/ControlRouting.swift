@@ -213,6 +213,7 @@ public enum ControlRouting {
             inferenceRecoveryWithheld: state.inferenceRecoveryWithheld,
             inferenceDeferredByProxy: state.inferenceDeferredByProxy,
             inferenceNotice: StatusText.inferenceNotice(state),
+            trafficNotice: StatusText.trafficNotice(state),
             api: state.api,
             inference: state.inference,
             inferenceVerified: state.inference?.isVerified(asOf: now),
@@ -262,7 +263,7 @@ public enum ControlRouting {
         metric("hearth_runner_info", "The runner Hearth supervises, always 1.", "gauge", "1", labels: "{runner=\"\(runnerKind)\"}")
         metric("hearth_healthy", "Shallow readiness with no unresolved inference incident; not proof of verified inference.", "gauge", state.isHealthy ? "1" : "0")
         metric("hearth_inference_recovery_withheld", "Unresolved inference failure with automatic recovery withheld.", "gauge", state.inferenceRecoveryWithheld ? "1" : "0")
-        metric("hearth_inference_deferred_by_proxy", "Open proxy connections defer inference checks; connections may be idle.", "gauge", state.inferenceDeferredByProxy ? "1" : "0")
+        metric("hearth_inference_deferred_by_proxy", "Client activity or unavailable observation defers inference checks.", "gauge", state.inferenceDeferredByProxy ? "1" : "0")
         metric("hearth_busy", "Whether the last probe answered busy (queue full).", "gauge", state.busy ? "1" : "0")
         metric("hearth_phase", "Current supervisor phase, 1 for the active one.", "gauge", "1", labels: "{phase=\"\(state.phase.rawValue)\"}")
         if let category = state.lastDownCategory {
@@ -277,6 +278,11 @@ public enum ControlRouting {
             if let success = inference.lastSuccessAt {
                 metric("hearth_inference_last_success_timestamp_seconds", "Time of last validated inference completion, possibly from a previous process.", "gauge", "\(Int(success.timeIntervalSince1970))")
             }
+        }
+        if let activity = state.recovery?.clientActivity {
+            metric("hearth_proxy_active_requests", "Outstanding observed HTTP requests.", "gauge", String(activity.activeRequests))
+            metric("hearth_proxy_open_connections", "Open proxy connections, including idle keep-alive.", "gauge", String(activity.openConnections))
+            metric("hearth_proxy_activity_uncertain", "Interrupted or unsupported traffic leaves work unsettled.", "gauge", activity.uncertain ? "1" : "0")
         }
         if let recovery = state.recovery {
             metric("hearth_inference_restart_eligible", "Policy permits inference recovery; proxy visibility remains partial.", "gauge", recovery.inferenceRestartEligible ? "1" : "0")
@@ -333,6 +339,7 @@ private struct StatusPayload: Encodable {
     var inferenceRecoveryWithheld: Bool
     var inferenceDeferredByProxy: Bool
     var inferenceNotice: String?
+    var trafficNotice: String?
     var api: APIEvidence?
     var inference: InferenceEvidence?
     var inferenceVerified: Bool?

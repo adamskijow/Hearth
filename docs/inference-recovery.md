@@ -61,7 +61,7 @@ The existing summaries remain:
   establish recent inference success; use `inferenceVerified` for that.
 - `inferenceRecoveryWithheld`: confirmed checks failed and the recovery policy
   withheld action. Attached mode never owns or restarts the runner.
-- `inferenceDeferredByProxy`: open connections deferred the check, even if idle.
+- `inferenceDeferredByProxy`: active, unknown, or unavailable proxy activity deferred the check.
 - `headline` and `inferenceNotice`: shared display text; automate against typed
   fields. The headline says **API responding** without current verification and
   **Inference verified** after a valid completion. Failures take precedence.
@@ -80,21 +80,17 @@ python3 scripts/validate-inference.py
 
 Build Hearth before running the Python gate. It launches a temporary headless
 Hearth against a fake HTTP/1.1 runner and checks API, CLI, metrics, heartbeat, and
-TCP relay behavior. It holds a pooled connection beyond the busy timeout, checks
-that no probe or recovery occurs, then checks validated recovery after closure.
+TCP relay behavior. Completed pooled requests permit checks with the socket still
+open; silent active requests defer checks beyond the busy timeout. Cancellation
+and byte-preserving framing cases are covered too.
 All configuration, data, ports, and processes are isolated from normal installs.
 The unit regressions use a fake clock and controlled process/HTTP seams.
 
-## Next step: traffic evidence
+## Request-level traffic evidence
 
-The TCP relay still counts connections rather than requests. Idle pooling and
-stalled requests can suppress checks. One observed connection cannot establish
-that all clients use the proxy; direct requests remain invisible. Policy
-eligibility is not a guarantee that recovery will preserve every client request.
-
-Before expanding the relay, compare runner-native activity evidence with a
-bounded HTTP implementation. Test framing, keep-alive reuse, streaming, silent
-prefill, cancellation, malformed responses, and client bypass. Preserve the
-conservative fallback for unsupported traffic. Then complete a clean setup path
-and the controlled local workload milestones in [the product plan](product-plan.md).
-No recruitment or outreach is required.
+The [request activity implementation](request-activity.md) supersedes the initial
+connection-count deferral. It distinguishes completed pooled requests from active
+work and keeps interrupted/unknown work conservative across reloads. Direct
+requests remain invisible; policy eligibility does not guarantee that recovery
+will preserve every client request. Clean setup and controlled local workloads
+remain next in [the product plan](product-plan.md).

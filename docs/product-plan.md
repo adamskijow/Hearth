@@ -38,8 +38,10 @@ The [inference implementation](inference-recovery.md) now separates API,
 completed inference evidence, current check activity, and recovery eligibility.
 It fixes the reproduced false recovery and stale-effect defects, validates
 completed responses, and explicitly defers adapters without residency evidence.
-The next implementation step is traffic visibility and its protocol tests;
-clean setup, the bounded workload, and release remain pending.
+[Request-level traffic observation](request-activity.md) now distinguishes idle
+pooling from active work and preserves cancellation uncertainty until owned
+group shutdown is confirmed. The UI and generated client endpoint have also
+been updated. Clean setup, the bounded workload, and release remain pending.
 
 ## 1. Reproduce before changing recovery policy
 
@@ -104,9 +106,9 @@ coverage, select the real workload model, configure necessary traffic visibility
 show the exact client endpoint, verify real inference, and offer a test alert.
 
 Prefer observed workload or resident models over the smallest installed model.
-Make the proxy's role in recovery visible alongside inference checks. Audit
-generated Caddy configuration: the current generator forwards to the runner
-port even when linked from the metrics-proxy setting.
+Make the proxy's role in recovery visible alongside inference checks. Generated
+Caddy configuration now selects the observed client endpoint when enabled;
+validate it through an actual Caddy instance in the clean-setup matrix.
 
 Use temporary directories and isolated instances for this setup matrix:
 
@@ -179,8 +181,9 @@ packaging, and separate monitoring apps until the core milestones are done.
 
 ## Next implementation session
 
-Compare runner-native activity signals with a bounded HTTP request tracker.
-Use isolated clients to establish framing, reuse, streaming, cancellation, and
-bypass behavior before changing automatic recovery eligibility. Retain explicit
-partial visibility for unsupported or direct traffic. No recruitment or outreach
-step precedes this work.
+Complete the isolated clean-setup matrix in milestone 3, using the new focused
+Preferences and consistent client endpoint. Finish live keyboard/menu checks
+when an unlocked desktop is available, and verify real inference through Caddy.
+Then run the controlled recovery drills before beginning the bounded 72-hour
+workload. Preserve partial traffic visibility and the additive evidence contract.
+No recruitment or outreach step precedes this work.

@@ -22,18 +22,19 @@
 - An inference timeout cannot distinguish a hang from unseen queued work.
   Deep-probe restart requires client traffic through the metrics proxy; otherwise
   Hearth alerts and leaves the runner in place.
-- The proxy counts open TCP connections, not active generation requests. A pooled
-  connection or stalled request can defer inference checks; observed proxy traffic
-  does not establish visibility into direct clients. Open connections now defer
-  checks without triggering the runner's HTTP 503 busy timeout.
+- The proxy observes a bounded subset of HTTP/1 request framing. Idle keep-alive
+  sockets do not block checks, but active, interrupted, or unsupported traffic
+  does. Cancellation is not proof of completed server work. Unowned uncertainty
+  persists for the observation session; owned uncertainty requires confirmed
+  process-group absence. Direct clients remain invisible. See
+  [request activity](request-activity.md) for supported framing and limits.
 - The lifecycle `phase` can remain `healthy` after inference failures
   while confirmation or recovery is pending. The separate `healthy` field becomes
   false and status surfaces show **Inference check failed** until inference
   succeeds. These additions are in source after v1.5.1. The phase alone does not
   prove recent inference success, nor does a shallow success between probes.
 
-The [product plan](product-plan.md) prioritizes traffic visibility and accurate
-inference status.
+The [product plan](product-plan.md) prioritizes verified setup and local workload evidence.
 
 Automatic inference checks require authoritative loaded-model evidence. Ollama
 and LM Studio provide it; MLX and Osaurus catalog listings do not. Those adapters

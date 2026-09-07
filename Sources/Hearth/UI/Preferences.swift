@@ -29,6 +29,7 @@ final class PreferencesController: NSObject, NSWindowDelegate {
     /// either side's changes.
     func externalConfigDidChange(_ new: HearthConfig) {
         guard window?.isVisible == true else {
+            model.resetProbeUI()
             model.config = new
             model.baseline = new
             model.probeEnabled = Self.hasProbe(new)
@@ -41,6 +42,7 @@ final class PreferencesController: NSObject, NSWindowDelegate {
             return
         }
         if model.config == baseline {
+            model.resetProbeUI()
             model.config = new
             model.baseline = new
             model.probeEnabled = Self.hasProbe(new)
@@ -52,6 +54,7 @@ final class PreferencesController: NSObject, NSWindowDelegate {
     }
 
     func show(config: HearthConfig) {
+        model.resetProbeUI()
         model.config = config
         model.baseline = config
         model.probeEnabled = Self.hasProbe(config)
@@ -69,7 +72,7 @@ final class PreferencesController: NSObject, NSWindowDelegate {
             let window = NSWindow(contentViewController: hosting)
             window.title = "Hearth Preferences"
             window.styleMask = [.titled, .closable, .resizable]
-            window.setContentSize(NSSize(width: 500, height: 620))
+            window.setContentSize(NSSize(width: 560, height: 640))
             window.isReleasedWhenClosed = false
             window.delegate = self
             window.center()
@@ -93,6 +96,12 @@ final class PreferencesController: NSObject, NSWindowDelegate {
 
 @MainActor
 final class PreferencesModel: ObservableObject {
+    enum Page: String, CaseIterable, Identifiable {
+        case runner = "Runner", health = "Health", alerts = "Alerts", access = "Access", advanced = "Advanced"
+        var id: String { rawValue }
+    }
+    @Published var page: Page = .runner
+    @Published var probeRequestID = UUID()
     @Published var config: HearthConfig
     @Published var baseline: HearthConfig
     @Published var status: String = ""
@@ -105,6 +114,13 @@ final class PreferencesModel: ObservableObject {
         self.baseline = config
         self.probeEnabled = !(config.probeModel ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    func resetProbeUI() {
+        probeRequestID = UUID()
+        probeBusy = false
+        probeStatus = ""
+        availableProbeModels = []
     }
 
     var blockingDiagnostics: [Diagnostic] {
@@ -125,13 +141,20 @@ struct PreferencesView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            Picker("Settings section", selection: $model.page) {
+                ForEach(PreferencesModel.Page.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 8)
             Form {
-                runnerSection
-                inferenceHealthSection
-                notificationsSection
-                controlSection
-                loggingSection
-                advancedSection
+                switch model.page {
+                case .runner: runnerSection
+                case .health: inferenceHealthSection; clientProxySection
+                case .alerts: notificationsSection
+                case .access: controlSection
+                case .advanced: advancedSection; loggingSection
+                }
             }
             .formStyle(.grouped)
 
@@ -159,12 +182,12 @@ struct PreferencesView: View {
                             : impact == .none ? "No changes to save." : "Saved and reloaded."
                     }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(!model.canSave)
+                    .disabled(!model.canSave || saveImpact == .none)
                 }
             }
             .padding(12)
         }
-        .frame(minWidth: 460, minHeight: 560)
+        .frame(minWidth: 500, minHeight: 560)
         .sheet(isPresented: $showingEnvEditor) {
             EnvEditorView(
                 env: model.config.runnerEnv,
@@ -184,15 +207,15 @@ struct PreferencesView: View {
             TokensEditorView(
                 tokens: model.config.controlStatusTokens,
                 heading: "Status-only tokens",
-                explanation: "Give dashboards and Hearth Monitor a read-only credential. These tokens can read /status and /metrics, but Hearth rejects start, stop, and restart with HTTP 403. Use a unique token per caller so access can be revoked independently.",
-                namePlaceholder: "name (e.g. hearth-monitor)",
+                explanation: "Give dashboards a read-only credential. These tokens can read /status and /metrics, but Hearth rejects start, stop, and restart with HTTP 403. Use a unique token per caller so access can be revoked independently.",
+                namePlaceholder: "name (e.g. dashboard)",
                 onDone: { model.config.controlStatusTokens = $0; showingStatusTokensEditor = false },
                 onCancel: { showingStatusTokensEditor = false }
             )
         }
         .task(id: probeTarget) {
             if deepProbeEnabled.wrappedValue {
-                await refreshProbeModels(selectSmallestWhenUnset: false)
+                await refreshProbeModels()
             }
         }
     }
@@ -206,7 +229,8 @@ struct PreferencesView: View {
     /// same long message at opposite ends of the window.
     private var footerBlockingDiagnostic: Diagnostic? {
         model.blockingDiagnostics.first { diagnostic in
-            !(model.config.runnerKind == .mlx
+            !(model.page == .runner
+              && model.config.runnerKind == .mlx
               && model.config.isManaged
               && model.config.normalizedMLXModel == nil
               && diagnostic.message.contains("requires mlxModel"))
@@ -252,46 +276,54 @@ struct PreferencesView: View {
             }
             .pickerStyle(.segmented)
             .help("Choose whether Hearth starts and restarts the runner, or only watches a runner started by something else.")
-            HStack {
-                TextField("Binary path", text: binaryPath)
-                Button("Detect") {
-                    if let found = RunnerLocator.locate(model.config.runner) {
-                        binaryPath.wrappedValue = found
-                        model.status = "Found \(found)"
-                    } else {
-                        model.status = "No \(model.config.runner) binary found."
+            Text(model.config.isManaged
+                 ? "Hearth owns this runner and can restart it after a process or API failure."
+                 : "Hearth checks and alerts. The existing app or service remains responsible for restarting the runner.")
+                .font(.callout).foregroundStyle(.secondary)
+            if model.config.isManaged {
+                HStack {
+                    TextField("Binary path", text: binaryPath)
+                    Button("Detect") {
+                        if let found = RunnerLocator.locate(model.config.runner) {
+                            binaryPath.wrappedValue = found
+                            model.status = "Found \(found)"
+                        } else {
+                            model.status = "No \(model.config.runner) binary found."
+                        }
                     }
+                    Button("Choose\u{2026}") { chooseBinary() }
                 }
-                Button("Choose\u{2026}") { chooseBinary() }
-            }
-            .help("Path to the runner executable. Detect searches the usual install locations.")
-            if model.config.runnerKind == .mlx, model.config.isManaged {
-                TextField("Startup model", text: optional(\.mlxModel),
-                          prompt: Text("mlx-community/Qwen2.5-0.5B-Instruct-4bit"))
-                    .help("Required in managed mode. Enter a Hugging Face repository ID or a local model directory; Hearth passes it to mlx_lm.server as --model.")
-                if model.config.normalizedMLXModel == nil {
-                    Text("Required in managed mode. Watch existing runner does not need it.")
-                        .foregroundStyle(.red)
-                        .font(.caption)
+                .help("Path to the runner executable. Detect searches the usual install locations.")
+                if model.config.runnerKind == .mlx, model.config.isManaged {
+                    TextField("Startup model", text: optional(\.mlxModel),
+                              prompt: Text("mlx-community/Qwen2.5-0.5B-Instruct-4bit"))
+                        .help("Required in managed mode. Enter a Hugging Face repository ID or a local model directory; Hearth passes it to mlx_lm.server as --model.")
+                    if model.config.normalizedMLXModel == nil {
+                        Text("Required in managed mode. Watch existing runner does not need it.")
+                            .foregroundStyle(.red)
+                            .font(.caption)
+                    }
                 }
             }
             TextField("Host", text: $model.config.host)
                 .help("Address the runner serves on. 127.0.0.1 keeps it on this machine.")
             TextField("Port", value: $model.config.port, format: .number.grouping(.never))
                 .help("Port the runner serves on. Ollama's default is 11434.")
-            HStack {
-                Text("Environment")
-                Spacer()
-                Text(envSummary).foregroundStyle(.secondary)
-                Button("Set Env\u{2026}") { showingEnvEditor = true }
+            if model.config.isManaged {
+                HStack {
+                    Text("Environment")
+                    Spacer()
+                    Text(envSummary).foregroundStyle(.secondary)
+                    Button("Set Env\u{2026}") { showingEnvEditor = true }
+                }
+                .help("Extra environment variables set on a managed runner at launch, for example OLLAMA_LOAD_TIMEOUT. Click Set Env to add or remove variables.")
             }
-            .help("Extra environment variables set on a managed runner at launch, for example OLLAMA_LOAD_TIMEOUT. Click Set Env to add or remove variables.")
         }
     }
 
     private var inferenceHealthSection: some View {
         Section {
-            Toggle("Check real inference, not only the API", isOn: deepProbeEnabled)
+            Toggle("Scheduled inference checks", isOn: deepProbeEnabled)
                 .help("Periodically generate one token while the selected model is already resident. This catches a GPU or model hang without loading an idle model just for monitoring.")
             if deepProbeEnabled.wrappedValue {
                 if model.availableProbeModels.isEmpty {
@@ -299,6 +331,7 @@ struct PreferencesView: View {
                               prompt: Text("e.g. qwen2.5:0.5b"))
                 } else {
                     Picker("Probe model", selection: optional(\.probeModel)) {
+                        Text("Choose your workload model").tag("")
                         ForEach(probeModelOptions) { option in
                             Text(probeModelLabel(option)).tag(option.name)
                         }
@@ -306,12 +339,13 @@ struct PreferencesView: View {
                 }
                 HStack {
                     Button("Refresh Models") {
-                        Task { await refreshProbeModels(selectSmallestWhenUnset: true) }
+                        Task { await refreshProbeModels() }
                     }
-                    Button("Test Now") {
+                    Button("Run Inference Test") {
                         Task { await testProbe() }
                     }
                     .disabled(model.probeBusy || (model.config.probeModel ?? "").isEmpty)
+                    .help("Runs one token through the client endpoint below. This deliberate test may load the selected model.")
                     if model.probeBusy { ProgressView().controlSize(.small) }
                 }
                 if !model.probeStatus.isEmpty {
@@ -322,7 +356,10 @@ struct PreferencesView: View {
         } header: {
             Text("Inference health")
         } footer: {
-            Text("Opt in: scheduled checks only test a model already resident from real use. Without the metrics proxy carrying client traffic, repeated failures alert but never restart the runner; this prevents a long queued generation from being killed as a false wedge.")
+            Text(model.config.makeRunner().reportsLoadedModels
+                 ? (!deepProbeEnabled.wrappedValue ? "Enable to periodically verify a response from a model your apps already have loaded."
+                    : "Choose a model your apps use. Scheduled checks never load an idle model. Run Inference Test may load it; save endpoint changes before testing.")
+                 : "This runner does not report loaded models, so scheduled checks stay deferred. A manual inference test can still verify a response and may load the model.")
         }
     }
 
@@ -367,40 +404,72 @@ struct PreferencesView: View {
                         model.status = "Generated a control token."
                     }
                 }
-            TextField("Bind host", text: $model.config.controlHost)
-                .help("Address the control endpoint listens on. Use a private or Tailscale address.")
-            TextField("Port", value: $model.config.controlPort, format: .number.grouping(.never))
-                .help("Port for the control endpoint.")
-            HStack {
-                TextField("Bearer token", text: optional(\.controlToken),
-                          prompt: Text("click Generate, or paste a secret"))
-                Button("Generate") { model.config.controlToken = Self.randomToken() }
+            if model.config.controlEnabled {
+                TextField("Bind host", text: $model.config.controlHost)
+                    .help("Address the control endpoint listens on. Use a private or Tailscale address.")
+                TextField("Port", value: $model.config.controlPort, format: .number.grouping(.never))
+                    .help("Port for the control endpoint.")
+                HStack {
+                    SecureField("Bearer token", text: optional(\.controlToken),
+                              prompt: Text("click Generate, or paste a secret"))
+                    Button("Generate") { model.config.controlToken = Self.randomToken() }
+                }
+                .help("Required secret on every control request. Generate makes a random one.")
+                HStack {
+                    Text("Named tokens")
+                    Spacer()
+                    Text(tokensSummary).foregroundStyle(.secondary)
+                    Button("Edit Tokens\u{2026}") { showingTokensEditor = true }
+                }
+                .help("Optional: give each caller its own named token, so start, stop, and restart actions are logged with the caller's name. The bearer token above keeps working and is logged as default.")
+                HStack {
+                    Text("Status-only tokens")
+                    Spacer()
+                    Text(statusTokensSummary).foregroundStyle(.secondary)
+                    Button("Edit Read-Only Tokens\u{2026}") { showingStatusTokensEditor = true }
+                }
+                .help("Dashboard access: these tokens can read status and metrics but cannot start, stop, or restart the runner.")
+                Button("Copy phone URL") { copyPhoneURL() }
             }
-            .help("Required secret on every control request. Generate makes a random one.")
-            HStack {
-                Text("Named tokens")
-                Spacer()
-                Text(tokensSummary).foregroundStyle(.secondary)
-                Button("Edit Tokens\u{2026}") { showingTokensEditor = true }
-            }
-            .help("Optional: give each caller its own named token, so start, stop, and restart actions are logged with the caller's name. The bearer token above keeps working and is logged as default.")
-            HStack {
-                Text("Status-only tokens")
-                Spacer()
-                Text(statusTokensSummary).foregroundStyle(.secondary)
-                Button("Edit Read-Only Tokens\u{2026}") { showingStatusTokensEditor = true }
-            }
-            .help("Least privilege for Hearth Monitor and dashboards: these tokens can read status and metrics but cannot start, stop, or restart the runner.")
-            Button("Copy phone URL") { copyPhoneURL() }
-            Toggle("Tokens-per-second metrics proxy", isOn: $model.config.metricsProxyEnabled)
-                .help("Opt-in: a transparent relay in front of the runner that reads the throughput numbers generations already report, surfaced on the status page, hearth status, and /metrics. Point your clients at the proxy port instead of the runner port; hearth proxy-setup prints ready-made snippets.")
-            numberInt("Metrics proxy port", $model.config.metricsProxyPort,
-                      help: "Port the metrics proxy listens on. Clients use this port in place of the runner port while the proxy is enabled.")
+
         } header: {
             Text("Remote control")
         } footer: {
             Text("Serve this on a private network only (a Tailscale address is ideal), never the open internet.")
         }
+    }
+
+    private var clientProxySection: some View {
+        Section {
+            Toggle("Observe client requests", isOn: $model.config.metricsProxyEnabled)
+            if model.config.metricsProxyEnabled {
+                numberInt("Client proxy port", $model.config.metricsProxyPort,
+                          help: "Your apps use this port instead of the runner port.")
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                Text(model.config.metricsProxyEnabled ? "Use this endpoint in your apps" : "Current client endpoint")
+                    .font(.callout).foregroundStyle(.secondary)
+                HStack {
+                    Text(model.config.clientEndpoint).font(.system(.callout, design: .monospaced))
+                        .textSelection(.enabled)
+                    Spacer(minLength: 8)
+                    Button("Copy") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(model.config.clientEndpoint, forType: .string)
+                        model.status = "Client endpoint copied."
+                    }
+                    .accessibilityLabel("Copy client endpoint")
+                }
+            }
+            Text(model.config.metricsProxyEnabled
+                 ? "Save, then use this address in your apps. Hearth can only observe requests sent through this address."
+                 : "Enable to observe requests and collect throughput metrics. Without observed traffic, inference failures alert but automatic inference recovery stays withheld.")
+                .font(.callout).foregroundStyle(.secondary)
+            if !model.config.isManaged {
+                Text("Attached mode never restarts the runner, even with request observation enabled.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+        } header: { Text("Client connection") }
     }
 
     private var loggingSection: some View {
@@ -507,8 +576,10 @@ struct PreferencesView: View {
                 model.probeEnabled = enabled
                 if enabled {
                     model.probeStatus = "Looking for models on the runner\u{2026}"
-                    Task { await refreshProbeModels(selectSmallestWhenUnset: true) }
+                    Task { await refreshProbeModels() }
                 } else {
+                    model.probeRequestID = UUID()
+                    model.probeBusy = false
                     model.config.probeModel = nil
                     model.probeStatus = ""
                 }
@@ -533,25 +604,25 @@ struct PreferencesView: View {
     }
 
     @MainActor
-    private func refreshProbeModels(selectSmallestWhenUnset: Bool) async {
-        guard !model.probeBusy else { return }
+    private func refreshProbeModels() async {
+        let requestID = UUID()
+        model.probeRequestID = requestID
+        let target = probeTarget
         model.probeBusy = true
-        defer { model.probeBusy = false }
+        model.availableProbeModels = []
+        defer { if model.probeRequestID == requestID { model.probeBusy = false } }
         do {
             let models = try await RunnerProbeSetup.availableModels(config: model.config)
+            guard !Task.isCancelled, target == probeTarget, model.probeRequestID == requestID else { return }
             model.availableProbeModels = models
             guard !models.isEmpty else {
-                model.probeStatus = "No models were reported. Load or install a small model, then refresh."
+                model.probeStatus = "No models were reported. Install your workload model, then refresh."
                 return
             }
-            let current = (model.config.probeModel ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            if selectSmallestWhenUnset && current.isEmpty, let smallest = models.first {
-                model.config.probeModel = smallest.name
-                model.probeStatus = "Selected \(smallest.name), the smallest model size the runner reported. Use Test Now to verify it."
-            } else {
-                model.probeStatus = "Found \(models.count) available model\(models.count == 1 ? "" : "s")."
-            }
+            model.probeStatus = "Found \(models.count) models. Choose the one your apps use."
+
         } catch {
+            guard !Task.isCancelled, target == probeTarget, model.probeRequestID == requestID else { return }
             model.availableProbeModels = []
             model.probeStatus = error.localizedDescription
         }
@@ -562,13 +633,21 @@ struct PreferencesView: View {
         guard !model.probeBusy,
               let probeModel = model.config.probeModel?.trimmingCharacters(in: .whitespacesAndNewlines),
               !probeModel.isEmpty else { return }
+        let target = probeTarget
+        let endpoint = model.config.clientEndpoint
+        let requestID = UUID()
+        model.probeRequestID = requestID
         model.probeBusy = true
         model.probeStatus = "Running a one-token inference test\u{2026}"
-        defer { model.probeBusy = false }
+        defer { if model.probeRequestID == requestID { model.probeBusy = false } }
         do {
             let result = try await RunnerProbeSetup.test(config: model.config, model: probeModel)
-            model.probeStatus = String(format: "Inference test passed in %.1f seconds. Save to enable ongoing checks.", result.elapsed)
+            guard target == probeTarget, endpoint == model.config.clientEndpoint,
+                  model.config.probeModel == probeModel, model.probeRequestID == requestID else { return }
+            model.probeStatus = String(format: "Completed through %@ in %.1f seconds. This test does not establish automatic recovery coverage.", endpoint, result.elapsed)
         } catch {
+            guard target == probeTarget, endpoint == model.config.clientEndpoint,
+                  model.config.probeModel == probeModel, model.probeRequestID == requestID else { return }
             model.probeStatus = error.localizedDescription
         }
     }

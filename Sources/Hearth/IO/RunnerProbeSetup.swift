@@ -3,7 +3,7 @@
 import Foundation
 import SupervisorCore
 
-/// Read-only runner calls used by the Preferences deep-probe assistant. Catalog
+/// Runner discovery and explicit inference tests used by the Preferences deep-probe assistant. Catalog
 /// discovery never loads a model; the explicit Test action performs the same
 /// one-token request the supervisor will later use.
 enum RunnerProbeSetup {
@@ -58,7 +58,7 @@ enum RunnerProbeSetup {
             }
     }
 
-    static func test(config: HearthConfig, model: String) async throws -> TestResult {
+    static func test(config: HearthConfig, model: String, http: any HTTPClient = URLSessionHTTPClient()) async throws -> TestResult {
         let runner = config.makeRunner()
         guard let request = runner.deepReadinessRequest(model: model) else {
             throw SetupError.unsupportedProbe
@@ -69,11 +69,17 @@ enum RunnerProbeSetup {
             interval: config.deepProbeIntervalSeconds,
             timeout: config.deepProbeTimeoutSeconds
         ).effectiveTimeout(modelIsConfirmedResident: false)
-        let outcome = await URLSessionHTTPClient().post(
-            request.url, body: request.body,
+        var endpoint = URLComponents(url: request.url, resolvingAgainstBaseURL: false)
+        endpoint?.port = config.clientPort
+        guard let url = endpoint?.url else { throw SetupError.unsupportedProbe }
+        let outcome = await http.post(
+            url, body: request.body,
             timeout: timeout)
         switch outcome {
-        case .ok:
+        case .ok(let body):
+            guard runner.validatesInferenceCompletion(body) else {
+                throw SetupError.failed("HTTP success did not contain a completed inference response.")
+            }
             return TestResult(elapsed: Date().timeIntervalSince(started))
         case .http(let status, _): throw SetupError.http(status)
         case .timedOut: throw SetupError.timedOut

@@ -353,6 +353,14 @@ final class FoundationProcessController: ProcessControlling, @unchecked Sendable
         }
     }
 
+    func terminationWitness(_ id: ProcessHandleID) -> (@Sendable () -> Bool)? {
+        guard let pgid = lock.withLock({ entries[id]?.pgid }), pgid > 1 else { return nil }
+        // An old member keeps this group id occupied. ESRCH proves absence;
+        // EPERM, a live/zombie member, or id reuse all conservatively return false.
+        // Capture the id so proof survives controller replacement and entry reap.
+        return { killpg(pgid, 0) == -1 && errno == ESRCH }
+    }
+
     func terminate(_ id: ProcessHandleID) {
         let entry: Entry? = lock.withLock { entries[id] }
         guard let entry, entry.pgid > 1 else {

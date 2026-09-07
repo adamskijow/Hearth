@@ -16,15 +16,30 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Deep HTTP 503 responses defer checks without invoking the shallow busy timeout.
   Observed process death invalidates recent inference verification.
 
-- Open metrics-proxy connections now defer inference checks without entering
-  the runner's HTTP 503 busy-timeout recovery path. Client connections are
-  checked again after a failed inference probe before recovery is authorized.
+- The relay drains buffered replies before acting on connection-state failure,
+  fixing truncated pipelined responses after a client write-half-close.
+- Active or uncertain proxied requests defer inference checks without entering
+  the runner's HTTP 503 busy-timeout recovery path. Completed keep-alive requests
+  permit checks while their sockets remain open. Client activity is checked again
+  after a failed inference probe before recovery is authorized.
+- Interrupted requests remain uncertain across listener reloads; only confirmed
+  shutdown of their owned process group can clear that generation's uncertainty.
+  Passive framing preserves every forwarded byte, including unsupported traffic.
+- Inference tests and generated Caddy upstreams use the configured client endpoint.
+  Tests require validated completion; throughput counters handle integer overflow.
 - Confirmed inference failures remain visible when automatic recovery is
   withheld. The menu, CLI, browser status, metrics, and heartbeat agree; shallow
   API success does not clear the warning. Status fields are additive and the
   lifecycle `phase` retains its existing meaning.
 
 ### Changed
+
+- Preferences now has focused Runner, Health, Alerts, Access, and Advanced pages.
+  Health groups workload model selection, testing, and a copyable client address.
+  Welcome explains ownership without claiming a found binary is healthy; long
+  menu notices wrap, control tokens are masked, and irrelevant fields stay hidden.
+- Status exposes request activity and uncertainty consistently in the menu, CLI,
+  browser, and metrics. Traffic visibility remains explicitly partial.
 
 - Added separate API, inference, and recovery evidence to status, with timestamps,
   freshness, deferral reasons, ownership, and explicitly partial traffic visibility.

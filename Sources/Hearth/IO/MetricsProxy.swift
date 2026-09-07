@@ -4,15 +4,9 @@ import Foundation
 import Network
 import SupervisorCore
 
-/// The opt-in tokens-per-second tap: a transparent TCP relay in front of the
-/// runner. Clients point at the proxy port instead of the runner and every byte
-/// is passed through untouched in both directions; the response side is scanned
-/// (never buffered, never stored) for the throughput numbers the runner itself
-/// reports, which feed `hearth_tokens_per_second` and friends in `/metrics`.
-///
-/// A relay, not an HTTP implementation, on purpose: streaming generations pass
-/// through with no added framing risk, and if the scan misunderstands a body
-/// the worst case is a missed sample, never a broken response.
+/// A byte-for-byte TCP relay with passive HTTP/1.1 activity observation and a
+/// best-effort throughput scanner. Unknown framing never changes forwarded data;
+/// it only withholds inference checks and automatic inference recovery.
 final class MetricsProxy: @unchecked Sendable {
     private final class ConnectionBox: @unchecked Sendable {
         let connection: NWConnection
@@ -35,20 +29,64 @@ final class MetricsProxy: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.hearth.metrics-proxy")
     private let activeLock = NSLock()
     private var active = 0
-    private var observedClientTraffic = false
+    private var ready = false
+    private var managedGeneration: UUID?
+    private var stopped = false
+    private var pairs: [UUID: RelayPair] = [:]
+    private let activityStore: ClientActivityStore
+    // Preserve cancellation uncertainty across proxy/config reloads for the same
+    // upstream. Only framing state and bounded transient headers are retained; no body storage or disk logging.
+    private static let registry = ActivityRegistry()
+    private final class ActivityRegistry: @unchecked Sendable {
+        let lock = NSLock()
+        var stores: [String: ClientActivityStore] = [:]
+        func store(_ key: String) -> ClientActivityStore {
+            lock.withLock {
+                if let store = stores[key] { return store }
+                let store = ClientActivityStore()
+                stores[key] = store
+                return store
+            }
+        }
+    }
 
-    /// Connections currently open through the proxy, for the graceful-drain
-    /// gate on routine restarts.
+    func activity() -> ClientActivity {
+        var value = activityStore.snapshot()
+        value.available = activeLock.withLock { ready }
+        return value
+    }
+
+    func beforeManagedSpawn() {
+        queue.sync {
+            cancelPairs()
+            managedGeneration = activityStore.beginManagedGeneration()
+        }
+    }
+
+    func beforeManagedTermination(_ witness: (@Sendable () -> Bool)?) {
+        queue.sync {
+            cancelPairs()
+            if let generation = managedGeneration {
+                activityStore.endManagedGeneration(generation, whenGone: witness)
+                managedGeneration = nil
+            }
+        }
+    }
+
+    private func cancelPairs() {
+        for pair in Array(pairs.values) { pair.cancel() }
+        pairs.removeAll()
+    }
+
+    /// Legacy connection count; request-aware callers use activity().
     func inFlightConnections() -> Int {
         activeLock.withLock { active }
     }
 
-    /// True after at least one client connection has crossed this proxy. Merely
-    /// enabling the proxy does not prove that applications were pointed at it;
-    /// destructive inference recovery needs evidence that the in-flight count
-    /// represents real client traffic rather than an unused listener.
+    /// True after a framed client request has crossed this managed generation.
+    /// Observation remains partial: direct runner traffic bypasses this listener.
     func hasObservedClientTraffic() -> Bool {
-        activeLock.withLock { observedClientTraffic }
+        activity().observedRequest
     }
 
     /// Listens on `host:port` and relays to the runner at `upstreamHost:upstreamPort`.
@@ -71,17 +109,28 @@ final class MetricsProxy: @unchecked Sendable {
         self.upstreamHost = upstreamHost
         self.upstreamPort = UInt16(upstreamPort)
         self.store = store
+        self.activityStore = Self.registry.store("\(upstreamHost):\(upstreamPort)")
     }
 
     func start() {
         listener.newConnectionHandler = { [weak self] connection in
             self?.accept(connection)
         }
+        listener.stateUpdateHandler = { [weak self] state in
+            guard let self else { return }
+            self.activeLock.withLock {
+                if case .ready = state, !self.stopped { self.ready = true } else { self.ready = false }
+            }
+        }
         listener.start(queue: queue)
     }
 
     func stop() {
+        activeLock.withLock { ready = false; stopped = true }
         listener.cancel()
+        // Cancellation retains uncertainty for unfinished server work. Cancel
+        // accepted pairs too; stopping only the listener left hidden relays alive.
+        queue.sync { cancelPairs() }
     }
 
     /// Tracks one proxied connection pair: balances the accept-side increment
@@ -93,7 +142,13 @@ final class MetricsProxy: @unchecked Sendable {
         private var closed = false
         private var finishedDirections = 0
         private let onClose: () -> Void
-        init(onClose: @escaping () -> Void) { self.onClose = onClose }
+        let cancelConnections: () -> Void
+        init(cancelConnections: @escaping () -> Void, onClose: @escaping () -> Void) {
+            self.cancelConnections = cancelConnections
+            self.onClose = onClose
+        }
+        var isClosed: Bool { lock.withLock { closed } }
+        func cancel() { cancelConnections(); close() }
 
         /// One direction saw a clean end-of-stream. True once both have.
         func directionFinished() -> Bool {
@@ -114,29 +169,35 @@ final class MetricsProxy: @unchecked Sendable {
     }
 
     private func accept(_ downstream: NWConnection) {
+        guard activeLock.withLock({ ready }) else { downstream.cancel(); return }
         let upstream = NWConnection(
             host: NWEndpoint.Host(upstreamHost),
             port: NWEndpoint.Port(rawValue: upstreamPort)!,
             using: .tcp
         )
-        activeLock.withLock {
-            active += 1
-            observedClientTraffic = true
-        }
-        let pair = RelayPair { [weak self] in
-            guard let self else { return }
-            self.activeLock.withLock { self.active -= 1 }
-        }
+        let id = UUID()
+        activeLock.withLock { active += 1 }
+        activityStore.open(id)
         let down = ConnectionBox(downstream)
         let up = ConnectionBox(upstream)
-        // A connection that fails or is torn down outside the relay loops (an
-        // unreachable runner, a mid-stream reset) must still release the pair,
-        // or a dead upstream would count as in-flight forever and block the
-        // drain gate. Waiting is failure here: the runner is local, so "trying
-        // to reach it" means it is down.
+        let pair = RelayPair(cancelConnections: {
+            down.connection.cancel()
+            up.connection.cancel()
+        }) { [weak self] in
+            guard let self else { return }
+            self.activeLock.withLock { self.active -= 1 }
+            self.activityStore.close(id)
+            self.queue.async { self.pairs.removeValue(forKey: id) }
+        }
+        pairs[id] = pair
+        // A failed state can arrive before buffered receive data and clean EOF.
+        // Let the receive/send completions drain or report their own error;
+        // cross-cancelling here can truncate pipelined replies after half-close.
+        // Explicit cancellation still releases the pair. Waiting is failure:
+        // this is a local runner, not a connection to retry invisibly.
         let teardown: @Sendable (NWConnection.State) -> Void = { state in
             switch state {
-            case .failed, .cancelled, .waiting:
+            case .cancelled, .waiting:
                 down.connection.cancel()
                 up.connection.cancel()
                 pair.close()
@@ -149,9 +210,9 @@ final class MetricsProxy: @unchecked Sendable {
         downstream.start(queue: queue)
         upstream.start(queue: queue)
         // Request side: client -> runner, untouched and unscanned.
-        relay(from: down, to: up, scanner: nil, pair: pair)
+        relay(from: down, to: up, scanner: nil, pair: pair, id: id, upstream: false)
         // Response side: runner -> client, scanned for throughput numbers.
-        relay(from: up, to: down, scanner: ScannerBox(TokenStreamScanner()), pair: pair)
+        relay(from: up, to: down, scanner: ScannerBox(TokenStreamScanner()), pair: pair, id: id, upstream: true)
     }
 
     /// Pump bytes one way. A clean end-of-stream forwards the FIN to the sink
@@ -160,10 +221,14 @@ final class MetricsProxy: @unchecked Sendable {
     /// error, or both directions finishing, tears the pair down. The optional
     /// scanner taps the stream for samples as it passes.
     private func relay(from source: ConnectionBox, to sink: ConnectionBox,
-                       scanner: ScannerBox?, pair: RelayPair) {
+                       scanner: ScannerBox?, pair: RelayPair, id: UUID, upstream: Bool) {
         let store = self.store
         source.connection.receive(minimumIncompleteLength: 1, maximumLength: 262_144) { data, _, isComplete, error in
-            if error != nil {
+            guard !pair.isClosed else { return }
+            if let data, !data.isEmpty { self.activityStore.ingest(data, id: id, upstream: upstream) }
+            if isComplete || error != nil { self.activityStore.end(id, upstream: upstream, clean: error == nil) }
+            let ended = isComplete || error != nil
+            if error != nil, data?.isEmpty != false {
                 source.connection.cancel()
                 sink.connection.cancel()
                 pair.close()
@@ -172,14 +237,16 @@ final class MetricsProxy: @unchecked Sendable {
             if let data, !data.isEmpty, let scanner {
                 for sample in scanner.ingest(data) { store.record(sample) }
             }
-            // Forward the bytes, and the FIN when this direction ended, in one
-            // send so ordering is preserved.
+            // Keep one stream context through the final FIN so no unfinished
+            // send context precedes the final bytes. Data accompanying a receive
+            // error is forwarded before teardown; unfinished activity remains unknown.
             sink.connection.send(
                 content: (data?.isEmpty ?? true) ? nil : data,
-                contentContext: isComplete ? .finalMessage : .defaultMessage,
-                isComplete: isComplete,
+                contentContext: .defaultStream,
+                isComplete: ended,
                 completion: .contentProcessed { sendError in
-                    if sendError != nil {
+                    guard !pair.isClosed else { return }
+                    if sendError != nil || error != nil {
                         source.connection.cancel()
                         sink.connection.cancel()
                         pair.close()
@@ -194,7 +261,7 @@ final class MetricsProxy: @unchecked Sendable {
                         }
                         return
                     }
-                    self.relay(from: source, to: sink, scanner: scanner, pair: pair)
+                    self.relay(from: source, to: sink, scanner: scanner, pair: pair, id: id, upstream: upstream)
                 }
             )
         }

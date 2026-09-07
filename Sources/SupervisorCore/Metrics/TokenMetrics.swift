@@ -76,7 +76,17 @@ public struct TokenStreamScanner: Sendable {
             var value = 0
             var sawDigit = false
             while index < data.endIndex, (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(data[index]) {
-                value = value * 10 + Int(data[index] - UInt8(ascii: "0"))
+                let product = value.multipliedReportingOverflow(by: 10)
+                let sum = product.partialValue.addingReportingOverflow(Int(data[index] - UInt8(ascii: "0")))
+                if product.overflow || sum.overflow {
+                    // Ignore oversized numbers in untrusted response content.
+                    while index < data.endIndex, (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(data[index]) {
+                        index = data.index(after: index)
+                    }
+                    sawDigit = false
+                    break
+                }
+                value = sum.partialValue
                 sawDigit = true
                 index = data.index(after: index)
             }
@@ -107,8 +117,9 @@ public final class TokenMetricsStore: @unchecked Sendable {
 
     public func record(_ sample: TokenSample) {
         lock.withLock {
-            requests += 1
-            tokens += sample.evalCount
+            requests = min(requests, Int.max - 1) + 1
+            let sum = tokens.addingReportingOverflow(max(0, sample.evalCount))
+            tokens = sum.overflow ? Int.max : sum.partialValue
             if let rate = sample.tokensPerSecond { lastRate = rate }
         }
     }

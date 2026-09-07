@@ -16,6 +16,7 @@ final class WelcomeController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
 
     func show(runner: String,
+              managed: Bool = true,
               foundPath: String?,
               installHint: String,
               collisionWarning: String?,
@@ -24,6 +25,7 @@ final class WelcomeController: NSObject, NSWindowDelegate {
               onOpenPreferences: @escaping () -> Void) {
         let view = WelcomeView(
             runner: runner,
+            managed: managed,
             foundPath: foundPath,
             installHint: installHint,
             collisionWarning: collisionWarning,
@@ -58,6 +60,7 @@ final class WelcomeController: NSObject, NSWindowDelegate {
 
 struct WelcomeView: View {
     let runner: String
+    var managed: Bool = true
     let foundPath: String?
     let installHint: String
     let collisionWarning: String?
@@ -79,9 +82,9 @@ struct WelcomeView: View {
                     .font(.system(size: 30))
                     .foregroundStyle(.orange)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Hearth is running")
+                    Text("Welcome to Hearth")
                         .font(.title2).fontWeight(.semibold)
-                    Label("It lives in your menu bar, look for the flame.", systemImage: "arrow.up")
+                    Label("Find Hearth in the menu bar.", systemImage: "arrow.up")
                         .font(.callout).foregroundStyle(.secondary)
                 }
             }
@@ -91,7 +94,7 @@ struct WelcomeView: View {
             if let collisionWarning {
                 collisionBlock(collisionWarning)
             } else if foundPath != nil {
-                Label("Your apps need no changes: they keep talking to the runner as they do now, and Hearth keeps it alive. Several apps and models can share the one runner.", systemImage: "checkmark.seal")
+                Label("Review your runner in Preferences. The Health tab configures inference checks and gives you the client endpoint for request observation.", systemImage: "checkmark.seal")
                     .font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -100,14 +103,14 @@ struct WelcomeView: View {
                 Label("Get alerted when the runner goes down.", systemImage: "bell")
                     .font(.callout).foregroundStyle(.secondary)
                 Spacer()
-                Button(notificationsEnabled ? "Notifications on" : "Enable notifications") {
+                Button(notificationsEnabled ? "Permission requested" : "Enable notifications") {
                     onEnableNotifications()
                     notificationsEnabled = true
                 }
                 .disabled(notificationsEnabled)
             }
 
-            Label("If anything ever looks off, run `hearth doctor` in Terminal for a full checkup.",
+            Label("The menu shows API and inference health separately. Finding a runner does not verify that it can complete a request.",
                   systemImage: "stethoscope")
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -115,9 +118,9 @@ struct WelcomeView: View {
             Divider()
 
             HStack {
-                Button("Open Preferences", action: onOpenPreferences)
+                Button("Later", action: onDone)
                 Spacer()
-                Button("Done", action: onDone)
+                Button("Open Preferences", action: onOpenPreferences)
                     .keyboardShortcut(.defaultAction)
             }
         }
@@ -127,12 +130,19 @@ struct WelcomeView: View {
 
     @ViewBuilder private var statusBlock: some View {
         HStack(alignment: .top, spacing: 11) {
-            if let found = foundPath {
+            if !managed {
+                Image(systemName: "eye").foregroundStyle(.secondary).font(.title3)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Watching an existing runner").fontWeight(.medium)
+                    Text("Hearth checks and alerts. Your existing app or service handles restarts.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+            } else if let found = foundPath {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.green).font(.title3)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Supervising \(runnerLabel)").fontWeight(.medium)
-                    Text("Found at \(found). Keeping it alive and serving.")
+                    Text("\(runnerLabel) found").fontWeight(.medium)
+                    Text(found).textSelection(.enabled)
                         .font(.callout).foregroundStyle(.secondary)
                 }
             } else {

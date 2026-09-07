@@ -132,6 +132,7 @@ enum StatusCLI {
             print(row("phase", busy ? "\(phase) (busy)" : phase))
         }
         if let notice = s["inferenceNotice"] as? String { print(row("inference", notice)) }
+        if let notice = s["trafficNotice"] as? String { print(row("clients", notice)) }
         if let up = s["uptimeSeconds"] as? Int { print(row("uptime", StatusText.duration(Double(up)))) }
         if let rc = s["restartCount"] as? Int { print(row("restarts", String(rc))) }
         if let cf = s["consecutiveFailures"] as? Int { print(row("failures", String(cf))) }

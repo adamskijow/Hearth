@@ -71,6 +71,13 @@ struct SupervisorAssembly {
             drainSeconds: max(0, config.drainSeconds),
             inFlight: inFlight,
             clientTrafficObserved: clientTrafficObserved,
+            clientActivity: metricsProxy.map { proxy in { @Sendable [weak proxy] in
+                proxy?.activity() ?? ClientActivity(available: false)
+            } },
+            beforeManagedTermination: metricsProxy.map { proxy in { @Sendable [weak proxy] witness in
+                proxy?.beforeManagedTermination(witness)
+            } },
+            beforeManagedSpawn: metricsProxy.map { proxy in { @Sendable [weak proxy] in proxy?.beforeManagedSpawn() } },
             includeLogTail: config.alertsIncludeLogTail,
             busyTimeout: max(30, config.busyTimeoutSeconds),
             modelFitThreshold: config.modelOOMThreshold,

@@ -42,6 +42,49 @@ struct PreferencesModelTests {
         }
     }
 
+    @Test func focusedTabsAndWelcomeRenderInBothAppearances() throws {
+        for dark in [false, true] {
+            for page in PreferencesModel.Page.allCases {
+                var config = HearthConfig()
+                config.mode = "attached"
+                config.port = 9 // isolated rendering must not query a normal runner
+                config.metricsProxyEnabled = true
+                config.probeModel = "qwen2.5:0.5b"
+                config.controlEnabled = true
+                config.controlToken = "fixture-token-not-a-real-secret"
+                let model = PreferencesModel(config)
+                model.page = page
+                let view = PreferencesView(model: model, onSave: { _ in }, onClose: {})
+                    .frame(width: 560, height: 640)
+                    .background(Color(nsColor: .windowBackgroundColor))
+                    .preferredColorScheme(dark ? .dark : .light)
+                let image = try render(view, size: NSSize(width: 560, height: 640))
+                try export(image, name: "preferences-\(page.rawValue)-\(dark ? "dark" : "light")")
+            }
+            for managed in [false, true] {
+                let view = WelcomeView(runner: "ollama", managed: managed,
+                    foundPath: "/opt/homebrew/bin/ollama", installHint: "brew install ollama",
+                    collisionWarning: nil, onSwitchToAttached: {}, onEnableNotifications: {},
+                    onOpenPreferences: {}, onDone: {})
+                    .frame(width: 460, height: 430)
+                    .background(Color(nsColor: .windowBackgroundColor))
+                    .preferredColorScheme(dark ? .dark : .light)
+                let image = try render(view, size: NSSize(width: 460, height: 430))
+                try export(image, name: "welcome-\(managed ? "managed" : "attached")-\(dark ? "dark" : "light")")
+            }
+        }
+    }
+
+    private func export(_ image: NSImage, name: String) throws {
+        guard let directory = ProcessInfo.processInfo.environment["HEARTH_RENDER_UI"] else { return }
+        let tiff = try #require(image.tiffRepresentation)
+        let bitmap = try #require(NSBitmapImageRep(data: tiff))
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        let url = URL(fileURLWithPath: directory).appendingPathComponent(name + ".png")
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try png.write(to: url)
+    }
+
     private func render<Content: View>(_ view: Content, size: NSSize) throws -> NSImage {
         let hosting = NSHostingView(rootView: view)
         hosting.frame = NSRect(origin: .zero, size: size)

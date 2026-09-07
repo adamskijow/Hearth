@@ -19,6 +19,7 @@ public struct InferenceEvidence: Codable, Sendable, Equatable {
     public enum Deferral: String, Codable, Sendable {
         case proxyConnections, modelNotResident, residencyUnknown, modelListUnavailable
         case runnerUnsupported, queueFull, apiUnavailable, stopped
+        case proxyRequests, trafficUnknown, proxyUnavailable
     }
     public var model: String?
     public var lastResult: Result = .unchecked
@@ -43,16 +44,19 @@ public struct InferenceEvidence: Codable, Sendable, Equatable {
 /// never proof that restarting cannot interrupt a client.
 public struct RecoveryEvidence: Encodable, Sendable, Equatable {
     public enum Ownership: String, Codable, Sendable { case managed, attached }
-    public enum Traffic: String, Codable, Sendable { case disabled, unused, observedConnections }
+    public enum Traffic: String, Codable, Sendable { case disabled, unused, observedConnections, observedRequests }
     public enum WithheldReason: String, Codable, Sendable {
         case stopped, attached, probeDisabled, residencyUnknown, proxyDisabled, proxyUnused, proxyConnections
+        case proxyRequests, trafficUnknown, proxyUnavailable
     }
     public var ownership: Ownership
     public var traffic: Traffic
     public let trafficVisibility = "partial"
     public var inferenceRestartEligible: Bool
     public var withheldReason: WithheldReason?
-    public init(ownership: Ownership, traffic: Traffic, withheldReason: WithheldReason?) {
+    public var clientActivity: ClientActivity?
+    public init(ownership: Ownership, traffic: Traffic, withheldReason: WithheldReason?, clientActivity: ClientActivity? = nil) {
+        self.clientActivity = clientActivity
         self.ownership = ownership
         self.traffic = traffic
         self.withheldReason = withheldReason

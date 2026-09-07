@@ -77,6 +77,9 @@ public enum StatusText {
             if inference.model == nil { return "Inference checks are not configured." }
             if inference.activity == .checking { return "Waiting for a completed inference response." }
             switch inference.deferredReason {
+            case .proxyRequests: return "A client request is still in progress. Inference checks will resume after its response finishes."
+            case .trafficUnknown: return "Client activity is unknown after interrupted or unsupported traffic. Inference checks are paused."
+            case .proxyUnavailable: return "The client proxy is unavailable. Check its address and port in Preferences."
             case .proxyConnections: return "Open proxy connections defer inference checks, even when idle."
             case .modelNotResident: return "The probe model is not loaded. Scheduled checks do not load idle models."
             case .residencyUnknown: return "This runner does not report loaded models; automatic inference checks are deferred."
@@ -101,6 +104,21 @@ public enum StatusText {
             return "The API answers. Open proxy connections defer inference checks, even when idle."
         }
         return nil
+    }
+
+    public static func trafficNotice(_ state: SupervisorState) -> String? {
+        guard let activity = state.recovery?.clientActivity, state.phase != .stopped else { return nil }
+        if !activity.available { return "Client proxy unavailable." }
+        if activity.uncertain {
+            return state.recovery?.ownership == .managed
+                ? "Client activity is unknown. Recovery waits for confirmed shutdown of the runner that handled this work."
+                : "Client activity is unknown. Hearth cannot confirm that interrupted work has ended."
+        }
+        if activity.activeRequests > 0 {
+            return "\(activity.activeRequests) active \(activity.activeRequests == 1 ? "request" : "requests"). Direct traffic is not visible."
+        }
+        if !activity.observedRequest { return "Waiting for a request through the client proxy." }
+        return "No active proxy requests; \(activity.openConnections) \(activity.openConnections == 1 ? "connection" : "connections") open. Direct traffic is not visible."
     }
 
     /// Shown when a watched (attached-mode) runner is down: in that mode nothing

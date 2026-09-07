@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import socket
+import struct
 import subprocess
 import tempfile
 import threading
@@ -51,6 +52,8 @@ class Runner:
 
 def run(binary):
     runner = Runner()
+    stream_release = threading.Event()
+    wire_reply = b"HTTP/1.1 200 OK\r\nX-Preserve: MiXeD value\r\nTransfer-Encoding: chunked\r\n\r\n3\r\na\x00b\r\n0\r\nX-Trailer: exact\r\n\r\n"
 
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -67,6 +70,24 @@ def run(binary):
             self.wfile.write(body)
 
         def do_GET(self):
+            if self.path in ("/wire", "/wire-unknown"):
+                response = wire_reply if self.path == "/wire" else wire_reply.replace(b"3\r\n", b"3;opaque=yes\r\n", 1)
+                self.wfile.write(response)
+                self.wfile.flush()
+                return
+            if self.path == "/stream":
+                self.send_response(200)
+                self.send_header("Transfer-Encoding", "chunked")
+                self.end_headers()
+                try:
+                    self.wfile.write(b"1\r\nx\r\n")
+                    self.wfile.flush()
+                    stream_release.wait(timeout=60)
+                    self.wfile.write(b"0\r\n\r\n")
+                    self.wfile.flush()
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+                return
             if self.path == "/api/version":
                 self.reply(200, {"version": "validation"})
             elif self.path == "/api/ps":
@@ -153,36 +174,75 @@ def run(binary):
                     pooled.request("GET", "/api/version")
                     assert json.loads(pooled.getresponse().read())["version"] == "validation"
                     assert pooled.sock is not None  # complete response; connection remains open
-                    deferred = wait_for(lambda s: s.get("inferenceDeferredByProxy") is True)
-                    assert deferred["busy"] is False and deferred["healthy"] is False
+                    # An idle pool is no longer a proxy deferral. Validate recovery
+                    # while the very same client socket remains open and reusable.
                     runner.set_failure(False)
+                    restored = wait_for(lambda s: s.get("healthy") is True
+                                        and s["recovery"]["clientActivity"]["openConnections"] >= 1)
+                    assert restored["inferenceDeferredByProxy"] is False
+                    assert restored["recovery"]["clientActivity"]["activeRequests"] == 0
+                    assert pooled.sock is not None
+                    pooled.request("GET", "/api/version")
+                    assert json.loads(pooled.getresponse().read())["version"] == "validation"
+                    print("PASS: completed keep-alive requests allow validated recovery with the socket open", flush=True)
+
+                    with socket.create_connection(("127.0.0.1", proxy_port), timeout=3) as wire:
+                        wire.sendall(b"GET /wire HTTP/1.1\r\nHost: fixture\r\n\r\n" * 2)
+                        wire.shutdown(socket.SHUT_WR)
+                        chunks = []
+                        while data := wire.recv(4096):
+                            chunks.append(data)
+                        assert b"".join(chunks) == wire_reply * 2, repr(b"".join(chunks))
+                    wait_for(lambda s: s["recovery"]["clientActivity"]["activeRequests"] == 0
+                             and not s["recovery"]["clientActivity"]["uncertain"])
+                    print("PASS: pipelined chunked replies, trailers, binary body, and half-close relay byte for byte", flush=True)
+
+                    # A streaming response with silent prefill remains active beyond
+                    # the busy timeout, even if no new body bytes arrive.
+                    pooled.request("GET", "/stream")
+                    streaming = pooled.getresponse()
+                    assert streaming.read(1) == b"x"
+                    deferred = wait_for(lambda s: s["inference"].get("deferredReason") == "proxyRequests")
                     posts_before = runner.post_count()
-                    heartbeats_before = runner.heartbeat_count()
-                    # More than the configured busy timeout, with each poll deep-due.
                     deadline = time.monotonic() + 35
                     while time.monotonic() < deadline:
                         state = json.loads(read("status"))
-                        assert state["restartCount"] == 0
-                        assert state["inferenceRecoveryWithheld"] is True
-                        assert state["busy"] is False
+                        assert state["restartCount"] == 0 and state["busy"] is False
+                        assert state["recovery"]["clientActivity"]["activeRequests"] == 1
+                        assert state["recovery"]["inferenceRestartEligible"] is False
                         time.sleep(0.5)
                     assert runner.post_count() == posts_before
-                    assert runner.heartbeat_count() == heartbeats_before
-                    pooled.request("GET", "/api/version")
-                    assert json.loads(pooled.getresponse().read())["version"] == "validation"
-                    print("PASS: idle pooled HTTP connection defers checks without busy-timeout recovery", flush=True)
-                    pooled.close()
-                    pooled = None
+                    stream_release.set()
+                    assert streaming.read() == b""
+                    wait_for(lambda s: runner.post_count() > posts_before and s.get("inferenceVerified") is True)
+                    print("PASS: silent streaming work blocks probes beyond busy timeout; final framing releases it", flush=True)
 
-                    restored = wait_for(lambda s: s.get("healthy") is True
-                                        and runner.heartbeat_count() > heartbeats_before)
-                    assert restored["inferenceRecoveryWithheld"] is False
-                    assert restored["inferenceDeferredByProxy"] is False
-                    assert runner.post_count() > posts_before
-                    assert b"hearth_healthy 1\n" in read("metrics")
-                    print("PASS: successful inference clears the incident after the connection closes", flush=True)
-                    print("PASS: heartbeat pauses during the incident and resumes after inference succeeds", flush=True)
+                    stream_release.clear()
+                    pooled.request("GET", "/stream")
+                    streaming = pooled.getresponse()
+                    assert streaming.read(1) == b"x"
+                    wait_for(lambda s: s["recovery"]["clientActivity"]["activeRequests"] == 1)
+                    # Force an actual reset, not a legal request-side half-close.
+                    pooled.sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+                    pooled.close()
+                    streaming.close()
+                    pooled = None
+                    uncertain = wait_for(lambda s: s["recovery"]["clientActivity"]["uncertain"] is True)
+                    assert uncertain["inference"]["deferredReason"] == "trafficUnknown"
+                    assert b"hearth_proxy_activity_uncertain 1\n" in read("metrics")
+                    assert uncertain["recovery"]["trafficVisibility"] == "partial"
+                    stream_release.set()
+                    with socket.create_connection(("127.0.0.1", proxy_port), timeout=3) as wire:
+                        wire.sendall(b"GET /wire-unknown HTTP/1.1\r\nHost: fixture\r\n\r\n")
+                        wire.shutdown(socket.SHUT_WR)
+                        chunks = []
+                        while data := wire.recv(4096):
+                            chunks.append(data)
+                        assert b"".join(chunks) == wire_reply.replace(b"3\r\n", b"3;opaque=yes\r\n", 1)
+                    print("PASS: unsupported framing still forwards every byte unchanged", flush=True)
+                    print("PASS: cancellation preserves unsettled activity; direct traffic remains explicitly partial", flush=True)
                 finally:
+                    stream_release.set()
                     if pooled is not None:
                         pooled.close()
                     child.terminate()

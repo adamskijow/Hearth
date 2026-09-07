@@ -90,6 +90,10 @@ public protocol ProcessControlling: Sendable {
     /// through `status`.
     func terminate(_ id: ProcessHandleID)
 
+    /// A nonblocking witness captured while the handle is known. True only once
+    /// the whole owned process group is absent; unknown implementations return nil.
+    func terminationWitness(_ id: ProcessHandleID) -> (@Sendable () -> Bool)?
+
     /// A cheap fingerprint of the executable on disk (size, modification time,
     /// inode), so the engine can notice the binary was upgraded and adopt the new
     /// version. nil if it cannot be read. Follows symlinks: a Homebrew binary is a
@@ -102,5 +106,6 @@ public protocol ProcessControlling: Sendable {
 }
 
 public extension ProcessControlling {
+    func terminationWitness(_ id: ProcessHandleID) -> (@Sendable () -> Bool)? { nil }
     func residentBytes(_ id: ProcessHandleID) -> Int64? { nil }
 }

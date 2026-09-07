@@ -48,6 +48,9 @@ public actor SupervisorEngine {
     /// Whether the proxy has actually carried client traffic. An enabled but
     /// unused proxy cannot prove that a zero in-flight count covers the user's
     /// real requests.
+    private let clientActivity: (@Sendable () -> ClientActivity)?
+    private let beforeManagedTermination: (@Sendable ((@Sendable () -> Bool)?) -> Void)?
+    private let beforeManagedSpawn: (@Sendable () -> Void)?
     private let clientTrafficObserved: (@Sendable () -> Bool)?
     /// The point at which an ongoing drain gives up and restarts anyway.
     private var drainDeadline: Date?
@@ -147,6 +150,9 @@ public actor SupervisorEngine {
                 drainSeconds: TimeInterval = 0,
                 inFlight: (@Sendable () -> Int)? = nil,
                 clientTrafficObserved: (@Sendable () -> Bool)? = nil,
+                clientActivity: (@Sendable () -> ClientActivity)? = nil,
+                beforeManagedTermination: (@Sendable ((@Sendable () -> Bool)?) -> Void)? = nil,
+                beforeManagedSpawn: (@Sendable () -> Void)? = nil,
                 includeLogTail: Bool = false,
                 busyTimeout: TimeInterval = 600,
                 modelFitThreshold: Int = 2,
@@ -166,6 +172,9 @@ public actor SupervisorEngine {
         self.drainSeconds = drainSeconds
         self.inFlight = inFlight
         self.clientTrafficObserved = clientTrafficObserved
+        self.clientActivity = clientActivity
+        self.beforeManagedTermination = beforeManagedTermination
+        self.beforeManagedSpawn = beforeManagedSpawn
         self.includeLogTail = includeLogTail
         self.busyTimeout = busyTimeout
         self.modelFit = ModelFitLedger(threshold: modelFitThreshold, window: modelFitWindow)
@@ -247,19 +256,28 @@ public actor SupervisorEngine {
     }
 
     private func recoveryEvidence() -> RecoveryEvidence {
-        let traffic: RecoveryEvidence.Traffic = inFlight == nil ? .disabled
-            : (clientTrafficObserved?() == true ? .observedConnections : .unused)
+        let activity = clientActivity?()
+        let traffic: RecoveryEvidence.Traffic = activity != nil
+            ? (activity!.observedRequest ? .observedRequests : .unused)
+            : (inFlight == nil ? .disabled : (clientTrafficObserved?() == true ? .observedConnections : .unused))
         let reason: RecoveryEvidence.WithheldReason?
         if machine.phase == .stopped { reason = .stopped }
         else if !managed { reason = .attached }
         else if deepProbe == nil { reason = .probeDisabled }
         else if !runner.reportsLoadedModels { reason = .residencyUnknown }
+        else if let activity {
+            if !activity.available { reason = .proxyUnavailable }
+            else if activity.uncertain { reason = .trafficUnknown }
+            else if activity.activeRequests > 0 { reason = .proxyRequests }
+            else if !activity.observedRequest { reason = .proxyUnused }
+            else { reason = nil }
+        }
         else if inFlight == nil { reason = .proxyDisabled }
         else if clientTrafficObserved?() != true { reason = .proxyUnused }
         else if (inFlight?() ?? 0) > 0 { reason = .proxyConnections }
         else { reason = nil }
         return RecoveryEvidence(ownership: managed ? .managed : .attached,
-                                traffic: traffic, withheldReason: reason)
+                                traffic: traffic, withheldReason: reason, clientActivity: activity)
     }
 
     private func recordAPI(_ readiness: Readiness) {
@@ -526,11 +544,14 @@ public actor SupervisorEngine {
         residencyIsCurrent: Bool
     ) async -> DeepProbeVerdict {
         guard let deep = deepProbe else { return .serving }
-        inferenceDeferredByProxy = (inFlight?() ?? 0) > 0
+        let activity = clientActivity?()
+        inferenceDeferredByProxy = activity?.blocksInference ?? ((inFlight?() ?? 0) > 0)
         if inferenceDeferredByProxy {
             consecutiveDeepProbeFailures = 0
             lastDeepProbeAt = now
-            deferInference(.proxyConnections)
+            deferInference(activity.map {
+                !$0.available ? .proxyUnavailable : ($0.uncertain ? .trafficUnknown : .proxyRequests)
+            } ?? .proxyConnections)
             return .deferred
         }
         let previousDeferral = inferenceEvidence.deferredReason
@@ -608,10 +629,12 @@ public actor SupervisorEngine {
             if consecutiveDeepProbeFailures >= 2 {
                 // A client may have connected while the inference POST awaited
                 // its response. Re-check before authorizing a restart.
-                inferenceDeferredByProxy = (inFlight?() ?? 0) > 0
+                let completedActivity = clientActivity?()
+                inferenceDeferredByProxy = completedActivity?.blocksInference ?? ((inFlight?() ?? 0) > 0)
                 // Attached mode can report down but still skips every process
                 // effect. Preserve its lifecycle without claiming restart ownership.
-                guard inFlight != nil, clientTrafficObserved?() == true,
+                let observed = completedActivity?.observedRequest ?? (clientTrafficObserved?() == true)
+                guard (completedActivity != nil || inFlight != nil), observed,
                       !inferenceDeferredByProxy else {
                     if !inferenceRecoveryWithheldOpen {
                         inferenceRecoveryWithheldOpen = true
@@ -635,11 +658,12 @@ public actor SupervisorEngine {
     }
 
     /// Whether a due routine restart should wait for in-flight work. True while
-    /// the proxy reports open connections and the drain budget has not run out;
+    /// proxied work is active or uncertain and the drain budget has not run out;
     /// the deadline is set once per drain so a busy server cannot defer forever.
     private func shouldDrainBeforeRoutineRestart(now: Date) -> Bool {
-        guard drainSeconds > 0, let inFlight else { return false }
-        guard inFlight() > 0 else {
+        guard drainSeconds > 0 else { return false }
+        let blocked = clientActivity?().blocksInference ?? ((inFlight?() ?? 0) > 0)
+        guard blocked else {
             drainDeadline = nil
             return false
         }
@@ -731,10 +755,14 @@ public actor SupervisorEngine {
         // handle kills that whole process group so a restart loop cannot stack up
         // leaked runners. Idempotent: terminating an already dead group is a no op.
         if let previous = currentHandle {
+            beforeManagedTermination?(processes.terminationWitness(previous))
             processes.terminate(previous)
         }
         lastDeepProbeAt = nil   // deep-probe the fresh runner once it is shallow-ready
         consecutiveDeepProbeFailures = 0
+        // Cancel old proxy pairs and begin a separate observation generation
+        // before the target can accept requests. Prior uncertainty is retained.
+        beforeManagedSpawn?()
         do {
             currentHandle = try processes.spawn(runner.processSpec())
             spawnedBinaryFingerprint = processes.executableFingerprint(at: runner.processSpec().executableURL)
@@ -755,6 +783,7 @@ public actor SupervisorEngine {
     private func killChild() {
         invalidateInferenceVerification()
         if let handle = currentHandle {
+            beforeManagedTermination?(processes.terminationWitness(handle))
             processes.terminate(handle)
         }
     }

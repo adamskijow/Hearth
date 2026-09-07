@@ -5,7 +5,7 @@
 # (scripts/install-hooks.sh) runs the same gate before every push.
 #
 # Default stages are headless safe (no desktop session, no Ollama):
-#   scripts/ci.sh            build (debug + release), unit tests, lint
+#   scripts/ci.sh            build (debug + release), unit/HTTP tests, lint
 #   scripts/ci.sh --smoke    also run the fake-runner smoke test (needs a desktop)
 #   scripts/ci.sh --real     also run the real Ollama gate (needs ollama + a model)
 #   scripts/ci.sh --all      everything above
@@ -75,6 +75,9 @@ fi
 
 section "Unit tests"
 ./scripts/test.sh && ok || bad "unit tests failed"
+
+section "HTTP activity and relay (isolated fake runner)"
+python3 ./scripts/validate-inference.py && ok || bad "HTTP activity or relay regression"
 
 section "Lint: whitespace"
 if git diff --check \

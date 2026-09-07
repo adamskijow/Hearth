@@ -71,6 +71,7 @@ public enum ControlStatusPage {
           const color = s.phase === 'healthy' && s.healthy === false ? 'phase-failing' : (s.phase === 'healthy' && s.inferenceDeferredByProxy ? 'phase-starting' : 'phase-' + s.phase);
           let h = row('status', s.headline || (s.busy ? s.phase + ' (busy)' : s.phase), color);
           if (s.inferenceNotice) h += row('inference', s.inferenceNotice);
+          if (s.trafficNotice) h += row('clients', s.trafficNotice);
           if (s.uptimeSeconds != null) h += row('uptime', dur(s.uptimeSeconds));
           h += row('restarts', s.restartCount);
           if (s.lastDownCategory) h += row('last failure', s.lastDownCategory);

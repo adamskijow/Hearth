@@ -3,8 +3,47 @@
 This dated evidence log records real-runner failures, fixes, and remaining gaps.
 M4 added scenarios 1 through 5; M5 added hard-crash orphan recovery.
 
-Reproduce with `./scripts/validate-real.sh` (requires a real Ollama and a small
-pulled model). The script exits non-zero on any failed scenario.
+The recent gates below use isolated configuration, data, ports, and owned process
+identities. The older `./scripts/validate-real.sh` targets normal runner state and
+uses broad process cleanup; use it only in a dedicated test environment.
+
+## September 7, 2026: request activity and UI
+
+The [request-activity stage](docs/request-activity.md) replaces idle-connection
+suppression with bounded HTTP framing observation. Adversarial review caught
+unsolicited response bytes briefly appearing idle, stale callbacks erasing new
+requests, asynchronous listener shutdown, and treating a termination signal as
+proof of group death. A further overlap case involved an old server retaining its
+port while the replacement exited. These now have conservative generation guards;
+the final review found no remaining blocker.
+
+The local gate passed **528 tests in 83 suites**, debug/release builds, and lint.
+The isolated HTTP gate passed:
+
+- API, CLI, and metrics retaining an inference failure until validated completion.
+- Reusing the same idle keep-alive socket while scheduled inference succeeds.
+- A silent chunked response remaining active beyond the 30-second busy timeout,
+  with no probe or unintended restart; final framing permits checks again.
+- Byte-exact pipelining, trailers, binary body data, and client write-half-close.
+- Unsupported chunk extensions forwarding unchanged while activity stays unknown.
+- Reset cancellation preserving uncertainty and explicit partial visibility.
+
+The byte-exact gate initially failed: connection-state failure arrived before the
+second buffered response and clean EOF. Immediate cross-cancellation truncated
+the reply. The relay now drains through I/O completions; the same reproduction
+and full gate pass. Raw traces remain local.
+
+The isolated real Ollama check passed startup without loading an idle model,
+proxied inference, controlled process exit, automatic recovery, renewed verified
+inference after group shutdown, and exact owned-process cleanup. No installed
+service was stopped or reconfigured.
+
+Preferences and Welcome were rendered natively in light and dark appearances.
+The pass groups setup into focused pages, exposes the selected client endpoint,
+masks credentials, clarifies ownership, and removes unsupported health claims.
+Live keyboard/menu interaction remains unverified because the Mac was locked.
+The full clean-setup matrix, Caddy runtime check, and bounded 72-hour workload
+remain pending. This is source validation, not a binary release.
 
 ## September 7, 2026: adversarial review and structured evidence
 

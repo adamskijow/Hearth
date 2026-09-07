@@ -16,8 +16,14 @@ public enum StatusText {
         case .starting:
             return "Starting\u{2026}"
         case .healthy:
-            if state.inferenceRecoveryWithheld { return "Inference check failed" }
+            if state.inferenceRecoveryWithheld || state.inference?.incidentOpen == true { return "Inference check failed" }
             if state.inferenceDeferredByProxy { return "Inference check deferred" }
+            if let evidence = state.inference {
+                if state.busy { return "API busy" }
+                if evidence.activity == .checking { return "Checking inference" }
+                if evidence.isVerified(asOf: now) { return "Inference verified" }
+                return "API responding"
+            }
             return state.busy ? "Healthy (busy)" : "Healthy"
         case .down:
             return "Down\(retrySuffix(state, now: now))"
@@ -59,6 +65,35 @@ public enum StatusText {
 
     public static func inferenceNotice(_ state: SupervisorState) -> String? {
         guard state.phase == .healthy else { return nil }
+        if let inference = state.inference {
+            if inference.incidentOpen {
+                if state.recovery?.ownership == .attached {
+                    return "The API answers. Inference has not recovered; attached mode cannot restart this runner."
+                }
+                return state.inferenceRecoveryWithheld
+                    ? "The API answers. Inference has not recovered; automatic restart is withheld by the traffic policy."
+                    : "The API answers. Inference has not recovered; a valid completed check is required."
+            }
+            if inference.model == nil { return "Inference checks are not configured." }
+            if inference.activity == .checking { return "Waiting for a completed inference response." }
+            switch inference.deferredReason {
+            case .proxyConnections: return "Open proxy connections defer inference checks, even when idle."
+            case .modelNotResident: return "The probe model is not loaded. Scheduled checks do not load idle models."
+            case .residencyUnknown: return "This runner does not report loaded models; automatic inference checks are deferred."
+            case .modelListUnavailable: return "Loaded models could not be checked; inference is deferred."
+            case .runnerUnsupported: return "This runner does not support automatic inference checks."
+            case .queueFull: return "The inference queue returned HTTP 503; the check is deferred."
+            case .apiUnavailable: return "Waiting for the API before checking inference."
+            case .stopped: return "Inference checks are stopped."
+            case nil: break
+            }
+            if inference.lastSuccessAt != nil {
+                return inference.currentProcess
+                    ? "Last completed inference check succeeded. Verification expires when the next check is due."
+                    : "The previous process completed inference; this process has not been verified."
+            }
+            return "No completed inference check yet."
+        }
         if state.inferenceRecoveryWithheld {
             return "The API answers. Automatic restart is withheld because client activity cannot be ruled out."
         }

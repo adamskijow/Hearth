@@ -359,7 +359,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let phase = latestState.phase
         let needsAttention = configProblem || binaryMissingPath != nil || supervisionStartBlocked
             || configDiagnostics.contains { $0.severity == .error }
-            || (latestState.phase == .healthy && latestState.inferenceRecoveryWithheld)
+            || (latestState.phase == .healthy && !latestState.isHealthy)
         let symbol = needsAttention ? "exclamationmark.triangle.fill" : MenuFormat.symbolName(for: phase)
         let label = "Hearth: \(StatusText.headline(latestState, now: Date()))"
         button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
@@ -439,14 +439,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         // Health: a bright, color-coded headline, then a couple of detail lines.
-        let phaseColor = (latestState.phase == .healthy && latestState.inferenceRecoveryWithheld) ? NSColor.systemOrange
+        let phaseColor = (latestState.phase == .healthy && !latestState.isHealthy) ? NSColor.systemOrange
             : MenuFormat.tint(for: latestState.phase) ?? .labelColor
         let headlineItem = infoRow(headlineAttr(StatusText.headline(latestState, now: now), color: phaseColor))
         menu.addItem(headlineItem)
-        // The down and failing headlines carry a retry countdown; hold the field so
-        // the menu can tick it live while open (a menu is otherwise a static
-        // snapshot taken when it opened).
-        liveHeadlineField = (latestState.phase == .down || latestState.phase == .failing)
+        // Retry countdowns and inference freshness change with time even while
+        // the menu stays open without another state publication.
+        liveHeadlineField = (latestState.phase == .down || latestState.phase == .failing
+            || latestState.inference != nil)
             ? headlineItem.view?.subviews.first as? NSTextField : nil
         menu.addItem(infoRow(detailAttr(StatusText.contextLine(
             latestState, runnerName: runner.name, managed: config.isManaged, now: now))))
@@ -544,7 +544,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func menuWillOpen(_ menu: NSMenu) {
-        // Only the down/failing headline has a live retry countdown to advance.
+        // Advance retry countdowns and expire inference verification while open.
         guard liveHeadlineField != nil else { return }
         // A default-mode timer does not fire while a menu is tracking, so add it to
         // the common modes.
@@ -562,7 +562,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func tickHeadline() {
         guard let field = liveHeadlineField else { return }
-        let color = (latestState.phase == .healthy && latestState.inferenceRecoveryWithheld) ? NSColor.systemOrange
+        let color = (latestState.phase == .healthy && !latestState.isHealthy) ? NSColor.systemOrange
             : MenuFormat.tint(for: latestState.phase) ?? .labelColor
         field.attributedStringValue = headlineAttr(StatusText.headline(latestState, now: Date()), color: color)
     }

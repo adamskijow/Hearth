@@ -96,6 +96,9 @@ public actor SupervisorEngine {
     /// successful inference re-arms it for a later, distinct incident.
     private var inferenceRecoveryWithheldOpen = false
     private var inferenceDeferredByProxy = false
+    private var apiEvidence = APIEvidence()
+    private var inferenceEvidence = InferenceEvidence()
+    private var pendingRecoveryEvent: SupervisorEvent?
     /// A recovery incident can include many failed replacement processes. The
     /// event log keeps every attempt, but phone and local alerts should announce
     /// the outage once, then stay quiet until recovery or a fresh healthy run.
@@ -157,6 +160,7 @@ public actor SupervisorEngine {
         self.policy = policy
         self.managed = managed
         self.deepProbe = deepProbe
+        self.inferenceEvidence = InferenceEvidence(model: deepProbe?.model)
         self.warmModels = warmModels
         self.memoryLimitBytes = memoryLimitBytes
         self.drainSeconds = drainSeconds
@@ -190,9 +194,7 @@ public actor SupervisorEngine {
         modelsToRestore = []
         suppressWarmupAfterCrash = false
         lastWarmupStartedAt = nil
-        consecutiveDeepProbeFailures = 0
-        inferenceRecoveryWithheldOpen = false
-        inferenceDeferredByProxy = false
+        resetEvidenceSession()
         let output = machine.start(now: clock.now)
         await apply(output, models: nil)
         nudgeLoop()
@@ -204,9 +206,8 @@ public actor SupervisorEngine {
         outageNotificationOpen = false
         busySince = nil
         drainDeadline = nil
-        consecutiveDeepProbeFailures = 0
-        inferenceRecoveryWithheldOpen = false
-        inferenceDeferredByProxy = false
+        resetEvidenceSession()
+        if deepProbe != nil { deferInference(.stopped) }
         let output = machine.stop(now: clock.now)
         await apply(output, models: nil)
         nudgeLoop()
@@ -217,9 +218,57 @@ public actor SupervisorEngine {
         controlGeneration &+= 1
         busySince = nil
         drainDeadline = nil
+        resetProcessEvidence()
         let output = machine.userRestart(now: clock.now)
         await apply(output, models: nil)
         nudgeLoop()
+    }
+
+    /// Stop/start is a fresh observation session, including attached mode.
+    private func resetEvidenceSession() {
+        inferenceEvidence = InferenceEvidence(model: deepProbe?.model)
+        lastDeepProbeFailedAt = nil
+        inferenceRecoveryWithheldOpen = false
+        pendingRecoveryEvent = nil
+        resetProcessEvidence()
+    }
+
+    /// Replacement invalidates old verification, but cannot resolve an incident.
+    private func resetProcessEvidence() {
+        apiEvidence = APIEvidence()
+        inferenceEvidence.currentProcess = false
+        inferenceEvidence.validUntil = nil
+        inferenceEvidence.activity = .idle
+        inferenceEvidence.deferredReason = nil
+        lastDeepProbeAt = nil
+        consecutiveDeepProbeFailures = 0
+        inferenceDeferredByProxy = false
+        runnerBusy = false
+    }
+
+    private func recoveryEvidence() -> RecoveryEvidence {
+        let traffic: RecoveryEvidence.Traffic = inFlight == nil ? .disabled
+            : (clientTrafficObserved?() == true ? .observedConnections : .unused)
+        let reason: RecoveryEvidence.WithheldReason?
+        if machine.phase == .stopped { reason = .stopped }
+        else if !managed { reason = .attached }
+        else if deepProbe == nil { reason = .probeDisabled }
+        else if !runner.reportsLoadedModels { reason = .residencyUnknown }
+        else if inFlight == nil { reason = .proxyDisabled }
+        else if clientTrafficObserved?() != true { reason = .proxyUnused }
+        else if (inFlight?() ?? 0) > 0 { reason = .proxyConnections }
+        else { reason = nil }
+        return RecoveryEvidence(ownership: managed ? .managed : .attached,
+                                traffic: traffic, withheldReason: reason)
+    }
+
+    private func recordAPI(_ readiness: Readiness) {
+        apiEvidence.status = readiness == .ready ? .responding : (readiness == .busy ? .busy : .unavailable)
+        apiEvidence.checkedAt = clock.now
+        if readiness != .ready, deepProbe != nil {
+            inferenceEvidence.activity = .deferred
+            inferenceEvidence.deferredReason = .apiUnavailable
+        }
     }
 
     /// Run the supervision loop until stopped. Safe to call once per session;
@@ -307,6 +356,7 @@ public actor SupervisorEngine {
             // A busy probe carries no model list (the fetch would queue behind
             // the very work making it busy); keep the current one.
             await apply(output, models: runnerBusy ? nil : report.models)
+            guard generation == controlGeneration else { return 0 }
             // The opt-in memory watchdog: Ollama's documented slow death is RSS
             // creep, then growing latency, then a wedge; a readiness probe only
             // catches the end. Restarting at a resident-size ceiling catches it
@@ -360,7 +410,12 @@ public actor SupervisorEngine {
             // treats it as a failure without trying to kill a process we do not
             // own (the kill effect is skipped anyway).
             let outcome = await http.get(runner.readinessEndpoint, timeout: policy.probeTimeout)
+            guard generation == controlGeneration else {
+                return HealthReport(isAlive: true, readiness: .unknown, exitReason: .running)
+            }
             var readiness = Readiness.from(outcome)
+            recordAPI(readiness)
+            if readiness != .ready && readiness != .busy { invalidateInferenceVerification() }
             let fetchedModels = readiness == .ready ? await fetchModels() : nil
             let models = fetchedModels ?? currentModels
             if readiness == .ready, generation == controlGeneration {
@@ -385,11 +440,15 @@ public actor SupervisorEngine {
         }
 
         guard let handle = currentHandle else {
+            invalidateInferenceVerification()
+            recordAPI(.unknown)
             // No child (spawn failed or never spawned): treat as dead.
             return HealthReport(isAlive: false, readiness: .unknown, exitReason: .unknown)
         }
         let status = processes.status(handle)
         if !status.isAlive {
+            invalidateInferenceVerification()
+            recordAPI(.unknown)
             let reason = runner.classifyExit(status.exit, stderr: status.recentStderr)
             return HealthReport(isAlive: false,
                                 readiness: .unknown,
@@ -397,7 +456,11 @@ public actor SupervisorEngine {
                                 recentStderr: status.recentStderr)
         }
         let outcome = await http.get(runner.readinessEndpoint, timeout: policy.probeTimeout)
+        guard generation == controlGeneration else {
+            return HealthReport(isAlive: true, readiness: .unknown, exitReason: .running)
+        }
         var readiness = Readiness.from(outcome)
+        recordAPI(readiness)
         var models = currentModels
         let fetchedModels = readiness == .ready ? await fetchModels() : nil
         if let fetched = fetchedModels {
@@ -417,6 +480,7 @@ public actor SupervisorEngine {
     }
 
     private func fetchModels() async -> [ResidentModel]? {
+        guard runner.reportsLoadedModels else { return nil }
         let outcome = await http.get(runner.modelsEndpoint, timeout: policy.probeTimeout)
         guard case .ok(let data) = outcome else { return nil }
         return try? runner.parseResidentModels(data)
@@ -425,14 +489,13 @@ public actor SupervisorEngine {
     private enum DeepProbeVerdict {
         case serving
         case deferred
-        case busy
         case unconfirmedFailure
         case confirmedFailure
     }
 
     /// Translate the inference-specific result back into the existing readiness
     /// vocabulary. A first ambiguous miss remains serving while Hearth verifies
-    /// it; only a runner's queue-full response is busy. Proxy connections defer
+    /// it; deep queue-full responses and proxy connections defer
     /// inference without entering the runner's busy-timeout recovery path.
     private func readinessAfterDeepProbe(
         now: Date,
@@ -445,8 +508,6 @@ public actor SupervisorEngine {
             residencyIsCurrent: residencyIsCurrent) {
         case .serving, .deferred, .unconfirmedFailure:
             return .ready
-        case .busy:
-            return .busy
         case .confirmedFailure:
             return .timedOut
         }
@@ -455,7 +516,7 @@ public actor SupervisorEngine {
     /// The optional deep readiness probe, run on its own slower cadence. Deep
     /// timeouts are ambiguous because a legitimate long generation may occupy
     /// the queue. Hearth therefore refuses to probe while proxy-observed client
-    /// work is active, treats HTTP 503 as busy, never loads an idle model on a
+    /// work is active, treats HTTP 503 as deferred, never loads an idle model on a
     /// timer, and requires two failures against a model confirmed resident at
     /// the start of each check. Recovery becomes destructive only after the
     /// proxy has carried real client traffic and currently reports no work.
@@ -469,16 +530,17 @@ public actor SupervisorEngine {
         if inferenceDeferredByProxy {
             consecutiveDeepProbeFailures = 0
             lastDeepProbeAt = now
+            deferInference(.proxyConnections)
             return .deferred
         }
-        if let last = lastDeepProbeAt, now.timeIntervalSince(last) < deep.interval {
-            return .serving
-        }
+        let previousDeferral = inferenceEvidence.deferredReason
+        inferenceEvidence.activity = .idle
+        inferenceEvidence.deferredReason = nil
         let wasResident = residentModels.contains { $0.name == deep.model }
         // Only trust residency when /api/ps answered during this probe. A stale
         // cached model list must not make a possible cold load inherit the much
         // shorter steady-state inference timeout.
-        let modelIsConfirmedResident = residencyIsCurrent && wasResident
+        let modelIsConfirmedResident = runner.reportsLoadedModels && residencyIsCurrent && wasResident
         guard modelIsConfirmedResident else {
             // A scheduled health check must not create GPU work by loading an
             // idle model. Besides being expensive, cancelling a slow load can
@@ -487,15 +549,24 @@ public actor SupervisorEngine {
             // resident, the next due check verifies inference normally.
             lastDeepProbeAt = now
             consecutiveDeepProbeFailures = 0
-            return .serving
+            deferInference(!runner.reportsLoadedModels ? .residencyUnknown
+                : (!residencyIsCurrent ? .modelListUnavailable : .modelNotResident))
+            return .deferred
         }
         guard let request = runner.deepReadinessRequest(
             model: deep.model,
             unloadAfter: false) else {
             consecutiveDeepProbeFailures = 0
+            deferInference(.runnerUnsupported)
+            return .deferred
+        }
+        if let last = lastDeepProbeAt, now.timeIntervalSince(last) < deep.interval {
+            if previousDeferral == .queueFull { deferInference(.queueFull) }
             return .serving
         }
         let generation = controlGeneration
+        inferenceEvidence.activity = .checking
+        publishState()
         let outcome = await http.post(
             request.url,
             body: request.body,
@@ -505,8 +576,15 @@ public actor SupervisorEngine {
         // entire timeout; using its start timestamp made the next expensive
         // check immediately overdue and could keep the GPU in a retry loop.
         let completedAt = clock.now
+        inferenceEvidence.activity = .idle
         switch outcome {
-        case .ok:
+        case .ok(let data) where runner.validatesInferenceCompletion(data):
+            inferenceEvidence.lastResult = .succeeded
+            inferenceEvidence.lastCheckedAt = completedAt
+            inferenceEvidence.lastSuccessAt = completedAt
+            inferenceEvidence.validUntil = completedAt.addingTimeInterval(deep.interval)
+            inferenceEvidence.currentProcess = true
+            inferenceEvidence.incidentOpen = false
             lastDeepProbeAt = completedAt
             consecutiveDeepProbeFailures = 0
             inferenceRecoveryWithheldOpen = false
@@ -514,8 +592,16 @@ public actor SupervisorEngine {
         case .http(status: 503, body: _):
             lastDeepProbeAt = completedAt
             consecutiveDeepProbeFailures = 0
-            return .busy
+            deferInference(.queueFull)
+            return .deferred
         default:
+            inferenceEvidence.lastResult = .failed
+            inferenceEvidence.lastCheckedAt = completedAt
+            inferenceEvidence.lastFailureAt = completedAt
+            inferenceEvidence.validUntil = nil
+            inferenceEvidence.currentProcess = true
+            inferenceEvidence.incidentOpen = true
+            if machine.phase == .healthy { pendingRecoveryEvent = .recovered }
             lastDeepProbeFailedAt = completedAt
             lastDeepProbeAt = completedAt
             consecutiveDeepProbeFailures += 1
@@ -523,6 +609,8 @@ public actor SupervisorEngine {
                 // A client may have connected while the inference POST awaited
                 // its response. Re-check before authorizing a restart.
                 inferenceDeferredByProxy = (inFlight?() ?? 0) > 0
+                // Attached mode can report down but still skips every process
+                // effect. Preserve its lifecycle without claiming restart ownership.
                 guard inFlight != nil, clientTrafficObserved?() == true,
                       !inferenceDeferredByProxy else {
                     if !inferenceRecoveryWithheldOpen {
@@ -539,6 +627,11 @@ public actor SupervisorEngine {
             }
             return .unconfirmedFailure
         }
+    }
+
+    private func deferInference(_ reason: InferenceEvidence.Deferral) {
+        inferenceEvidence.activity = .deferred
+        inferenceEvidence.deferredReason = reason
     }
 
     /// Whether a due routine restart should wait for in-flight work. True while
@@ -571,11 +664,20 @@ public actor SupervisorEngine {
     // MARK: - Effect interpretation
 
     private func apply(_ output: MachineOutput, models: [ResidentModel]?) async {
+        let generation = controlGeneration
         for effect in output.effects {
+            guard generation == controlGeneration else { return }
             switch effect {
             case .spawn:
                 // Attached mode never spawns; it monitors a runner it does not own.
-                if managed { spawnChild() }
+                if managed {
+                    resetProcessEvidence()
+                    spawnChild()
+                } else {
+                    // Retrying observation of the same external process is not
+                    // replacement. Keep confirmation history, but recheck now.
+                    lastDeepProbeAt = nil
+                }
             case .kill:
                 // The teardown is where the resident set is last trustworthy;
                 // capture it so the post-recovery warm-up can restore it.
@@ -601,6 +703,13 @@ public actor SupervisorEngine {
             case .emit(let event):
                 await handleEvent(event)
             }
+        }
+        guard generation == controlGeneration else { return }
+        if machine.phase == .healthy, !inferenceEvidence.incidentOpen,
+           let event = pendingRecoveryEvent {
+            pendingRecoveryEvent = nil
+            await handleEvent(event)
+            guard generation == controlGeneration else { return }
         }
         publishState()
     }
@@ -638,16 +747,24 @@ public actor SupervisorEngine {
         }
     }
 
+    private func invalidateInferenceVerification() {
+        inferenceEvidence.currentProcess = false
+        inferenceEvidence.validUntil = nil
+    }
+
     private func killChild() {
+        invalidateInferenceVerification()
         if let handle = currentHandle {
             processes.terminate(handle)
         }
     }
 
     private func handleEvent(_ event: SupervisorEvent) async {
+        let generation = controlGeneration
         var followUps: [SupervisorEvent] = []
         switch event {
         case .down(let reason):
+            if inferenceEvidence.incidentOpen { pendingRecoveryEvent = .recovered }
             // A crash can land without a kill effect; snapshot here too so the
             // warm-up knows what was resident before the failure.
             if !currentModels.isEmpty {
@@ -674,6 +791,11 @@ public actor SupervisorEngine {
             }
         case .recovered, .becameHealthy:
             startWarmupIfNeeded()
+            if inferenceEvidence.incidentOpen {
+                pendingRecoveryEvent = event
+                return
+            }
+            pendingRecoveryEvent = nil
         default:
             break
         }
@@ -697,6 +819,7 @@ public actor SupervisorEngine {
         // Emit any derived events (a model crossing the too-large threshold) after
         // the triggering event, so the log reads down, then the guidance.
         for followUp in followUps {
+            guard generation == controlGeneration else { return }
             await handleEvent(followUp)
         }
     }
@@ -787,7 +910,10 @@ public actor SupervisorEngine {
             deepProbeLastFailedAt: lastDeepProbeFailedAt,
             inferenceRecoveryWithheld: inferenceRecoveryWithheldOpen,
             inferenceDeferredByProxy: inferenceDeferredByProxy,
-            oversizedModels: oversized
+            oversizedModels: oversized,
+            api: apiEvidence,
+            inference: inferenceEvidence,
+            recovery: recoveryEvidence()
         )
         current = state
         stateContinuation.yield(state)

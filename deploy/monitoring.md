@@ -38,6 +38,10 @@ The exposed series (all `gauge` unless noted):
 | `hearth_phase{phase=...}` | Current supervisor phase; the active one is 1. |
 | `hearth_last_down{reason=...}` | Last failure category. |
 | `hearth_last_restart{category=...}` | Last restart category. |
+| `hearth_inference_verified` | Successful completion from this process within the configured inference interval (1). |
+| `hearth_inference_incident_open` | An inference failure awaits a valid completion (1). |
+| `hearth_inference_last_success_timestamp_seconds` | Last valid completion, possibly from a previous process; not itself proof of current health. |
+| `hearth_inference_restart_eligible` | Recovery policy permits inference restart (1); traffic visibility remains partial. |
 | `hearth_deep_probe_configured` | Inference probe enabled (1). |
 | `hearth_deep_probe_last_failure_timestamp_seconds` | Last inference-probe failure. |
 | `hearth_restarts_total` (counter) | Restarts this session. |

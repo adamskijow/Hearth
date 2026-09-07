@@ -32,6 +32,9 @@ public enum SupervisorPhase: String, Sendable, Equatable {
 /// The typed snapshot the menubar renders. Plain data, `Sendable`, `Equatable`,
 /// with no behavior. The core publishes it; it never reaches back into the UI.
 public struct SupervisorState: Sendable, Equatable {
+    public var api: APIEvidence?
+    public var inference: InferenceEvidence?
+    public var recovery: RecoveryEvidence?
     public var phase: SupervisorPhase
     /// Models the runner currently holds resident, from its own API.
     public var residentModels: [ResidentModel]
@@ -94,7 +97,13 @@ public struct SupervisorState: Sendable, Equatable {
                 deepProbeLastFailedAt: Date? = nil,
                 inferenceRecoveryWithheld: Bool = false,
                 inferenceDeferredByProxy: Bool = false,
-                oversizedModels: [String] = []) {
+                oversizedModels: [String] = [],
+                api: APIEvidence? = nil,
+                inference: InferenceEvidence? = nil,
+                recovery: RecoveryEvidence? = nil) {
+        self.api = api
+        self.inference = inference
+        self.recovery = recovery
         self.phase = phase
         self.residentModels = residentModels
         self.healthySince = healthySince
@@ -117,7 +126,7 @@ public struct SupervisorState: Sendable, Equatable {
 
     /// Shallow readiness with no known unresolved inference incident. This does
     /// not promise that inference was configured, checked, or recently verified.
-    public var isHealthy: Bool { phase == .healthy && !inferenceRecoveryWithheld }
+    public var isHealthy: Bool { phase == .healthy && !inferenceRecoveryWithheld && inference?.incidentOpen != true }
 
     /// Uptime of the current healthy streak as of `reference`. Nil if not
     /// currently healthy.

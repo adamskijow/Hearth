@@ -13,6 +13,10 @@ import Foundation
 /// you started with `osaurus serve`, is the recommended path; managed mode is
 /// best effort, and the doctor says so.
 public struct OsaurusRunner: Runner {
+
+    public func validatesInferenceCompletion(_ data: Data) -> Bool {
+        InferenceCompletion.openAI(data)
+    }
     public let name = "Osaurus"
 
     private let binaryPath: String

@@ -108,7 +108,7 @@ struct AttachedModeTests {
         http.set(runner.modelsEndpoint, .ok(Data(
             #"{"models":[{"name":"llama3"}]}"#.utf8)))
         let deepURL = runner.deepReadinessRequest(model: "llama3")!.url
-        http.set(deepURL, .ok(Data("{}".utf8)))   // inference works at first
+        http.set(deepURL, .ok(Data(#"{"done":true,"eval_count":1}"#.utf8)))   // inference works at first
 
         await engine.start()
         _ = await engine.stepOnce()                     // shallow + deep ok -> healthy

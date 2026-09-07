@@ -6,6 +6,34 @@ M4 added scenarios 1 through 5; M5 added hard-crash orphan recovery.
 Reproduce with `./scripts/validate-real.sh` (requires a real Ollama and a small
 pulled model). The script exits non-zero on any failed scenario.
 
+## September 7, 2026: adversarial review and structured evidence
+
+An independent adversarial agent reproduced stale effects killing a replacement
+child, false inference recovery after respawn, deep HTTP 503 bypassing the traffic
+policy, and attached-session scheduling leakage. The subsequent patch adds
+regressions for those cases, validates completed responses, and requires loaded-
+model evidence for scheduled checks. A second review caught stale verification
+after observed process death and notification delivery delaying teardown. Both
+were corrected; the final focused review found no remaining blocker.
+
+The local gate passed **508 tests in 81 suites**, debug and release builds, and
+lint. The isolated HTTP/CLI/metrics/heartbeat gate passed with a pooled connection
+held beyond the busy timeout. Inference failures stayed visible, no recovery or
+new probe occurred while the connection was held, and a validated completion
+cleared the incident after closure.
+
+A separate isolated real Ollama run passed startup with the model unloaded,
+explicit proxied generation, and `inferenceVerified: true` from the automatic
+completion validator. Killing only its recorded runner process triggered
+recovery; another real generation completed afterward. Shutdown removed the
+owned process groups and isolated state. No normal service was reconfigured.
+
+This is source validation, not a binary release or the planned 72-hour workload.
+LM Studio completion shapes are fixture-tested; they were not revalidated against
+its live server in this pass. MLX and Osaurus scheduled checks now defer because
+their catalog responses do not prove residency. Request-level traffic visibility
+and unobserved external replacements in attached mode remain limitations.
+
 ## September 7, 2026: inference status and proxy deferral
 
 The [first implementation](docs/inference-recovery.md) adds regression coverage

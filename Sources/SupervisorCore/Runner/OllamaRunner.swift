@@ -7,6 +7,11 @@ import Foundation
 /// `/api/version` and `/api/ps` endpoints, the resident models JSON shape, and
 /// the stderr signatures that mark an out of memory death.
 public struct OllamaRunner: Runner {
+
+    public func validatesInferenceCompletion(_ data: Data) -> Bool {
+        InferenceCompletion.ollama(data)
+    }
+    public var reportsLoadedModels: Bool { true }
     public let name = "Ollama"
 
     private let binaryPath: String

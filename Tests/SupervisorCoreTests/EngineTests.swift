@@ -639,7 +639,7 @@ struct EngineTests {
             clientTrafficObserved: { true })
         makeServing(h)
         let deepURL = h.runner.deepReadinessRequest(model: "llama3:8b")!.url
-        h.http.set(deepURL, .ok(Data("{}".utf8)))   // inference works at first
+        h.http.set(deepURL, .ok(Data(#"{"done":true,"eval_count":1}"#.utf8)))   // inference works at first
 
         await h.engine.start()
         _ = await h.engine.stepOnce()                // shallow + deep ok -> healthy
@@ -662,7 +662,7 @@ struct EngineTests {
             deepProbe: DeepProbeConfig(model: "llama3:8b", interval: 60, timeout: 30))
         makeServing(h)
         let deepURL = h.runner.deepReadinessRequest(model: "llama3:8b")!.url
-        h.http.set(deepURL, .ok(Data("{}".utf8)))
+        h.http.set(deepURL, .ok(Data(#"{"done":true,"eval_count":1}"#.utf8)))
 
         await h.engine.start()
         _ = await h.engine.stepOnce()
@@ -693,10 +693,10 @@ struct EngineTests {
         #expect(StatusText.headline(await h.engine.snapshot(), now: h.clock.now) == "Inference check failed")
 
         makeServing(h)
-        h.http.set(deepURL, .ok(Data("{}".utf8)))
+        h.http.set(deepURL, .ok(Data(#"{"done":true,"eval_count":1}"#.utf8)))
         h.clock.advance(by: 61)
         _ = await h.engine.stepOnce()
-        #expect(StatusText.headline(await h.engine.snapshot(), now: h.clock.now) == "Healthy")
+        #expect(StatusText.headline(await h.engine.snapshot(), now: h.clock.now) == "Inference verified")
         #expect(await h.engine.snapshot().isHealthy)
         #expect(await h.engine.snapshot().inferenceRecoveryWithheld == false)
     }
@@ -765,7 +765,7 @@ struct EngineTests {
         #expect(await h.notifier.received.filter { $0.event == .inferenceRecoveryWithheld }.isEmpty)
     }
 
-    @Test func deepProbeBusyDoesNotRestartWithinBusyTimeout() async {
+    @Test func deepProbeQueueFullDefersWithoutMarkingTheAPIAsBusy() async {
         let h = makeHarness(deepProbe: DeepProbeConfig(model: "llama3:8b", interval: 60, timeout: 30))
         makeServing(h)
         let deepURL = h.runner.deepReadinessRequest(model: "llama3:8b")!.url
@@ -774,7 +774,8 @@ struct EngineTests {
         await h.engine.start()
         _ = await h.engine.stepOnce()
         #expect(await h.engine.snapshot().phase == .healthy)
-        #expect(await h.engine.snapshot().busy)
+        #expect(await h.engine.snapshot().busy == false)
+        #expect(await h.engine.snapshot().inference?.deferredReason == .queueFull)
         #expect(h.processes.terminateCount == 0)
 
         h.clock.advance(by: 61)
@@ -790,7 +791,7 @@ struct EngineTests {
         // previously let a 20-second timeout repeatedly cancel Ollama's load.
         makeServing(h, models: #"{"models":[]}"#)
         let deepURL = h.runner.deepReadinessRequest(model: "probe:tiny")!.url
-        h.http.set(deepURL, .ok(Data("{}".utf8)))
+        h.http.set(deepURL, .ok(Data(#"{"done":true,"eval_count":1}"#.utf8)))
 
         await h.engine.start()
         _ = await h.engine.stepOnce()
@@ -860,7 +861,7 @@ struct EngineTests {
             deepProbe: DeepProbeConfig(model: "probe:tiny", interval: 30, timeout: 20))
         makeServing(h, models: #"{"models":[{"name":"probe:tiny","size":42}]}"#)
         let deepURL = h.runner.deepReadinessRequest(model: "probe:tiny")!.url
-        h.http.set(deepURL, .ok(Data("{}".utf8)))
+        h.http.set(deepURL, .ok(Data(#"{"done":true,"eval_count":1}"#.utf8)))
 
         await h.engine.start()
         _ = await h.engine.stepOnce()

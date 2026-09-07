@@ -36,8 +36,8 @@ func runnerEndpoint(host: String, port: Int, path: String) -> URL {
 }
 
 /// A model the runner currently holds resident in memory, as reported by its own
-/// API. The supervisor surfaces this for situational awareness only. It never
-/// chooses, loads, or unloads a model.
+/// API. Catalog entries from adapters without residency evidence must not be
+/// presented as resident models by the supervisor.
 public struct ResidentModel: Sendable, Equatable {
     public var name: String
     public var sizeBytes: Int64?
@@ -178,8 +178,8 @@ public enum RunnerHeuristics {
 }
 
 /// A request that exercises real inference, for the optional deep readiness probe.
-/// The shallow readiness endpoint only proves the HTTP server answers; a deep probe
-/// proves the model runner is not wedged.
+/// The shallow endpoint proves HTTP reachability. A validated completion provides
+/// dated inference evidence; merely receiving HTTP 200 does not.
 public struct DeepProbeRequest: Sendable, Equatable {
     public var url: URL
     public var body: Data
@@ -219,10 +219,17 @@ public protocol Runner: Sendable {
     /// The endpoint a successful GET on which means "ready to serve".
     var readinessEndpoint: URL { get }
 
-    /// The endpoint reporting currently resident models.
+    /// Whether model-list membership proves residency, rather than catalog availability.
+    var reportsLoadedModels: Bool { get }
+
+    /// Validate a bounded, non-streaming completed inference response.
+    func validatesInferenceCompletion(_ data: Data) -> Bool
+
+    /// The endpoint reporting models (a catalog on adapters without residency evidence).
     var modelsEndpoint: URL { get }
 
-    /// Parse the resident models response body. Throws on malformed input.
+    /// Parse the model list. Membership only proves residency when
+    /// reportsLoadedModels is true. Throws on malformed input.
     func parseResidentModels(_ data: Data) throws -> [ResidentModel]
 
     /// The endpoint listing models a user can select for the optional deep probe.
@@ -245,6 +252,8 @@ public protocol Runner: Sendable {
 }
 
 public extension Runner {
+    var reportsLoadedModels: Bool { false }
+    func validatesInferenceCompletion(_ data: Data) -> Bool { false }
     /// Compatibility convenience for deliberate warm-up and callers that want
     /// the runner's normal residency policy.
     func deepReadinessRequest(model: String) -> DeepProbeRequest? {

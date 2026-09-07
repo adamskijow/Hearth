@@ -34,10 +34,12 @@ Each milestone produces one reviewable change or a small sequence of changes.
 Advance when its evidence is complete; elapsed time alone is not a completion
 condition. The 72-hour run is future validation work, not a scheduled task.
 
-The [first implementation](inference-recovery.md) reproduces the connection and
-health-reporting defects, adds persistent inference-failure status, and separates
-proxy deferral from runner busy-timeout recovery. The remaining state-model and
-traffic-visibility work is documented there; later milestones are still pending.
+The [inference implementation](inference-recovery.md) now separates API,
+completed inference evidence, current check activity, and recovery eligibility.
+It fixes the reproduced false recovery and stale-effect defects, validates
+completed responses, and explicitly defers adapters without residency evidence.
+The next implementation step is traffic visibility and its protocol tests;
+clean setup, the bounded workload, and release remain pending.
 
 ## 1. Reproduce before changing recovery policy
 
@@ -175,9 +177,10 @@ stop adding features. If recovery is useful but setup is cumbersome, prioritize
 setup. Defer new runner integrations, fleet management, model labs, paid
 packaging, and separate monitoring apps until the core milestones are done.
 
-## First implementation session
+## Next implementation session
 
-Reproduce a pooled connection through the proxy and extend the existing
-inference-failure/healthy-phase case. Include the busy-timeout interaction.
-Produce the evidence table and additive state proposal, then implement the
-smallest justified correction. No recruitment or outreach step precedes this work.
+Compare runner-native activity signals with a bounded HTTP request tracker.
+Use isolated clients to establish framing, reuse, streaming, cancellation, and
+bypass behavior before changing automatic recovery eligibility. Retain explicit
+partial visibility for unsupported or direct traffic. No recruitment or outreach
+step precedes this work.

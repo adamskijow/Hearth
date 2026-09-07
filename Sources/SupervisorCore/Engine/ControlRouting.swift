@@ -213,6 +213,10 @@ public enum ControlRouting {
             inferenceRecoveryWithheld: state.inferenceRecoveryWithheld,
             inferenceDeferredByProxy: state.inferenceDeferredByProxy,
             inferenceNotice: StatusText.inferenceNotice(state),
+            api: state.api,
+            inference: state.inference,
+            inferenceVerified: state.inference?.isVerified(asOf: now),
+            recovery: state.recovery,
             runner: runnerKind,
             mode: mode,
             rebootOnWedge: rebootOnWedge,
@@ -236,6 +240,7 @@ public enum ControlRouting {
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
         return (try? encoder.encode(payload)) ?? Data("{}".utf8)
     }
 
@@ -265,6 +270,16 @@ public enum ControlRouting {
         }
         if let category = state.lastRestartCategory {
             metric("hearth_last_restart", "Most recent restart category this session (also covers deliberate restarts), 1 for the active one.", "gauge", "1", labels: "{category=\"\(category)\"}")
+        }
+        if let inference = state.inference {
+            metric("hearth_inference_verified", "Completed inference evidence is current and within its configured interval.", "gauge", inference.isVerified(asOf: now) ? "1" : "0")
+            metric("hearth_inference_incident_open", "An inference failure awaits a validated completion.", "gauge", inference.incidentOpen ? "1" : "0")
+            if let success = inference.lastSuccessAt {
+                metric("hearth_inference_last_success_timestamp_seconds", "Time of last validated inference completion, possibly from a previous process.", "gauge", "\(Int(success.timeIntervalSince1970))")
+            }
+        }
+        if let recovery = state.recovery {
+            metric("hearth_inference_restart_eligible", "Policy permits inference recovery; proxy visibility remains partial.", "gauge", recovery.inferenceRestartEligible ? "1" : "0")
         }
         metric("hearth_deep_probe_configured", "Whether the deep readiness probe is configured.", "gauge", state.deepProbeConfigured ? "1" : "0")
         if let failedAt = state.deepProbeLastFailedAt {
@@ -318,6 +333,10 @@ private struct StatusPayload: Encodable {
     var inferenceRecoveryWithheld: Bool
     var inferenceDeferredByProxy: Bool
     var inferenceNotice: String?
+    var api: APIEvidence?
+    var inference: InferenceEvidence?
+    var inferenceVerified: Bool?
+    var recovery: RecoveryEvidence?
     var runner: String
     var mode: String
     var rebootOnWedge: Bool

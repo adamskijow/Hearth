@@ -14,6 +14,11 @@ import Foundation
 /// server and let it monitor and alert) is the reliable path, and is what the
 /// README recommends for this runner.
 public struct LMStudioRunner: Runner {
+
+    public func validatesInferenceCompletion(_ data: Data) -> Bool {
+        InferenceCompletion.openAI(data)
+    }
+    public var reportsLoadedModels: Bool { true }
     public let name = "LM Studio"
 
     private let binaryPath: String

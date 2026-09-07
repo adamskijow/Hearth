@@ -82,7 +82,7 @@ def run(binary):
             if runner.post():
                 self.reply(500, {"error": "controlled inference failure"})
             else:
-                self.reply(200, {"response": "ok", "done": True})
+                self.reply(200, {"response": "ok", "done": True, "eval_count": 1})
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()

@@ -9,6 +9,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Recovery waits for validated inference when an inference incident is open,
+  including after process replacement. Empty HTTP 200 responses cannot clear it.
+- Old effects cannot kill a child created during a notification await. Attached
+  stop/start resets evidence and immediately schedules a fresh check.
+- Deep HTTP 503 responses defer checks without invoking the shallow busy timeout.
+  Observed process death invalidates recent inference verification.
+
 - Open metrics-proxy connections now defer inference checks without entering
   the runner's HTTP 503 busy-timeout recovery path. Client connections are
   checked again after a failed inference probe before recovery is authorized.
@@ -18,6 +25,11 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   lifecycle `phase` retains its existing meaning.
 
 ### Changed
+
+- Added separate API, inference, and recovery evidence to status, with timestamps,
+  freshness, deferral reasons, ownership, and explicitly partial traffic visibility.
+- Scheduled inference checks require authoritative loaded-model evidence. MLX
+  and Osaurus catalogs are no longer treated as proof of residency.
 
 - Moved legacy Monitor packaging and its sandbox audit out of the default CI
   gate; maintainers can run them explicitly with `--legacy-monitor`.

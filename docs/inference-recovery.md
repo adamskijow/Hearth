@@ -1,74 +1,100 @@
 <!-- SPDX-License-Identifier: MIT -->
-# Inference recovery: first implementation
+# Inference evidence and recovery
 
 September 7, 2026. These changes are in source after v1.5.1; they are not a new
 binary release.
 
-## Reproduced behavior
+## Adversarial findings and corrections
 
-| Scenario | Before | First correction |
+The first patch separated proxy deferral from shallow busy-timeout recovery and
+kept withheld inference failures visible. An independent adversarial review then
+reproduced four remaining defects in isolated tests against that implementation.
+
+| Scenario | Reproduced behavior | Correction |
 | --- | --- | --- |
-| Repeated inference failures, no observed client traffic | Advisory fires, headline remains Healthy | Persistent failure headline, `healthy: false`, no forced restart |
-| Shallow success or unloaded model after that incident | Healthy headline hides unresolved inference failure | Warning persists until successful inference or a fresh supervision session |
-| Open proxy connection with 5-second polling and 60-second deep cadence | Intermediate polls reset the busy timer; checks remain skipped | Explicit proxy deferral, separate from runner busy |
-| Open proxy connection with 61-second polling and 60-second deep cadence | Busy timeout initiates recovery despite no runner-reported failure | No busy-timeout recovery from a connection count |
-| Client connects while a failing inference POST is pending | Preflight connection count can authorize recovery using stale evidence | Connection count checked again when the POST completes |
-| Stop/start while a failing POST is pending | Result can update inference bookkeeping for the old session | Old-session result discarded |
+| Manual restart during a down notification | Resumed old effects kill the new child | Check control generation across effect awaits; teardown precedes down notifications |
+| Repeated inference failure followed by respawn | First unconfirmed failure on replacement announces recovery | Preserve the incident until a validated inference completion |
+| Deep HTTP 503 with every poll deep-due | Shared busy timeout restarts without traffic evidence | Deep queue-full responses defer; only shallow busy uses the busy timeout |
+| Attached stop/start inside deep interval | New session skips its first check and retains the old failure time | Reset session evidence and scheduling in both modes |
 
-The first two regression tests were run against the previous implementation.
-They failed with three misleading-headline assertions and an unexpected
-termination in the 61-second polling case. The corrected tests pass. The fake
-clock covers 750 seconds without sleeping or touching a real runner.
+The review also identified permissive HTTP 200 validation and model catalogs
+being mistaken for residency. Automatic probes now require a runner adapter
+that reports loaded models: Ollama `/api/ps` or LM Studio's loaded-state list.
+MLX and Osaurus catalog membership does not prove residency, so scheduled
+inference checks are deferred for those adapters. Their catalogs are not shown
+as resident models. Deliberate model tests and client requests remain possible.
 
-## Current status contract
+A successful Ollama probe must have `done: true` and a positive integer
+`eval_count`. OpenAI-style completions require a finished choice and generated
+content or positive completion-token usage. Empty, malformed, unfinished, error,
+and oversized completion bodies cannot clear an incident. Validation decodes at
+most 64 KiB and does not retain response text in evidence.
 
-The lifecycle `phase` remains unchanged. New `/status` fields are additive:
+The second review also caught recent verification surviving an observed process
+exit. Death, teardown, and replacement now invalidate current verification while
+preserving historical timestamps. Stop/start begins a fresh evidence session. Attached mode cannot detect an
+external replacement that occurs entirely between observations.
 
-- `healthy`: lifecycle ready with no unresolved inference incident whose recovery
-  is withheld. It does not establish recent inference success.
-- `inferenceRecoveryWithheld`: confirmed inference checks failed and recovery
-  was withheld because client activity could not be ruled out.
-- `inferenceDeferredByProxy`: an open proxy connection deferred the check. The
-  connection may be idle; this is separate from a runner HTTP 503 response.
-- `headline` and optional `inferenceNotice`: display text used by the CLI and
-  browser. Clients should automate against typed fields.
+## Additive status contract
 
-The menu uses the same headline and notice. `hearth_healthy` and heartbeat pulses
-exclude unresolved withheld-recovery incidents. Two new gauges expose the
-inference flags. Existing phase-based consumers retain their prior semantics.
+Lifecycle `phase` retains its existing meaning. `/status` adds these objects:
 
-## Repeatable local check
+| Field | Meaning |
+| --- | --- |
+| `api` | `status`: unchecked, responding, busy, or unavailable; `checkedAt` is the shallow observation time |
+| `inference` | Configured `model`, `lastResult`, `lastCheckedAt`, `lastSuccessAt`, `lastFailureAt`, `validUntil`, `currentProcess`, `incidentOpen`, `activity`, and optional `deferredReason` |
+| `inferenceVerified` | Successful evidence from the current process, no unresolved incident, and still within the configured inference interval, evaluated at response time |
+| `recovery` | Managed/attached `ownership`, proxy `traffic` evidence, `trafficVisibility: partial`, `inferenceRestartEligible`, and optional `withheldReason` |
 
-Build Hearth, then run:
+Times are ISO 8601 UTC strings. Missing timestamps mean no such observation.
+Completed inference evidence and current activity are independent. Deferring a
+check cannot refresh an old success or erase a failure. HTTP 503 does not count
+as a completed inference failure or success. A single failed check opens an
+incident; two paced failures are still required before automatic recovery is
+considered. Shallow success, an unloaded model, and replacement alone cannot
+clear it. Recovery notifications wait for valid inference when that incident is
+open. A fresh stop/start explicitly begins a new observation session.
+
+The existing summaries remain:
+
+- `healthy`: lifecycle ready with no unresolved inference incident. It does not
+  establish recent inference success; use `inferenceVerified` for that.
+- `inferenceRecoveryWithheld`: confirmed checks failed and the recovery policy
+  withheld action. Attached mode never owns or restarts the runner.
+- `inferenceDeferredByProxy`: open connections deferred the check, even if idle.
+- `headline` and `inferenceNotice`: shared display text; automate against typed
+  fields. The headline says **API responding** without current verification and
+  **Inference verified** after a valid completion. Failures take precedence.
+
+The menu, CLI, and browser share this wording. `hearth_healthy` and heartbeat
+pulses exclude unresolved inference incidents. Metrics also expose current
+verification, incident state, last successful completion, and policy eligibility.
+Existing phase-only consumers retain their prior semantics.
+
+## Repeatable checks
 
 ```sh
+./scripts/test.sh --filter 'EngineTests|InferenceEvidenceTests|ControlRoutingTests|StatusTextTests'
 python3 scripts/validate-inference.py
 ```
 
-The gate launches one temporary headless Hearth in attached mode against a fake
-HTTP/1.1 runner. It checks real API, CLI, metrics, heartbeat, and TCP relay
-behavior. After a complete response it keeps a pooled client connection open
-beyond the busy timeout, checks that no inference probe or recovery occurs,
-then verifies that successful inference clears the incident after closure.
+Build Hearth before running the Python gate. It launches a temporary headless
+Hearth against a fake HTTP/1.1 runner and checks API, CLI, metrics, heartbeat, and
+TCP relay behavior. It holds a pooled connection beyond the busy timeout, checks
+that no probe or recovery occurs, then checks validated recovery after closure.
 All configuration, data, ports, and processes are isolated from normal installs.
+The unit regressions use a fake clock and controlled process/HTTP seams.
 
-## Next state-model change
+## Next step: traffic evidence
 
-The full separation proposed in the product plan remains to be implemented:
+The TCP relay still counts connections rather than requests. Idle pooling and
+stalled requests can suppress checks. One observed connection cannot establish
+that all clients use the proxy; direct requests remain invisible. Policy
+eligibility is not a guarantee that recovery will preserve every client request.
 
-| Surface | Proposed evidence |
-| --- | --- |
-| API | Responding, unavailable, or unchecked, with the observation time |
-| Inference | Model, last completed result, last success/failure times, and the current check or deferral reason |
-| Recovery | Process owner, supported failure types, and the reason recovery is available or withheld |
-
-Store the last inference result separately from the current check activity. A
-deferred check must not overwrite an unresolved failure or make an old success
-look fresh. Keep the fields introduced here as compatible summaries when adding
-that structured evidence.
-
-The TCP relay still counts connections rather than requests. This patch prevents
-connections from becoming false busy-timeout failures; it does not solve idle
-pooling, stalled-request diagnosis, or direct-client bypass. One observed
-connection cannot establish complete traffic visibility. Protocol-aware or
-runner-native activity evidence needs its own tests before changing that policy.
+Before expanding the relay, compare runner-native activity evidence with a
+bounded HTTP implementation. Test framing, keep-alive reuse, streaming, silent
+prefill, cancellation, malformed responses, and client bypass. Preserve the
+conservative fallback for unsupported traffic. Then complete a clean setup path
+and the controlled local workload milestones in [the product plan](product-plan.md).
+No recruitment or outreach is required.

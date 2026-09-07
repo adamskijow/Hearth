@@ -11,6 +11,10 @@ import Foundation
 /// argument, preserving spaces in a local path. Config admission prevents a
 /// managed launch when it is absent; attached mode never launches this spec.
 public struct MLXRunner: Runner {
+
+    public func validatesInferenceCompletion(_ data: Data) -> Bool {
+        InferenceCompletion.openAI(data)
+    }
     public let name = "mlx_lm"
 
     private let binaryPath: String

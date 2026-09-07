@@ -276,10 +276,11 @@ struct SupervisorMachine {
         failureTimestamps.append(now)
         pruneFailureWindow(now: now)
 
-        var effects: [MachineEffect] = [.emit(.down(reason))]
-        if killNeeded {
-            effects.append(.kill)
-        }
+        // Teardown precedes notification I/O. An awaited down alert must not
+        // leave a gap between the engine's traffic check and the kill effect.
+        var effects: [MachineEffect] = []
+        if killNeeded { effects.append(.kill) }
+        effects.append(.emit(.down(reason)))
 
         if failureTimestamps.count >= config.crashLoopThreshold {
             // Crash loop: stop thrashing, retry slowly, keep probing.

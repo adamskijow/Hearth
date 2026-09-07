@@ -4,10 +4,15 @@
 
 Security fixes land on the latest 1.x release line.
 
-| Version | Supported |
-|---------|-----------|
-| 1.x     | yes       |
-| < 1.0   | no        |
+| Product/version | Supported |
+|-----------------|-----------|
+| Full Hearth 1.x | yes |
+| Full Hearth < 1.0 | no |
+| Hearth Monitor, all versions | no; retired September 7, 2026 |
+
+Monitor artifacts remain available for historical reference. There are no
+planned Monitor releases or routine support. Report vulnerabilities in shared
+code through the private channel below so they can be assessed for full Hearth.
 
 ## Reporting a vulnerability
 
@@ -23,26 +28,16 @@ you prefer to stay anonymous.
 
 ## Security posture
 
-A few things worth knowing when assessing Hearth:
+Hearth's main security boundaries:
 
-- **No third-party dependencies.** Hearth builds against Apple system frameworks
-  only, so the supply-chain surface is effectively empty.
-- **Signed and notarized.** Releases are Developer ID signed with the Hardened
-  Runtime enabled and notarized by Apple. The App Sandbox is intentionally off,
-  because supervising another process is incompatible with the sandbox.
-- **The control endpoint is a control surface, not a public API.** It refuses to
-  start without a bearer token, compares the token in constant time, and should be
-  bound to localhost or a private interface (a Tailscale address is ideal), never
-  a public one. Browser responses are non-cacheable and non-frameable, bearer
-  failures are throttled by peer, and simultaneous connections are capped.
-  `GET /` and `GET /healthz` are intentionally unauthenticated and reveal nothing
-  about the runner. The browser token lasts only for its current tab.
-- **Reboot escalation runs as root and can reboot the Mac.** It is opt-in and off
-  by default, and only takes effect when Hearth runs as the headless
-  LaunchDaemon. When enabled it is guarded against reboot loops by a minimum
-  interval, a daily cap, and a kernel boot-time backstop. Review
-  `RebootEscalation` before enabling it.
-- **The experimental reboot helper authenticates the actual client, not only its
-  login UID.** Installation snapshots a Developer ID designated requirement into
-  a root-owned file. Each request must come from the configured executable path
-  and a live audit token satisfying that requirement; ad-hoc clients are refused.
+- **Apple frameworks only.** The Swift package has no third-party dependencies.
+- **Signed and notarized releases.** Hardened Runtime is enabled. Full Hearth runs
+  outside App Sandbox to supervise another process.
+- **Private control endpoint.** Bearer tokens use constant-time comparison.
+  Peer throttling and connection caps limit abuse. Bind to localhost or a VPN.
+  `GET /` and `GET /healthz` expose the shell page and Hearth liveness; runner
+  state stays behind authentication. Browser tokens live for one tab.
+- **Guarded reboot escalation.** This opt-in root feature enforces a minimum
+  interval, daily cap, and boot-time backstop.
+- **Code-bound reboot helper.** The experimental helper checks executable path,
+  Developer ID requirement, audit token, user ID, and rate limit for every request.

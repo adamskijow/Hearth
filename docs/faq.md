@@ -1,156 +1,117 @@
 <!-- SPDX-License-Identifier: MIT -->
 # FAQ
 
-Plain answers to the questions people have before and just after installing.
-The [README](../README.md) has the tour; [Troubleshooting](troubleshooting.md)
-has the fixes.
-
 ## Is Hearth affiliated with Ollama?
 
-No. Hearth is an independent, third-party project. It is not affiliated with,
-endorsed by, or supported by Ollama.
+Hearth is an independent community project. Ollama and other runner vendors do
+not develop or support it.
 
-## Is Hearth for me?
+## Who is Hearth for?
 
-If you run models locally with Ollama (or LM Studio or mlx_lm) and you want them
-to stay up without babysitting (for a chat app you use daily, a home-lab server,
-or anything that talks to `localhost:11434`), yes. Hearth restarts the runner
-when it crashes, notices when it is running but no longer answering, keeps the
-Mac awake while it serves, and alerts you when something breaks.
+Hearth serves people who rely on a local AI runner and want unattended recovery.
+It watches Ollama, LM Studio, `mlx_lm`, or Osaurus, keeps the Mac awake, and sends
+alerts. The runner still owns models and inference.
 
-Hearth does not run, install, or download models. It stands behind the runner
-you already use.
+Full Hearth requires Apple silicon and macOS 14 or later. Standalone
+[Hearth Monitor is retired](hearth-monitor.md), including its Intel support.
 
-## Ollama keeps crashing or not responding on my Mac. Does Hearth fix that?
+## What failures can it recover?
 
-Probably, if any of these sound familiar:
+Managed mode handles process exits and API hangs. An optional one-token probe can
+detect inference hangs behind a responsive API. GPU or driver hangs that survive
+a process restart can use the opt-in reboot ladder on a headless Mac.
 
-- Ollama **stops responding after a while** and you restart it by hand.
-- The server is "up" but **requests hang forever**, with nothing useful in the logs.
-- Ollama **dies overnight on a Mac mini** (or any always-on Mac) and nothing brings
-  it back.
-- It **falls back to CPU, or the GPU hangs**, and generations crawl for hours.
-- You want to run `ollama serve` as an **always-on service on Apple Silicon** that
-  survives crashes, sleep, and reboots.
-- `launchd` or `brew services` restart the process, but **not when it is wedged**
-  (still running, no longer answering).
+See [How Hearth works](how-it-works.md) for the recovery path and
+[Known limitations](limitations.md) for its boundaries.
 
-Hearth watches whether Ollama actually answers, not just whether the process is
-alive, so it catches the "running but not responding" case those tools miss, and it
-keeps the Mac awake while it serves. [Keeping Ollama running on
-macOS](keep-ollama-running-on-macos.md) walks through the causes and the manual
-fixes to try, and [How it works](how-it-works.md) has the mechanism and a real
-GPU-crash recovery.
+## How do managed and attached modes differ?
 
-## Does it work on a normal Mac, or only a server?
+- **Managed:** Hearth starts, stops, and restarts the runner.
+- **Attached:** another app or service owns the runner; Hearth watches and alerts.
 
-Full Hearth requires an Apple silicon Mac running macOS 14 or later: a desktop,
-a Mac mini in a closet, or a laptop. Hearth Monitor's attached runner checks are
-also available on Intel. The docs sometimes say "headless," which just means a Mac nobody is
-logged into at the moment, not a special kind of machine. One thing to know on
-a laptop: while the runner is serving, Hearth deliberately keeps the Mac from
-idle-sleeping, which uses battery if it is unplugged.
+Use attached mode with Ollama.app and LM Studio. Use managed mode for a Homebrew
+Ollama installation after stopping `brew services`. Managed `mlx_lm` also needs a
+startup model. The Preferences labels are **Hearth starts runner** and **Watch
+existing runner**.
 
-## I use the official Ollama app. What do I do?
+## How do I know it works?
 
-Install Hearth normally. The Ollama app starts its own server, and Hearth will
-notice that and offer a one-click fix in its menu ("Watch the Existing Runner
-Instead") so Hearth watches the app's server rather than starting a second one.
-That is attached mode; details in the [Ollama setup guide](ollama.md).
+`hearth doctor` checks setup, and `hearth status` reports the supervisor's current
+state. The default health check proves API responsiveness. Verify actual
+generation with your workload and the optional inference check in Preferences.
 
-## What do "managed" and "attached" mean?
+In the current release, repeated inference failures can leave the phase
+**Healthy** while Hearth alerts that recovery was withheld. A green phase alone
+does not prove inference is working. See [known limitations](limitations.md).
 
-The two words that appear in the config and CLI, in plain terms:
+For an isolated recovery demonstration, use `make demo`. It supplies its own fake
+runner, configuration, and data directory.
 
-- **Managed:** Hearth starts the runner and restarts it when it fails. The
-  default, and what you want if nothing else starts Ollama for you.
-- **Attached:** something else starts the runner (the Ollama app, `brew
-  services`), and Hearth only watches it and alerts you. In this mode Hearth
-  never starts or stops the runner itself.
+## What happens during a crash loop?
 
-The Preferences window calls these "Hearth starts runner" and "Watch existing
-runner"; they are the same two settings.
+Hearth backs off after repeated failures, reports **Crash loop**, and keeps
+probing. It retries slowly until the underlying problem clears. Open **Logs** or
+run `hearth logs -n 100` to find the cause.
 
-## How do I know it is working?
+## Must my apps change?
 
-Three checks, any one is enough:
+Apps continue using the runner's normal address. A short retry handles the
+restart window for requests safe to retry. Automatic inference recovery requires
+client traffic through the optional metrics proxy, which changes the client
+endpoint. Apps that need startup ordering can use:
 
-1. The menubar flame has no warning badge, and clicking it shows **Healthy**.
-2. `hearth status` in Terminal shows the health, uptime, and loaded models.
-3. `hearth doctor` in Terminal ends with `0 errors, 0 warnings.`
-
-To see it actually save you: quit Ollama however you like, and watch Hearth
-bring it back.
-
-## What happens when the runner crashes?
-
-Hearth notices within seconds, sends a "Runner down" notification, and restarts
-it. If it keeps failing, Hearth waits a little longer between each attempt, and
-after several rapid failures it slows right down (the menu says "Crash loop")
-and keeps retrying until the underlying problem clears; it never just gives up
-silently. [Troubleshooting](troubleshooting.md) covers reading the log when
-that happens.
-
-## Do I have to change my apps or models?
-
-No. Your apps keep talking to the runner at the same address they always have;
-several apps and models share the one runner. Hearth changes nothing about how
-inference works; it only keeps the server process alive.
-
-## Does Hearth send my data anywhere?
-
-No. Prompts, model output, and models never leave the machine through Hearth.
-The only things it ever sends are the short status alerts you explicitly
-configure (macOS notifications, an ntfy topic for your phone, or a webhook),
-and those contain status text like "Runner down", nothing more.
-
-The one exception is opt-in and off by default: `alertsIncludeLogTail` appends
-the runner's last few log lines to down alerts so the alert says why. Log
-lines are runner content (file paths, model names, and with debug modes even
-request text), and they travel to whatever notifier you configured, including
-the public ntfy.sh server unless you self-host. `hearth doctor` warns about
-that combination; leave the flag off if in doubt.
-
-## Do I need ntfy, Tailscale, or the "control endpoint"?
-
-No; all three are optional extras for checking on a Mac you are away from. The
-control endpoint is a small password-protected status page you can open from a
-phone; ntfy pushes alerts to a phone; Tailscale is one safe way to reach either
-from outside your home network. A single Mac you sit at needs none of them.
-
-## Can Hearth supervise two runners at once (Ollama and mlx, say)?
-
-Yes, with two Hearth instances: one per runner, each with its own config. The
-single-instance lock is keyed to the config file, so two configs coexist:
-
-```
-HEARTH_CONFIG=~/.config/hearth-mlx.json hearth --headless
+```sh
+hearth wait-ready && start-my-app
 ```
 
-Give the second config its own `runner`, `port`, and (if enabled)
-`controlPort`. Each instance supervises, alerts, and serves status for its own
-runner; there is no cross-runner orchestration, by design.
+See [Integrating with Hearth](integrating.md).
 
-## I am going on vacation. Can I quiet the alerts without losing my setup?
+## What leaves the Mac?
 
-Yes: Pause Notifications in the menu (or `"notificationsPaused": true` in the
-config) silences local, ntfy, and webhook alerts without touching their
-settings. Hearth keeps supervising and logging events; unpause when you are
-back.
+Hearth sends health checks to the configured runner and, when enabled, relays
+client traffic through its metrics proxy. A remote runner receives that traffic.
+Configured ntfy or webhook alerts receive short status messages. The optional `alertsIncludeLogTail` setting
+also sends a bounded runner-log excerpt, which may contain paths, model names, or
+request fragments. `hearth doctor` warns when that setting uses public ntfy.sh.
 
-## My Mac runs with nobody logged in. Does Hearth still work?
+See the [privacy policy](../PRIVACY.md).
 
-Yes, that is its favorite habitat. `hearth setup` installs a login agent so
-Hearth starts at login, and [Running headless](running-headless.md) covers the
-fully unattended setup (starting before login, and the optional
-reboot-as-last-resort recovery).
+## Do I need ntfy, Tailscale, or remote control?
+
+They are optional. ntfy pushes phone alerts. Tailscale provides private remote
+access. The control endpoint serves authenticated status and runner controls.
+
+## Can one Mac supervise several runners?
+
+Run one Hearth instance per runner, each with a separate config, data directory,
+runner port, and any enabled control and metrics-proxy ports:
+
+```sh
+HEARTH_CONFIG="$HOME/.config/hearth-mlx.json" \
+HEARTH_DATA_DIR="$HOME/Library/Application Support/Hearth-MLX" \
+hearth --headless
+```
+
+The single-instance lock is scoped to the config file. `HEARTH_DATA_DIR` also
+isolates process-recovery records and logs; separate configs alone still share
+the default runtime data. Configure additional instances explicitly rather than
+installing multiple copies of the canonical login agent.
+
+## Can I pause alerts?
+
+**Pause Notifications** silences local, ntfy, and webhook delivery while health
+checks and event logging continue.
+
+## Does Hearth work before login?
+
+`hearth install-agent` starts headless supervision after login. A root
+LaunchDaemon can start before login; follow [Running headless](running-headless.md).
 
 ## How do I uninstall it?
 
-```
+```sh
 brew uninstall --cask hearth
 ```
 
-Add `--zap` to also delete Hearth's config and logs. If you installed the
-headless extras, `hearth uninstall-agent` removes the login agent first. Ollama
-and your models are untouched.
+Add `--zap` to remove Hearth's config and logs. Run `hearth uninstall-agent`
+first if you installed the login agent. Runner applications and models remain.

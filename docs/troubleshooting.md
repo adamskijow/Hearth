@@ -1,114 +1,56 @@
 <!-- SPDX-License-Identifier: MIT -->
 # Troubleshooting
 
-Run `hearth doctor` first; it catches most of these and tells you which. The menu
-also shows a "config issues" line when it finds any.
+Run `hearth doctor` first. It checks configuration, binary paths, ports,
+permissions, and competing process managers.
 
-- **The menubar flame never goes green / "runner binary not found."** Hearth is
-  looking for the runner at the default path and not finding it. Set
-  `ollamaBinaryPath` (or `lmStudioBinaryPath` / `mlxBinaryPath`) to the output of
-  `which ollama`, in Preferences or the config. `hearth doctor` reports the path
-  it tried.
-- **LM Studio keeps restarting (down, restarting, down).** Managed mode does not
-  work with LM Studio: `lms server start` exits immediately. Start LM Studio's
-  server yourself, then run `hearth mode attached`; Hearth will watch it.
-- **I use the official Ollama app.** The app already starts Ollama's server. Set
-  `runner` to `ollama` and run `hearth mode attached` so Hearth watches that server
-  instead of launching a second one. See [Ollama setup with Hearth](ollama.md).
-- **Managed mlx_lm does not start and Hearth reports `mlxModel`.** Current
-  `mlx_lm.server` releases require `--model` at startup. In Preferences, select
-  mlx_lm and **Full Hearth**, then enter a Hugging Face repository ID or local
-  model directory in **Model or Hugging Face repo**. In JSON, set `mlxModel`.
-  Hearth deliberately refuses to launch an incomplete managed configuration;
-  attached mode does not require the setting.
-- **mlx_lm downloads a model on first start.** A Hugging Face repository ID may
-  need a one-time network download and can take longer than a warm restart. Use
-  a local model directory when the machine must start without network access.
-- **Login item or notifications do nothing.** Those need the packaged, signed app
-  (`make install` or the cask), not `swift run Hearth`. Unbundled, they degrade
-  gracefully and the menu says so.
-- **`hearth status` says the control endpoint is unreachable.** Enable it
-  (`controlEnabled`, with a `controlToken`), and check `controlHost`/`controlPort`.
-  Bind it to localhost or a Tailscale address, never a public interface.
-- **Another computer can't reach the runner (connection refused).** By default
-  Ollama binds to `127.0.0.1`, so it is reachable only from the Mac it runs on. Set
-  `host` to `0.0.0.0` to open it to your LAN: managed Hearth then launches the runner
-  bound correctly, with no `launchctl setenv OLLAMA_HOST` ritual. Open the firewall
-  for the port, then connect from the other machine to `http://<this-mac-lan-ip>:11434`.
-  `hearth doctor` prints the exact URL and the firewall reminder, and the menu shows
-  a "Reachable at" line once it is open. For access beyond your LAN, use Tailscale
-  rather than exposing the port. To carry hand-tuned runner settings
-  (`OLLAMA_LOAD_TIMEOUT` and the like) along with the bind change, set them in
-  `runnerEnv` so they live in the config instead of a launchd plist.
-- **A stray `ollama serve` is running after a restart.** Hearth records the
-  process group it owns and sweeps it on the next launch. If you deleted
-  `runner-state.json` by hand, that record is gone; kill the stray once and let
-  Hearth own the next one.
-- **The runner keeps restarting and the state churns (managed mode).** Something
-  else is also managing the runner and fighting Hearth over it, most often
-  `brew services`. `hearth doctor` and the menu flag this; run `hearth mode
-  attached` if brew should keep owning Ollama, or `brew services stop ollama` so
-  Hearth is the sole supervisor. (Two Hearths can also collide; the single-instance
-  guard handles that, but a non-Hearth manager needs stopping.) Note that
-  `hearth mode` only edits the config: the running Hearth keeps fighting until you
-  reload it (Reload Config in the menu, or `killall -HUP Hearth`).
-- **The HTTP server answers but generations hang.** The shallow probe only proves
-  the API answers. Set `probeModel` to a small model you have already pulled so
-  Hearth periodically runs a one-token deep probe and catches inference-level
-  failures too. For automatic restart after a confirmed inference failure, enable
-  the metrics proxy and point every client at its port. Without that traffic
-  visibility Hearth alerts but does not risk interrupting an unseen long request.
-- **The menu says "Crash loop" (or you got a "Runner failing" alert).** The runner
-  failed several times in a row right after starting, so Hearth stopped restarting
-  it rapidly and now retries slowly. Hearth has not given up: the moment the
-  underlying problem clears, it recovers on its own. To find the problem, click
-  **Open Logs** in the menu and read the last lines of `runner.log`: the usual
-  causes are a model too large for the Mac's memory (the log ends in an
-  out-of-memory error), another process holding the port (`hearth doctor` flags
-  this), or a broken runner install after an upgrade. Fix the cause and Hearth
-  brings it back; **Restart** in the menu retries immediately.
-- **The status shows "spawn failed" / "No such file or directory" /
-  "Permission denied."** Hearth tried to launch the runner and the launch itself
-  failed, so the path in the config points at something missing or not executable.
-  Run `hearth doctor` (it reports the path Hearth tried and the path it detected),
-  then fix the binary path in Preferences (the Detect button finds the usual
-  install locations).
-- **The activity log says "stuck (still running, but not answering)."** The
-  runner's process was alive but its API stopped answering in time: the hang
-  (sometimes called a wedge) that Hearth exists to catch. Hearth restarts the
-  runner when this happens; if it happens often, the
-  [Ollama setup guide](ollama.md) covers deep probes, and a recurring hang after
-  heavy load is usually the runner or GPU, not Hearth.
-- **"Runner down" and "Runner recovered" alternate while an Ollama probe model
-  loads.** Update Hearth. Current releases never cold-load an idle model during
-  a scheduled health check. Deep recovery remains active once real use makes the
-  configured model resident. Older builds could cancel a slow load, destabilize
-  Ollama's scheduler, and then mistake the resulting API stall for a wedge.
-- **The runner keeps failing and my phone receives repeated down alerts.** Update
-  Hearth. One incident now sends one down alert regardless of how many recovery
-  attempts fail; each attempt remains visible in the event log, and crash-loop
-  escalation is still announced separately.
-- **A big model keeps crashing the runner (or the GPU) on load.** A model too
-  large for the Mac's unified memory dies as it loads, often as an
-  out-of-memory kill. Hearth restarts it, but if `warmModelsAfterRestart` is on
-  it will NOT reload a model whose load just crashed the runner (that would
-  crash the GPU again); it leaves the runner idle-but-alive and alerts "Models
-  not reloaded" so you can switch to a smaller model or lower the context size.
-  If the same model does this repeatedly (by default twice within 30 minutes),
-  Hearth stops guessing and says so directly: a "Model likely too large" alert
-  names the model, the menu shows a warning, and `/status` lists it under
-  `oversizedModels`, so you know exactly which model to swap. Tune or disable
-  this with `modelOOMThreshold` and `modelOOMWindowSeconds`.
-  To have Hearth cycle the runner pre-emptively as memory creeps, before a hard
-  crash, set `runnerMemoryLimitMB` to a ceiling above what your good models
-  need. Note that Ollama runs language and vision (image-reading) models only;
-  it does not do image generation, so a text-to-image model is not something to
-  point Hearth at.
-- **Phone alerts (ntfy) or webhooks stopped arriving.** Delivery failures are
-  logged, one line per alert, to Hearth's stderr: `Hearth: ntfy alert to
-  <server> failed: ...` (or `webhook alert to <host> failed`). For the menubar
-  app that lands in Console.app (search "Hearth"); for the headless daemon it
-  is in the launchd log path from its plist. A repeating line means a
-  misconfigured endpoint (wrong server, 401, firewall), and it repeats on
-  every alert until fixed, so a long-broken endpoint also makes that log
-  noisy. Preferences has a "Send test notification" button to verify a fix.
+## Startup and ownership
+
+- **Runner binary missing:** set the runner's binary path in Preferences. The
+  **Detect** button and `hearth doctor` show common locations.
+- **LM Studio keeps restarting:** start its server in LM Studio, then run `hearth
+  mode attached` and reload Hearth.
+- **Ollama.app is running:** use attached mode so Ollama.app retains ownership.
+- **Managed `mlx_lm` reports `mlxModel`:** enter a Hugging Face repository ID or
+  local model directory under **Startup model**. First use may download the model.
+- **Managed state keeps cycling:** stop the competing manager, often `brew
+  services`, or switch Hearth to attached mode. Reload after `hearth mode` changes.
+- **Spawn failed or permission denied:** correct the configured binary path and
+  executable permissions.
+
+## Health and recovery
+
+- **HTTP works but generation hangs:** configure `probeModel`. Enable the metrics
+  proxy and route clients through it for automatic deep-probe recovery.
+- **Crash loop:** inspect **Open Logs** or `hearth logs -n 100`. Common causes are
+  a busy port, broken runner install, or model memory pressure.
+- **Stuck (still running, but not answering):** the process survived while its API
+  timed out. Hearth restarts managed runners after confirmation.
+- **A large model repeatedly crashes:** choose a smaller quantization or context.
+  `oversizedModels` and the **Model likely too large** alert identify repeated
+  memory-related failures. Tune `modelOOMThreshold`, `modelOOMWindowSeconds`, or
+  `runnerMemoryLimitMB` if needed.
+- **A stray managed runner remains:** relaunch Hearth so it can sweep the recorded
+  process group. Deleting `runner-state.json` removes that recovery record.
+
+## Network and remote access
+
+- **Another computer cannot connect:** set `host` to a trusted LAN address or
+  `0.0.0.0`, allow the runner port through the firewall, and use the URL from
+  `hearth doctor`. Prefer Tailscale for access beyond the LAN.
+- **Control endpoint unreachable:** enable `controlEnabled`, set a token, and
+  verify `controlHost` and `controlPort`. Bind it to localhost or a private
+  interface.
+- **ntfy or webhook alerts fail:** search Console for `Hearth: ntfy alert` or
+  `Hearth: webhook alert`. Preferences includes **Send test notification**.
+
+## macOS integration
+
+- **Login item or notifications fail in a source run:** install the packaged app
+  with `make install` or Homebrew. macOS services require an app bundle and
+  signature.
+- **No local notification in headless mode:** use ntfy, a webhook, or heartbeat;
+  Notification Center needs a logged-in desktop session.
+
+Configuration details are in the [reference](configuration.md). Ollama ownership
+examples are in the [Ollama guide](ollama.md).

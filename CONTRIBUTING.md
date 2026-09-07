@@ -1,13 +1,17 @@
 <!-- SPDX-License-Identifier: MIT -->
 # Contributing to Hearth
 
-Thanks for your interest. Hearth is a small, focused tool: a macOS supervisor that
-keeps a local LLM runner alive. It is an availability layer, not an inference
-layer, and it stays that way.
+Hearth is a focused macOS supervisor for local AI runners. Contributions should
+improve availability, recovery, diagnostics, security, or their user experience.
+
+Standalone Hearth Monitor is retired. Its source and tests remain for historical
+reference; new Monitor features and App Store submissions are out of scope.
+Full Hearth's attached monitoring mode remains supported. Current work is listed
+in the [product plan](docs/product-plan.md).
 
 ## Building and testing
 
-It is a plain Swift Package; no Xcode project.
+Hearth builds as a Swift Package.
 
 ```
 make build        # debug build
@@ -28,8 +32,7 @@ make smoke        # drives the agent against scripts/fake-runner.py
 make validate     # drives the agent against a real `ollama serve`
 ```
 
-There is no hosted-only step: the same `scripts/ci.sh` runs locally and on
-GitHub Actions.
+GitHub Actions and local development use the same `scripts/ci.sh`.
 
 ## Architecture rules
 
@@ -38,14 +41,14 @@ The split is the point. Keep it.
 - **`SupervisorCore` is pure.** No AppKit, no SwiftUI, no real `sleep`, no direct
   process or socket calls. All I/O is behind protocols (`SupervisorClock`,
   `ProcessControlling`, `HTTPClient`, `Notifier`, `PowerManaging`,
-  `MetricsProviding`). This is what makes the restart policy testable with fakes
-  and no real time. New decision logic goes here, behind a seam if it needs I/O.
+  `MetricsProviding`). These seams make restart policy testable with fakes and
+  simulated time. New decision logic goes here.
 - **The `Hearth` executable does the I/O.** posix_spawn and process-group
   teardown, the control server, IOKit, SMAppService, the menubar and Preferences.
   Pure helpers that can be unit tested belong in `SupervisorCore` (see
   `StatusText`, `RunnerLocation`, `ConfigLoading`, `ConfigDiagnostics`).
-- **Do not weaken or delete a test to make it pass.** Fix the code, or correct
-  the test to match reality and say why.
+- **Preserve test intent.** Fix the code, or explain why reality requires a test
+  correction.
 
 ## Style and conventions
 
@@ -67,7 +70,5 @@ Never fabricate a result; if something is unverified, say so.
 
 ## Releasing
 
-Releasing is local and documented in the README's Releasing section:
-`scripts/release.sh` signs (Developer ID), notarizes, and packages a DMG and a
-zip. The Mac App Store is intentionally not a target, because the App Sandbox
-forbids supervising another process.
+The [development guide](docs/development.md#full-hearth-release) covers full
+Hearth's Developer ID release path. Monitor publication scripts are disabled.

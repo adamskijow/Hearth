@@ -1,10 +1,7 @@
 # Hearth validation report
 
-This records validating Hearth against a real Ollama for the first time (it had
-only ever run against a fake Python runner), the defects that surfaced, the fixes,
-and what remains unverified. M4 added scenarios 1 through 5 (lifecycle and process
-group teardown); M5 added scenario 6 (hard-crash orphan recovery). Evidence is raw
-command output, not prose claims.
+This dated evidence log records real-runner failures, fixes, and remaining gaps.
+M4 added scenarios 1 through 5; M5 added hard-crash orphan recovery.
 
 Reproduce with `./scripts/validate-real.sh` (requires a real Ollama and a small
 pulled model). The script exits non-zero on any failed scenario.
@@ -16,14 +13,13 @@ pulled model). The script exits non-zero on any failed scenario.
 - Ollama 0.30.11 (Homebrew, `/opt/homebrew/bin/ollama`).
 - Model: `qwen2.5:0.5b` (Q4_K_M, 397 MB on disk).
 - Unsigned debug build (`swift build`); no signing or notarization was attempted.
-- Gatekeeper note: the dev binary is run directly from `.build`, so it is not
-  quarantined and Gatekeeper does not gate it; a distributed `.app` would need
-  Developer ID signing and notarization (out of scope for this phase).
+- Gatekeeper was outside this debug-build test. Release validation covers
+  Developer ID signing and notarization separately.
 
 ## Ground truth: the real process tree
 
-`ollama serve` forks a separate `llama-server` child once a model loads. Both
-share a process group. This is the crux of the teardown defect.
+`ollama serve` forks a `llama-server` child when a model loads. Both share a
+process group, which caused the teardown defect.
 
 ```
   PID  PPID  PGID COMM
@@ -68,9 +64,8 @@ PASS: readiness flagged not-Healthy while PID 79652 was still alive (state T); a
 PASS: recovered to Healthy with a new serve pid 79777
 ```
 
-`state=T` is the kernel's "stopped" state: the PID is alive, so a liveness check
-passes, but readiness (the HTTP probe) times out and correctly reports Down. This
-is the core thing Hearth claims to do, now shown on a real process.
+`state=T` is the kernel's "stopped" state: the PID is alive, while the HTTP probe
+times out and reports Down. This verifies readiness detection on a real process.
 
 ### The defect, before the fix
 
@@ -167,11 +162,9 @@ residual gap is only the window between the crash and the next launch.
 
 ## Live GPU-crash test
 
-Scenarios 1 through 6 induce failures synthetically (SIGKILL, SIGSTOP, a hard kill
-of Hearth). This is the real thing, on 2026-07-02: a GPU crash caused by generating
-images in a separate app while Ollama served a 14 GB model. It is the first
-observation of Hearth's readiness detection against an actual GPU wedge rather than
-a SIGSTOP stand-in, and the run walked Ollama down the full failure ladder.
+Scenarios 1 through 6 use signals. On 2026-07-02, image generation caused a GPU
+crash while Ollama served a 14 GB model. Hearth observed the real inference wedge
+and full failure ladder.
 
 Setup: Ollama 0.30.11 serving `qwen2.5:14b-instruct` (14 GB resident, 32K context).
 Two instruments, both independent of the machine's live managed daemon (which was a
@@ -235,7 +228,7 @@ same episode through down, failing, and healthy.
   serve"` check, which confirmed the real restart 74418 -> 16645. An earlier read
   of the streaming pids as a restart was wrong and was corrected.
 - One machine, one run; not a scripted, repeatable gate like scenarios 1 through 6.
-- This does NOT close the out-of-memory classification gap below. A jetsam SIGKILL
+- The run leaves the out-of-memory classification gap below. A jetsam SIGKILL
   carries no `ggml`/`metal` stderr signature (those come from Ollama's own Metal
   allocation-failure path, a different mode than the OS killing the process), and
   the runner stderr at the crash was not captured. What the run does show is the
@@ -325,19 +318,16 @@ SIGKILL, Hearth recorded the failure, scheduled a bounded restart, spawned a new
 PID, restored the same model, and completed a second real inference request.
 Clean Hearth shutdown left no MLX process or listener behind.
 
-A second configuration omitted `mlxModel`. `hearth doctor` exited 1 with the
-actionable error, headless Hearth exited 2 before constructing supervision, and
-no process bound the test port. This proves the new incomplete-config path fails
-closed rather than entering a crash loop.
+A second configuration omitted `mlxModel`. `hearth doctor` exited 1, headless
+Hearth exited 2 before supervision, and the test port stayed free. Incomplete
+managed MLX configuration therefore fails closed.
 
-MLX-LM itself printed its upstream warning that the server is not recommended
-for production because it implements only basic security checks. Hearth mirrors
-that warning for every non-loopback MLX bind. One remaining semantic boundary is
-intentional: `/v1/models` can answer while a first-time model download is still
-finishing, so shallow health proves the API is reachable, not that inference has
-completed. Enable `probeModel` for ongoing one-token inference checks.
+MLX-LM printed its upstream production warning about basic security checks. Hearth
+mirrors it for non-loopback binds. `/v1/models` can answer during a first-time
+model download, so shallow health proves API reachability; `probeModel` verifies
+inference.
 
-### LM Studio (attached validated; managed does not work)
+### LM Studio (attached validated; managed unsupported)
 
 Attached mode, against an externally started `lms server start`:
 
@@ -346,13 +336,12 @@ attached /status: {"phase":"healthy","restartCount":0,"models":[],...}
 Hearth spawned no server of its own (attached mode)
 ```
 
-Attached works: Hearth reaches Healthy watching the external server (`/v1/models`
-and `/api/v0/models` both 200) and does not spawn or kill it.
+Attached Hearth reaches Healthy against the external server (`/v1/models` and
+`/api/v0/models` both 200) while leaving ownership with LM Studio.
 
-Managed mode does NOT work, and this is now flagged by `hearth doctor` and the
-menu. `lms server start` is a client command that tells LM Studio's background
-process to serve and then exits immediately, so Hearth's spawned child dies at
-once and the liveness check restarts it in a loop while the server is actually up:
+Managed mode is unsupported and flagged by `hearth doctor` and the menu. `lms
+server start` tells LM Studio's background process to serve, then exits. Hearth
+would restart that short-lived client while the server remains up:
 
 ```
 Hearth managed /status: phase down, restarts 3
@@ -361,7 +350,7 @@ the server itself:      GET /v1/models -> 200   (up the whole time)
 
 There is no foreground flag for `lms server start`, so LM Studio is attached only.
 
-## Still UNVERIFIED
+## Remaining gap
 
 Honest gaps, with the steps to close each.
 
@@ -382,4 +371,4 @@ ollama serve >/dev/null 2>&1 & ollama pull qwen2.5:0.5b ; kill %1
 ./scripts/validate-real.sh
 ```
 
-The script manages its own `ollama serve`; do not leave the brew service running.
+Stop the Homebrew service first; the script manages its own `ollama serve`.

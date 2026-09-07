@@ -19,8 +19,7 @@ run:
 test:
 	./scripts/test.sh
 
-# Local CI: build (debug + release), unit tests, and lint. This is the gate the
-# pre-push hook runs. There is no hosted runner.
+# Build (debug + release), run tests, and lint. Local hooks and GitHub use it.
 ci:
 	./scripts/ci.sh
 

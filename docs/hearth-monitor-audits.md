@@ -1,117 +1,67 @@
 <!-- SPDX-License-Identifier: MIT -->
-# Hearth Monitor design decisions
+# Hearth Monitor historical design decisions
 
-This document records the durable product and safety decisions behind Hearth
-Monitor. Transient implementation notes, machine-specific observations, test
-counts, and release status belong in commits, CI, and release records instead.
+Standalone Hearth Monitor was retired on September 7, 2026. These notes describe
+the retained source, not an active roadmap. See [retirement and migration](hearth-monitor.md).
 
 ## Product boundary
 
-Hearth has two deliberately separate Mac products:
+- **Hearth** owns runner processes, performs recovery, keeps the Mac awake, and
+  can escalate persistent GPU failures. It ships outside App Sandbox.
+- **Hearth Monitor** observes attached runners and Apple's on-device language
+  model. It ships as a separate sandboxed executable.
 
-- **Hearth** is the full Developer ID product. It can own a runner process,
-  recover crashes and inference wedges, preserve GPU-native operation, and use
-  optional reboot escalation. These capabilities require operation outside App
-  Sandbox.
-- **Hearth Monitor** is the Mac App Store product. It observes user-configured
-  local AI runners and Apple's on-device language model without controlling a
-  runner or a system service.
+`scripts/audit-monitor-boundary.sh` checks dependencies and entitlements. Store
+requirements cannot weaken full Hearth recovery.
 
-Monitor is a separate executable and sandboxed bundle, not a runtime mode inside
-full Hearth. Its dependency and entitlement boundary is mechanically checked by
-`scripts/audit-monitor-boundary.sh`. Store requirements must never weaken full
-Hearth's recovery behavior.
+## Health model
 
-## Core user value
+A responsive API may hide failed inference. Monitor combines a lightweight API
+check with an optional one-token generation for Ollama, LM Studio, `mlx_lm`, and
+Osaurus.
 
-A responsive HTTP endpoint does not prove that inference is working. Monitor can
-therefore combine a lightweight API check with an optional tiny inference check.
-This distinguishes an available runner from a runner whose API answers while
-generation is wedged.
+One failure enters verification; a second opens an incident. Inference incidents
+close after successful inference. Busy responses remain serving states. Monitor
+keeps process ownership with the runner's existing manager.
 
-Monitor supports Ollama, LM Studio, mlx_lm, and Osaurus in attached mode. It can
-show health, resident models, confirmed incidents, and actionable next steps. It
-never starts, stops, installs, updates, or restarts these runners.
+## Apple model
 
-One transient failure is shown as a pending check. A second consecutive failure
-is required to open an incident or alert. A successful inference check is
-required to close an inference incident; a shallow HTTP success is insufficient.
-Busy responses remain serving states and do not trigger recovery claims.
+On compatible Macs, Monitor reads Foundation Models availability and can request
+one fixed on-device response with user consent. It stores timing, health, and
+bounded incident data. Siri, Writing Tools, image generation, and other Apple
+Intelligence features fall outside this check.
 
-## Apple on-device model
-
-On compatible Macs, Monitor uses Apple's public Foundation Models framework to
-check availability and, with explicit user consent, request one tiny fixed local
-response. It immediately discards the response and retains only health, timing,
-and bounded incident information.
-
-The check covers Foundation Models language generation. It does not claim to
-verify Siri, Writing Tools, image generation, or every Apple Intelligence
-feature. Monitor can recreate its own session, but macOS owns the underlying
-model service and Monitor never claims to restart it.
-
-Timed-out work is retained rather than abandoned and stacked behind another
-request. Automatic checks pause for sleep, Low Power Mode, and serious thermal
-pressure. Explicit checks remain available when the user requests them.
+Timed-out work remains tracked until completion, preventing overlapping requests.
+Automatic checks pause for sleep, Low Power Mode, and serious thermal pressure.
+macOS owns service recovery; Monitor can refresh only its app session.
 
 ## Privacy and credentials
 
-Monitor has no analytics or developer-operated service. Runner requests travel
-directly between the Mac and endpoints the user configures. Apple model prompts
-and responses remain on device. Settings and diagnostics never contain bearer
-tokens.
+Monitor has no analytics or developer service. Requests travel directly to user
+configured endpoints. Tokens use separate Keychain items and stay out of settings,
+history, and diagnostics. Responses are size-bounded; redirects and shared web
+credential state are disabled.
 
-Optional runner credentials and full Hearth status credentials use distinct
-Keychain items. A missing credential fails explicitly. Network responses are
-size bounded, redirects and shared credential state are restricted, and copied
-diagnostics describe configuration and recovery scope without exposing secrets.
+Optional full Hearth pairing uses a status-only token and `GET /status`. It adds
+recovery context while direct checks remain the health source.
 
-## Optional full Hearth context
+## Historical scope
 
-Monitor can pair with a separately installed full Hearth through a status-only
-credential. It verifies the endpoint, runner identity, and credential scope,
-then displays whether managed recovery is present. It does not send start, stop,
-restart, or configuration commands.
+Monitor reports current health, recent checks, and bounded incidents. It avoids
+lifetime reliability claims unsupported by retained data.
 
-This integration is supporting context, not a prerequisite or the primary
-Monitor workflow. Unpaired users keep the complete Apple and attached-runner
-monitoring experience.
+## Historical release evidence
 
-## Deliberate scope limits
+Monitor candidates used shared tests, universal packaging, the sandbox boundary
+audit, UI renders, Keychain and Apple model self-tests, and runner checks.
+Distribution procedures are retained in the tagged source. Publication is now
+disabled; local archive packaging and auditing are opt-in through
+`scripts/ci.sh --legacy-monitor`. Machine dogfood logs stay local.
 
-The private Model Lab experiment was removed. A generic prompt playground added
-surface area without improving the core promise of detecting failed local
-inference or explaining recovery coverage. Reintroducing arbitrary prompts,
-sampling controls, streaming, or token accounting requires new evidence that
-they materially improve monitoring or recovery outcomes.
+## Historical review questions
 
-Monitor also avoids invented uptime percentages and lifetime success counts. It
-shows only evidence it actually retains: current health, recent verified checks,
-bounded incidents, and relevant runner or model context.
-
-## Release evidence
-
-A release candidate must pass the complete shared test gate, both product
-builds, universal Monitor packaging, the App Store capability boundary audit,
-and release-sized UI renders. Distribution builds also require signed Keychain
-and Apple model self-tests, a real inference-aware runner check, and TestFlight
-review before App Review.
-
-Machine-specific dogfood logs remain local and are never committed. A release
-record should distinguish automated coverage, one-machine functional evidence,
-and behavior that still requires external review. Passing one does not imply the
-others passed. Passive dogfood may end when additional successful samples no
-longer change the decision; controlled outage, notification, and recovery
-exercises remain separate evidence and must not be inferred from a clean run.
-
-## Review questions for future changes
-
-Every material Monitor addition must answer:
-
-1. Can a user understand the state and next action without knowing Hearth's
-   implementation?
-2. Does it improve inference-aware monitoring rather than duplicate a generic
-   uptime checker or model playground?
-3. Is the feature necessary for that value, or is it speculative surface area?
-4. What can fail, what evidence covers it, and can it affect full Hearth's
-   process-control boundary?
+1. Can a user understand the state and next action?
+2. Does the feature improve inference-aware monitoring?
+3. Is the added surface justified by measured value?
+4. What failure evidence covers it?
+5. Can it cross full Hearth's process-control boundary?

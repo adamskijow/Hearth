@@ -4,5 +4,8 @@ contact_links:
     url: https://github.com/adamskijow/Hearth/security/advisories/new
     about: Please report security issues privately here, not as a public issue.
   - name: Question or troubleshooting
-    url: https://github.com/adamskijow/Hearth#troubleshooting
-    about: Check the Troubleshooting section and run hearth doctor first.
+    url: https://github.com/adamskijow/Hearth/blob/main/docs/troubleshooting.md
+    about: Check the troubleshooting guide and run hearth doctor first.
+  - name: Hearth Monitor is retired
+    url: https://github.com/adamskijow/Hearth/blob/main/docs/hearth-monitor.md
+    about: Read the retirement notice and migration options for the historical beta.

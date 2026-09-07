@@ -1,205 +1,87 @@
 <!-- SPDX-License-Identifier: MIT -->
 # Development
 
-Working on Hearth: running the test suite and cutting a release. For the
-configuration reference see [configuration.md](configuration.md); for embedding
-Hearth in an app that depends on a local runner see [integrating.md](integrating.md).
+## Tests
 
-## Testing
-
-`SupervisorCore` is covered by a Swift Testing suite driven entirely by fakes for
-the clock, process control, and HTTP. There is no real runner and no real
-`sleep`; the fake clock is advanced by hand. The suite covers readiness catching
-a hung but alive runner, exponential backoff timing, a crash loop entering the
-failing state without thrashing, recovery back to healthy, out of memory versus
-crash classification, attached mode never spawning or killing, the runners' spec
-and parsing (including a real Ollama `/api/ps` capture), the pre-spawn process
-group sweep, the hard-crash sweep decision, log rotation decisions, the control
-endpoint's routing and auth, the metrics formatting, tailnet address recognition,
-runner binary location ordering, config resolution (the first-run, clean, and
-parse-failure paths), the status line wording for every phase, the readiness
-mapping from each HTTP outcome, and the exit and down-reason labels.
-
-For end to end checks against a live server, `scripts/validate-real.sh` drives the
-real agent against a real `ollama serve` and proves the lifecycle scenarios
-(cold start, external kill, the SIGSTOP wedge, process group teardown with no
-orphans, attached mode, and hard-crash orphan recovery), exiting non-zero on any
-failure. It needs a real Ollama; its findings and the fix it drove are written up
-in [VALIDATION-REPORT.md](../VALIDATION-REPORT.md).
-
-Run the tests with:
-
-```
+```sh
 make test
+make ci
+make hooks
 ```
 
-or directly:
+`make test` runs Swift Testing through `scripts/test.sh`, which supports full
+Xcode and Command Line Tools layouts. `make ci` builds debug and release, runs
+the tests, and lints source headers, whitespace, shell syntax, and the
+repository's no-em-dash rule. Retained Monitor source and regression tests still
+compile; retired-product packaging is outside the default gate.
 
-```
-./scripts/test.sh
-```
+The pre-push hook and GitHub Actions call the same CI script. Add `--smoke` for
+the desktop fake-runner test or `--real` for the Ollama lifecycle gate.
 
-The wrapper exists because the tests use Swift Testing, and on a Mac with only
-the Command Line Tools installed (the common state on a headless box) the Swift
-Testing framework is not on the default search path. The script detects the right
-directory for both the Command Line Tools and full Xcode layouts and passes it.
-On a machine with full Xcode, a plain `swift test` also works.
-
-The gate runs in two places, both through `scripts/ci.sh`: locally via the
-pre-push hook, and on GitHub Actions (free for public repositories) for every push
-and pull request (`.github/workflows/ci.yml`). `make ci` (or `./scripts/ci.sh`)
-builds debug and release, runs the unit suite, and lints (an SPDX header on every
-Swift source, and the no em dash rule). Install the pre-push hook once with
-`make hooks`, which points `core.hooksPath` at the in-repo `scripts/hooks`, and
-that gate runs before every push; bypass a single push with `git push
---no-verify`. Pass `--smoke` or `--real` to `scripts/ci.sh` to also run the
-desktop and Ollama gates described below.
-
-A manual GitHub Actions workflow, `.github/workflows/real-ollama.yml`, can run
-the real Ollama gate on demand. It installs Ollama, pulls a small model, and then
-runs `./scripts/ci.sh --real`. It is intentionally not part of the default PR
-gate because it is slower and depends on a live runner.
-
-### Trying it without a runner
-
-You can exercise the whole agent without installing Ollama or LM Studio, using a
-small stand in runner that answers the endpoints Hearth probes:
-
-```
-./scripts/smoke-test.sh
+```sh
+./scripts/smoke-test.sh       # fake runner; logged-in desktop required
+./scripts/validate-real.sh    # real Ollama
+make demo                     # isolated narrated wedge recovery
 ```
 
-This builds Hearth, points it at `scripts/fake-runner.py` through a throwaway
-config, and checks the acceptance behavior end to end: the agent starts and owns
-the child, holds the power assertion (`pmset`), restarts the child when it is
-killed externally, drives a restart through the control endpoint (with token auth
-checked), and releases the assertion and kills the child on a clean shutdown. It
-launches the real menubar agent, so it needs a logged in desktop session; it is a
-local helper, not a CI step.
+The manual `real-ollama.yml` workflow runs the live Ollama gate on GitHub. Test
+evidence lives in [VALIDATION-REPORT.md](../VALIDATION-REPORT.md). The
+[product plan](product-plan.md) defines the next local validation milestones.
 
-For the wedge-recovery story specifically:
+## Full Hearth release
 
-```
-make demo
-```
+`scripts/release.sh` builds, Developer ID signs, notarizes, staples, and packages
+the app as DMG and ZIP. Supply a signing identity plus either a Keychain profile:
 
-drives the same fake runner through the alive-but-wedged case: it reaches healthy,
-freezes the runner with `SIGUSR1` (the process stays up and the port stays open,
-but it stops answering), and narrates Hearth catching it by readiness and recovering
-on its own. It is fully isolated through `HEARTH_DATA_DIR` (its state, logs, and
-lock live under a throwaway directory), so it is safe to run alongside a real
-Hearth. It is the source for the README's wedge-recovery recording.
-
-## Releasing
-
-`scripts/release.sh` builds, Developer ID signs (Hardened Runtime on, App Sandbox
-off), notarizes, and staples `Hearth.app`, then packages it two ways: a
-drag-to-install DMG (`scripts/make-dmg.sh`, the app plus an Applications shortcut)
-and a zip, notarizing and stapling the DMG as well. It prints the sha256 of each.
-It needs a signing identity and notarization credentials, either a stored
-notarytool profile:
-
-```
+```sh
 export HEARTH_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
-export HEARTH_NOTARY_PROFILE="HearthNotary"   # from xcrun notarytool store-credentials
+export HEARTH_NOTARY_PROFILE="HearthNotary"
 ./scripts/release.sh
 ```
 
-or an App Store Connect API key passed directly, which works in a non-interactive
-shell where storing a keychain profile is blocked:
+or an App Store Connect API key:
 
-```
+```sh
 export HEARTH_SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)"
 export HEARTH_NOTARY_KEY="$HOME/path/AuthKey_XXXX.p8"
-export HEARTH_NOTARY_KEY_ID="XXXX"            # the XXXX in the filename
-export HEARTH_NOTARY_ISSUER="<issuer-uuid>"   # App Store Connect issuer ID
+export HEARTH_NOTARY_KEY_ID="XXXX"
+export HEARTH_NOTARY_ISSUER="<issuer-uuid>"
 ./scripts/release.sh
 ```
 
-Releasing can be local: run it on your Mac, then attach the DMG and zip to a
-GitHub release. The canonical cask lives in `adamskijow/homebrew-tap`; its
-hourly and manually dispatchable sync workflow reads the latest published
-release, downloads the matching DMG, computes its sha256, and updates the tap.
-Install with `brew install --cask adamskijow/tap/hearth`. For a quick local
-install without a release, `make install` ad-hoc signs and copies the app to
-`/Applications`.
+Attach the DMG, ZIP, `SHA256SUMS`, and `RELEASE-PROVENANCE.txt` to the GitHub
+release. The `adamskijow/homebrew-tap` sync workflow updates its cask from the
+latest release.
 
-It can also be hosted: pushing a `v*` tag runs `.github/workflows/release.yml`,
-which gates on CI and, when the signing secrets are configured (the workflow
-header lists them), signs, notarizes, and publishes the release automatically.
-The job uses the GitHub `release` environment; configure required reviewers for
-that environment before enabling hosted signing. It refuses tags that do not
-exactly match the bundle version, tags not pointing at the checked-out
-commit, and commits not already on `origin/main`. Published artifacts include
-`SHA256SUMS` and a tag/commit/workflow provenance record. Without signing secrets
-the tag still gets a release gate and you publish locally.
+Pushing a `v*` tag triggers `release.yml`. It verifies that the tag matches the
+bundle version, points at the checked-out commit, and belongs to `origin/main`.
+Configured signing secrets enable hosted publication; otherwise the workflow
+runs only the release gate and artifacts must be published locally.
 
-Hearth Monitor has a separate App Store boundary and release path. A normal CI
-run builds its universal sandbox bundle and runs
-`scripts/audit-monitor-boundary.sh`; locally, the same gate is:
+## Retired Monitor source
+
+Standalone Hearth Monitor was retired on September 7, 2026. Its source, tests,
+and historical artifacts remain available. New features and App Store work are
+outside the active roadmap. See [retirement and migration](hearth-monitor.md).
+
+To inspect the archived universal sandbox app locally:
 
 ```sh
-./scripts/package-monitor-app.sh
-./scripts/audit-monitor-boundary.sh
+./scripts/ci.sh --legacy-monitor
 ```
 
-For a public GitHub beta, `scripts/release-monitor.sh` preserves that sandbox
-boundary while Developer ID signing, notarizing, and stapling a universal DMG
-and ZIP. It accepts the same notarization variables as `scripts/release.sh` and
-uses `HEARTH_MONITOR_SIGN_IDENTITY`, falling back to
-`HEARTH_SIGN_IDENTITY`. Use a product-specific tag such as
-`hearth-monitor-v0.2.0`; full Hearth already owns the historical `v*` version
-line.
+This adds ad-hoc Monitor packaging and the sandbox boundary audit to the normal
+gate. It does not publish a release or contact App Store Connect.
+`--all` selects the supported product's smoke and real-runner checks; it does
+not implicitly select this legacy packaging step.
 
-For longer real-device evidence, install the signed local Monitor build and run
-the privacy-safe canary recorder once or in a bounded developer loop:
+Monitor Developer ID release, App Store packaging, and upload scripts exit with
+a retirement notice. Original release procedures are preserved in the
+[0.2.0 tagged source](https://github.com/adamskijow/Hearth/tree/hearth-monitor-v0.2.0).
+
+Historical sampling scripts remain for reference. To remove an existing local
+sampling agent, use:
 
 ```sh
-./scripts/dogfood-monitor.sh
-./scripts/dogfood-monitor.sh --loop
+./scripts/install-dogfood-monitor-agent.sh --uninstall
 ```
-
-For unattended dogfooding on a logged-in Mac, install the per-user LaunchAgent:
-
-```sh
-./scripts/install-dogfood-monitor-agent.sh
-```
-
-It runs at login and every 15 minutes. Each run reopens the installed Monitor
-only if it is no longer running, then records one bounded Apple on-device model
-canary. It makes no cloud or third-party model request and consumes no API
-tokens. Results live at `~/Library/Logs/Hearth Monitor/dogfood.tsv`; scheduler
-diagnostics live beside them in `dogfood-launchd.log`. Remove the scheduler with
-`./scripts/install-dogfood-monitor-agent.sh --uninstall`; existing evidence is
-preserved.
-
-Long-running dogfood is success-path evidence, not a substitute for failure
-testing. End it when additional clean samples no longer change the release
-decision, then separately exercise a controlled outage, notification, and
-inference-verified recovery. Record only a bounded summary in release notes;
-keep the raw machine log local.
-
-For the isolated runner failure gate, start `scripts/fake-runner.py` on a
-dedicated loopback port and package with
-`HEARTH_MONITOR_RUNNER_SELF_TEST=1`. The signed app uses its production
-URLSession transport to prove healthy inference, one provisional miss, a
-confirmed second miss with actionable alert content, and recovery only after
-inference succeeds. Set `HEARTH_MONITOR_SELF_TEST_PORT` on both processes when
-using a port other than `44144`; never point this gate at a real runner.
-
-The default loop interval is 15 minutes. Results go to the ignored,
-user-readable `.dogfood/hearth-monitor.tsv` with mode `0600` and contain only
-UTC time, exit status, and the existing self-test summary. Override the app
-path, log path, interval, or process timeout with
-`HEARTH_MONITOR_DOGFOOD_APP`, `HEARTH_MONITOR_DOGFOOD_LOG`,
-`HEARTH_MONITOR_DOGFOOD_INTERVAL` (minimum five minutes), or
-`HEARTH_MONITOR_DOGFOOD_TIMEOUT` (75 seconds by default). The external timeout
-also catches a launch that stalls before Hearth Monitor's in-process model
-timeout can start. Switching the same bundle identifier between local and Store
-signatures can cause macOS to request confirmation before reusing its container;
-complete that confirmation before treating the first timeout as a model failure.
-
-Do not pass the full Hearth signing identity or release bundle through this
-path. Creating an uploadable Store package additionally needs the explicit App
-ID, Mac App Store provisioning profile, and distribution identities documented
-in [the Hearth Monitor App Store checklist](hearth-monitor-app-store.md).

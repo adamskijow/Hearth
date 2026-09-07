@@ -1,69 +1,93 @@
 <!-- SPDX-License-Identifier: MIT -->
-# Hearth Monitor privacy policy
+# Hearth privacy policy
 
-Effective July 15, 2026.
-
-Hearth Monitor does not collect, sell, share, or transmit personal data to the
-developer. It contains no analytics, advertising, tracking, telemetry, crash-
-reporting service, account system, or third-party SDK.
-
-## Data that stays on your Mac
-
-- Apple on-device language-model availability, functional-check timing, recent local
-  latency samples, and confirmed incidents stay inside Hearth Monitor's private
-  App Sandbox container. The fixed canary prompt and generated response are
-  never written to disk or included in diagnostics.
-- Runner addresses, monitoring preferences, and incident history are stored in
-  Hearth Monitor's private App Sandbox container.
-- An optional status-only credential for a separately installed full Hearth is
-  stored in your macOS Keychain. It is deleted when you disconnect full Hearth
-  or remove that watched runner.
-- Outage and recovery notifications are created locally through macOS.
-
-You can delete this local data by removing watched runners in Settings, clearing
-History, or quitting Hearth Monitor and deleting its
-`~/Library/Containers/com.hearth.HearthMonitor` container.
-
-## Network connections you choose
-
-Hearth Monitor connects directly from your Mac to AI-runner and optional full
-Hearth addresses that you configure. It sends runner-specific health, model-list,
-and optional one-token inference requests. When you connect full Hearth, it sends
-the saved bearer credential only in an authenticated `GET /status` request to the
-exact configured address. These requests are not relayed through or visible to
-the developer.
-
-As with any direct network connection, the server you choose can observe the
-request and your network address. Use HTTPS for untrusted networks. Hearth
-Monitor refuses redirects and does not include prompts, model responses, response
-bodies, or credentials in copied diagnostics or incident history.
-
-## Apple on-device model checks
-
-On an Apple Intelligence-compatible Mac running macOS 26 or later, Hearth
-Monitor can read the public Foundation Models availability state and, only when
-you enable functional checks, request one tiny fixed response from Apple's
-on-device language model. This check does not test Siri, Writing Tools, image
-generation, or every Apple Intelligence feature. Hearth Monitor does not send
-the prompt or response to the developer, retain either value, use either value
-for analytics, or expose them to configured runner endpoints. It keeps only the
-time, duration, broad error category, and confirmed incident state needed to
-explain health.
-
-Functional checks default to 15 minutes apart and pause during sleep, Low Power
-Mode, and serious thermal pressure. Disabling functional checks leaves only the
-public availability check.
+Updated September 7, 2026 to describe full Hearth and the retirement of
+standalone Hearth Monitor.
 
 ## Full Hearth
 
-Full Hearth is a separate product. If you configure full Hearth to use third-
-party notification or webhook services, those choices are governed by that
-service and are outside Hearth Monitor. The optional Monitor connection is
-read-only and never sends start, stop, or restart commands.
+Hearth has no developer account, analytics, advertising, or tracking service.
+It stores configuration, process identity, event history, system metrics, and
+runner logs locally. Configuration can contain notification addresses and
+control tokens. Runner logs may contain paths, model names, and request text
+produced by the runner.
 
-## Contact and changes
+Default data locations are:
 
-Questions or privacy concerns can be filed through the
-[Hearth support tracker](https://github.com/adamskijow/Hearth/issues). Material
-changes to this policy will be published in the repository and reflected in the
-policy's effective date.
+```text
+~/Library/Application Support/Hearth
+~/Library/Logs/Hearth
+```
+
+Headless root installations use their configured paths, including
+`/etc/hearth/config.json` and `/var/log/hearth.out.log` and
+`/var/log/hearth.err.log`. `HEARTH_CONFIG` and `HEARTH_DATA_DIR` can override
+user-instance locations.
+
+Hearth sends health, model-list, and optional fixed inference requests to the
+runner you configure. The optional metrics proxy relays client requests and
+responses to that runner and reads runner-reported timing and token counts.
+The proxy does not save request or response bodies. A remote runner receives
+traffic at the address you choose; its data handling is outside Hearth.
+
+## Optional connections and sharing
+
+- Configured ntfy and webhook destinations receive status alerts. The default
+  ntfy server is public `ntfy.sh`; ntfy remains disabled until a topic is set.
+- `alertsIncludeLogTail` is off by default. Enabling it adds up to five sanitized
+  runner-log lines to failure alerts sent through configured notification
+  channels. These lines can contain paths, model names, or request fragments.
+- A configured heartbeat URL receives periodic requests while the supervisor
+  reports healthy.
+- The optional control endpoint shares status and metrics with authenticated
+  clients. Full-control tokens also authorize process commands. Status can
+  include model names and recent events; Prometheus labels omit model names.
+- The `hearth update` command invokes Homebrew when requested. Runner startup
+  may download models according to that runner's configuration.
+
+Connections go directly to the selected services; the developer does not relay
+them. Those services can observe requests and network addresses. Review copied
+diagnostics and logs before sharing them through GitHub or another service.
+
+## Retired Hearth Monitor
+
+Standalone Hearth Monitor was retired on September 7, 2026. This description
+remains applicable to the historical beta.
+
+The beta has no analytics, advertising, tracking, developer account, or
+crash-reporting service. Its sandbox stores settings, runner addresses, check
+timing, recent latency samples, and up to 500 confirmed incidents. Runner
+credentials and optional full Hearth status tokens use separate Keychain items.
+
+Monitor connects directly to configured runner and full Hearth endpoints for
+health, model-list, optional fixed inference, and authenticated status requests.
+Redirects are refused. Copied diagnostics and incident history exclude
+credentials, prompts, model responses, and response bodies.
+
+Apple on-device functional checks request one fixed response through Foundation
+Models when enabled by the user. The prompt and response are discarded. Retained
+data is limited to timing, health, broad failure categories, and incidents.
+Checks pause during sleep, Low Power Mode, and serious thermal pressure.
+
+## Delete data
+
+For full Hearth, stop supervision and remove any installed agent or daemon before
+removing its configuration and logs. See [uninstallation](docs/faq.md#how-do-i-uninstall-it)
+and [headless operation](docs/running-headless.md). Runner applications and their
+model data are managed separately.
+
+For Monitor, remove configured runners and connections to delete associated
+Keychain items, disable Open at Login, then quit the app and delete:
+
+```text
+~/Library/Containers/com.hearth.HearthMonitor
+```
+
+Full instructions are in [Monitor retirement and removal](docs/hearth-monitor.md#remove-monitor).
+
+## Contact
+
+Privacy questions can be filed through the
+[support tracker](https://github.com/adamskijow/Hearth/issues). Report sensitive
+security information through [private reporting](SECURITY.md#reporting-a-vulnerability).
+Material changes to this policy will update this page and its date.

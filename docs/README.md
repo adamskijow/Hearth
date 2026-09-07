@@ -17,6 +17,8 @@ Start with the guide that matches what you are trying to do.
 
 ## Understand the product
 
+- [Product plan](product-plan.md): recovery correctness, setup, and local
+  validation milestones.
 - [How Hearth works](how-it-works.md): readiness checks, deep probes, recovery,
   and architecture.
 - [Keeping Ollama running on macOS](keep-ollama-running-on-macos.md): the problem
@@ -25,8 +27,8 @@ Start with the guide that matches what you are trying to do.
   cases.
 - [Stability contract](stability.md): compatibility promises for configuration,
   commands, API responses, and logs.
-- [Observability roadmap](observability-roadmap.md): shipped diagnostics and
-  deliberately open work.
+- [Observability](observability-roadmap.md): metrics, model-state limits, and
+  remaining work.
 
 ## Connect other systems
 
@@ -36,17 +38,13 @@ Start with the guide that matches what you are trying to do.
 - [Integrating with Hearth](integrating.md): guidance and examples for apps that
   consume Hearth state.
 
-## Hearth Monitor
+## Retired Hearth Monitor
 
-- [Hearth Monitor guide](hearth-monitor.md): Apple on-device model checks and
-  sandboxed attached runner monitoring.
-- [Mac App Store listing](hearth-monitor-app-store-listing.md): product copy and
-  reviewer path.
-- [Mac App Store release checklist](hearth-monitor-app-store.md): packaging,
-  validation, and release gates.
+- [Retirement and migration](hearth-monitor.md): product status, alternatives,
+  and removal of the historical beta.
+- [Historical design notes](hearth-monitor-audits.md): retained implementation
+  boundaries for the archived source.
 
 ## Development and maintenance
 
 - [Development](development.md): build, test, dogfood, and release workflows.
-- [Hearth Monitor design decisions](hearth-monitor-audits.md): durable product
-  boundaries and review questions.

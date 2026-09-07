@@ -1,90 +1,55 @@
 <!-- SPDX-License-Identifier: MIT -->
 # Integrating with Hearth
 
-Hearth is an availability layer for a local LLM runner (Ollama, LM Studio, or
-mlx_lm). If your app or agent depends on a local runner being up, you do **not**
-integrate against Hearth's API. You depend on the **runner**, and let Hearth keep
-the runner alive underneath you.
+Apps talk to the local AI runner directly. Hearth keeps that shared runner
+available underneath them.
 
-## The model
+## Recommended setup
 
-- **One runner**, for example Ollama on `127.0.0.1:11434`, shared by every local
-  app on the machine.
-- **One Hearth** keeping that runner alive. Do not run a Hearth per app. Hearth
-  has a single-instance guard, so several apps can each ensure Hearth is running
-  and it resolves to one supervisor (the rest stand by or bow out, they never
-  fight).
-- **Your app talks to the runner directly** (Ollama's `/api/...`, an OpenAI
-  compatible `/v1/...`, etc.), exactly as if Hearth were not there.
-
-## What your app should do
-
-1. **Make sure Hearth is installed and running.** The simplest setup, which a
-   person or an agent can run as-is:
+1. Install and configure one Hearth instance per runner:
 
    ```sh
-   brew install --cask adamskijow/tap/hearth   # if not already installed
-   hearth setup                                 # detect runner, install agent, wait for ready
+   brew install --cask adamskijow/tap/hearth
+   hearth setup
    ```
 
-   `hearth setup` is the one-shot path: it detects the runner, points the config at
-   it, installs the login agent, and waits for the runner to come up. If you want
-   just the agent step, `hearth install-agent` writes a per-user LaunchAgent
-   (`~/Library/LaunchAgents/com.hearth.headless.plist`) that runs Hearth headless
-   at login and keeps it alive. It needs no sudo, and it is safe to run even if
-   Hearth is already set up or the menubar app is also running (the guard makes one
-   instance stand by). Remove it with `hearth uninstall-agent`.
+   `hearth setup` detects the runner, writes the config, installs the per-user
+   login agent, and waits for readiness. `hearth install-agent` and `hearth
+   uninstall-agent` manage only the login agent.
 
-2. **Gate your startup on the runner being ready**, if order matters:
+2. Gate dependent startup when order matters:
 
    ```sh
-   hearth wait-ready && start-my-app
+   hearth wait-ready -t 120 && exec start-my-app
    ```
 
-   `hearth wait-ready` blocks until the runner answers its readiness endpoint, then
-   exits 0; on timeout it exits 1. Use `-t SECONDS` to change the timeout (default
-   120). It probes the runner directly, so it works whether or not Hearth itself is
-   running, as long as the runner is up. In a LaunchAgent, run it as a
-   `ProgramArguments` preflight, or just `hearth wait-ready && exec my-app`.
+   The command probes the runner's shallow API readiness endpoint and returns
+   `0` on readiness or `1` on timeout. It does not verify model generation.
 
-3. **Degrade gracefully on a transient miss.** Even with Hearth, there is a brief
-   window during a restart where the runner is down. Treat a failed request as
-   retryable rather than fatal. Hearth keeps that window short; your app keeps it
-   invisible.
+3. Use bounded retries for requests safe to repeat during the restart window.
+   Runner recovery does not resume an interrupted application job automatically.
 
-4. **Optionally, read Hearth's own health.** If the control endpoint is enabled,
-   `GET /healthz` (unauthenticated) returns `200` when Hearth is up, `GET /status`
-   (with the bearer token) returns the phase, uptime, resident models, and metrics,
-   and `GET /metrics` (with the token) exposes the same as a Prometheus text
-   exposition for Grafana or Uptime Kuma. Useful for a dashboard, not required for
-   normal operation.
+4. Use Hearth's status surfaces for operations. With the control endpoint
+   enabled, `/healthz` reports Hearth liveness, while authenticated `/status` and
+   `/metrics` report runner state.
 
-## Do not
+## Ownership rules
 
-- **Do not run a second Hearth per app.** One shared Hearth supervises the one
-  shared runner. The guard will stop the duplicate from fighting, but there is no
-  reason to start it.
-- **Do not ship your own copy of the LaunchAgent plist.** Use
-  `hearth install-agent` so the path and config stay correct and there is one
-  canonical job (`com.hearth.headless`) rather than per-app copies that drift and
-  collide.
-- **Do not reach into Hearth's config or process.** Point at the runner; let
-  Hearth do its job.
+- Share one runner and one Hearth instance among local apps.
+- Install the canonical login agent through `hearth install-agent`.
+- Treat Hearth's config and process as operator-owned state.
+- Send inference traffic to the runner, or to Hearth's metrics proxy when
+  throughput and in-flight visibility are enabled.
 
-## Example: Hob
+The single-instance guard prevents duplicate supervisors from fighting, but a
+single owner keeps startup and logs clear.
 
-[Hob](https://github.com/adamskijow/Hob) (a morning-digest agent) depends on
-Ollama. Its integration is exactly the model above: install Hearth, run
-`hearth install-agent` so Ollama stays up, and Hob talks to Ollama on localhost.
-If Ollama wedges, Hearth restarts it; Hob degrades gracefully during the gap and
-its requests resume on their own.
+## Webhook automation
 
-## Recipes: Home Assistant and n8n
+Webhook notifications contain `level`, `title`, `body`, `event`, and `timestamp`.
+`event` is a stable snake-case kind such as `down`, `recovered`, `failing`,
+`memory_limit_exceeded`, or `warmup_finished`. Home Assistant, n8n, and similar
+tools can route these events directly.
 
-The webhook body is small JSON (`level`, `title`, `body`, `event`,
-`timestamp`; `event` is a stable snake_case kind such as `down`, `recovered`,
-`failing`, `memory_limit_exceeded`, `warmup_finished`), which drops straight
-into automation tools:
-
-**Home Assistant.** Add a [webhook
-trigger](https://www.home-assistant.io/docs/automation/trigger/#
+See [Remote control and status](remote-control.md) for endpoints and
+[Stability](stability.md) for the machine-readable contract.

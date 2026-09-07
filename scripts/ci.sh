@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # SPDX-License-Identifier: MIT
 #
-# Local CI for Hearth. There is no hosted runner; this is the gate you run on
-# your own machine, and the pre-push hook (scripts/install-hooks.sh) runs it for
-# you before every push.
+# Shared local and GitHub CI for Hearth. The pre-push hook
+# (scripts/install-hooks.sh) runs the same gate before every push.
 #
 # Default stages are headless safe (no desktop session, no Ollama):
 #   scripts/ci.sh            build (debug + release), unit tests, lint
 #   scripts/ci.sh --smoke    also run the fake-runner smoke test (needs a desktop)
 #   scripts/ci.sh --real     also run the real Ollama gate (needs ollama + a model)
 #   scripts/ci.sh --all      everything above
+#   scripts/ci.sh --legacy-monitor  also package/audit the retired Monitor target
 #
 # Exits non-zero if any stage fails. Build failures stop early; test and lint
 # failures are collected so one run shows the full picture.
@@ -40,13 +40,14 @@ swift_build() {
   fi
 }
 
-SMOKE=0; REAL=0
+SMOKE=0; REAL=0; LEGACY_MONITOR=0
 for arg in "$@"; do
   case "$arg" in
     --smoke) SMOKE=1 ;;
     --real)  REAL=1 ;;
     --all)   SMOKE=1; REAL=1 ;;
-    -h|--help) sed -n '3,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    --legacy-monitor) LEGACY_MONITOR=1 ;;
+    -h|--help) sed -n '3,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown flag: $arg (see --help)" >&2; exit 2 ;;
   esac
 done
@@ -63,11 +64,13 @@ swift_build && ok || die "debug build failed"
 section "Build (release)"
 swift_build -c release && ok || die "release build failed"
 
-section "Hearth Monitor App Store boundary"
-if ./scripts/package-monitor-app.sh && ./scripts/audit-monitor-boundary.sh; then
-  ok
-else
-  die "Hearth Monitor sandbox package or boundary audit failed"
+if [ "$LEGACY_MONITOR" = "1" ]; then
+  section "Retired Hearth Monitor sandbox archive"
+  if ./scripts/package-monitor-app.sh && ./scripts/audit-monitor-boundary.sh; then
+    ok
+  else
+    die "legacy Hearth Monitor sandbox package or boundary audit failed"
+  fi
 fi
 
 section "Unit tests"

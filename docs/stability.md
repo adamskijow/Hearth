@@ -1,27 +1,19 @@
 <!-- SPDX-License-Identifier: MIT -->
 # Stability contract
 
-Hearth aims to follow semantic versioning, and a version number only means
-something if it says what is covered. This page declares which surfaces are
-stable for the 1.x series, what "stable" means for each, and what carries no
-promise. Tests pin the load-bearing pieces, so an accidental break fails CI
-rather than shipping.
-
-The policy: removing or renaming anything listed as stable requires a major
-version. Deprecations get at least one minor release during which the old form
-still works and `hearth doctor` warns about it.
+Hearth follows semantic versioning for the surfaces below. Removing or renaming a
+stable item requires a major version. Deprecations retain compatibility for at
+least one minor release with a `hearth doctor` warning.
 
 ## Config file
 
 Config keys are stable. New keys may be added in minor releases; existing keys
 keep their names, types, and defaults through 1.x.
 
-Loading is lenient by design, so config files travel across versions:
+Config files travel across versions:
 
-- An unknown key (from a newer Hearth, or a typo) is ignored with a doctor and
-  menu warning, never an error.
-- An unrecognized value for `runner` or `mode` is an error and the configuration
-  is not applied. It never silently activates the default runner or mode.
+- Unknown keys produce doctor and menu warnings.
+- Unknown `runner` or `mode` values block activation.
 - A missing key means its documented default.
 
 ## Command line
@@ -32,9 +24,7 @@ The subcommand names (`status`, `logs`, `events`, `metrics`, `doctor`,
 code 0 means success, 1 means an operational failure, and 2 means invalid usage
 or a configuration that Hearth refused to apply.
 
-CLI output text is written for people and is NOT a stable interface; wording
-may improve in any release. A script that needs machine-readable state should
-call the control API's `/status`, not parse CLI output.
+CLI prose may change. Scripts should use `/status` or `hearth status --json`.
 
 ## Control API
 
@@ -69,11 +59,11 @@ spaces, and the message. Four message phrases are frozen because
 them, so rewording one of these fails CI. Other event descriptions are
 human-facing and may be reworded in minor releases.
 
-## No promise (experimental)
+## Experimental
 
 - `rebootViaHelper` and the hearth-reboot-helper socket protocol.
 - The Osaurus runner integration, until its server surface settles.
 - Anything explicitly marked experimental in its documentation.
 
-Experimental features may change or be removed in a minor release; their config
-keys still follow the unknown-key rule (a leftover key warns, nothing breaks).
+Experimental features may change or be removed in a minor release. Leftover
+config keys follow the unknown-key warning rule.

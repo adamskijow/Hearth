@@ -1,17 +1,15 @@
 <!-- SPDX-License-Identifier: MIT -->
 # Ollama setup with Hearth
 
-Hearth does not replace Ollama and does not install models. It supervises an
-Ollama setup on a Mac: in managed mode it launches and restarts `ollama serve`,
-and in attached mode it watches a server owned by something else.
+Hearth supervises an existing Ollama installation. Managed mode launches and
+restarts `ollama serve`; attached mode watches a server owned by Ollama.app or
+another service manager.
 
 Your apps still talk to Ollama directly:
 
 ```
 http://127.0.0.1:11434
 ```
-
-Hearth runs beside it as the supervisor.
 
 ## Which mode should I use?
 
@@ -48,7 +46,7 @@ Two managers will fight over the same runner. `hearth doctor` reports this case
 and tells you which manager it found. On a fresh config, `hearth setup` switches
 to attached mode automatically when it sees Ollama already managed by launchd and
 answering on the configured port, clear evidence another supervisor owns a live
-runner. A loaded job that is not serving stops setup with the `brew services`
+runner. A loaded but silent job stops setup with the `brew services`
 commands to inspect or stop it, so a stale service cannot park Hearth in attached
 mode watching nothing.
 
@@ -66,9 +64,8 @@ attached mode so Hearth watches the server the app owns:
 }
 ```
 
-Attached mode does not spawn or kill Ollama. It keeps the Mac awake while
-supervision is running, probes readiness, reports status, and notifies you when
-the app-owned server stops answering.
+Attached mode probes readiness, reports status, sends alerts, and leaves process
+control to Ollama.app.
 
 To switch explicitly:
 
@@ -91,11 +88,9 @@ catch that, set `probeModel` to a small model you have already pulled:
 }
 ```
 
-Hearth then runs a one-token generation on a slower interval whenever that model
-is already resident from real use. It does not load an idle model on a timer, so
-monitoring cannot create a cold-load or GPU-churn loop. It does not set
-`keep_alive` for a resident model, so Ollama's own `OLLAMA_KEEP_ALIVE` policy
-continues to control residency.
+Hearth then runs a one-token generation on a slower interval while that model is
+resident. Scheduled probes avoid cold loads and leave residency to Ollama's
+`OLLAMA_KEEP_ALIVE` policy.
 
 If the inference check fails repeatedly but Hearth has not observed client
 traffic through its optional metrics proxy, it alerts without restarting. A long
@@ -108,8 +103,8 @@ In Preferences, **Inference health** can discover installed models, put the
 smallest reported model first, and run the one-token test before you save. The
 free-form config remains available for headless setups.
 
-Good probe models are models your workload actually keeps resident. Smaller
-models make the optional Test Now setup check cheaper. You can list models with:
+Choose a model your workload keeps resident. Smaller models make the optional
+setup test cheaper. List models with:
 
 ```sh
 ollama list
@@ -117,18 +112,6 @@ ollama list
 
 ## LAN and remote access
 
-Keep Ollama on `127.0.0.1` for local apps. To reach it from another machine, bind
-only on a trusted LAN or put it behind a private reverse proxy. Ollama itself does
-not authenticate requests. See [reverse-proxy.md](reverse-proxy.md) for the safe
-pattern.
-
-## Listing blurb
-
-For a future community directory entry, Hearth can be described without changing
-its scope:
-
-> Hearth is a macOS menubar and CLI supervisor that keeps an existing Ollama
-> server alive on headless Macs, with readiness probes, process-group restart
-> recovery, sleep prevention, notifications, and Prometheus-style status.
-
-This repository work does not create or submit any external pull request.
+Keep Ollama on `127.0.0.1` for local apps. Remote clients should use a trusted
+LAN, VPN, or authenticated private proxy. Ollama accepts unauthenticated requests;
+see the [network guide](reverse-proxy.md).

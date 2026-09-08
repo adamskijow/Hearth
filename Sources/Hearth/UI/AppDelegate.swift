@@ -184,6 +184,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Tear down the current engine and rebuild it from a config. Safe to call on
     /// first launch (nothing to tear down) and on every later reload.
     private func applyConfig(_ loaded: ConfigLoad) async {
+        // Every overlapping reload must rebuild until teardown and ownership
+        // admission finish; a live-only update could strand a stopped engine.
+        supervisionStartBlocked = true
         reloadGeneration &+= 1
         let generation = reloadGeneration
 
@@ -234,9 +237,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Check ownership before managed supervision can spawn anything. The
         // official Ollama app commonly owns this port already; starting first
         // and warning afterward creates the collision the warning describes.
-        let foreign = await RunnerCollision.foreignRunnerServing(config: config)
-        preexistingRunnerWarning = PreexistingRunner.warning(
-            runner: config.runner, mode: config.mode, foreignRunnerServing: foreign)
+        let collisionWarning = await RunnerCollision.warning(config: config)
+        guard generation == reloadGeneration else { return }
+        preexistingRunnerWarning = collisionWarning
         supervisionStartBlocked = ManagedStartAdmission.shouldBlock(
             mode: config.mode,
             hasPreexistingRunner: preexistingRunnerWarning != nil,
@@ -749,8 +752,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func openPreferencesTapped() {
         if preferences == nil {
             preferences = PreferencesController(config: config) { [weak self] newConfig in
-                ConfigStore.save(newConfig)
-                Task { await self?.reloadFromDisk(firstRun: false) }
+                guard let self, ConfigStore.save(newConfig) else { return false }
+                Task { await self.reloadFromDisk(firstRun: false) }
+                return true
             }
         }
         preferences?.show(config: config)

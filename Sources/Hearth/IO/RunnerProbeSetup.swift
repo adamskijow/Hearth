@@ -32,6 +32,10 @@ enum RunnerProbeSetup {
     }
 
     static func availableModels(config: HearthConfig) async throws -> [AvailableModel] {
+        guard isValidEndpointHost(config.host), (1...65_535).contains(config.port),
+              (1...65_535).contains(config.clientPort) else {
+            throw SetupError.failed("Correct the host and client port in Preferences first.")
+        }
         let runner = config.makeRunner()
         let outcome = await URLSessionHTTPClient().get(runner.availableModelsEndpoint, timeout: 5)
         let data: Data
@@ -59,6 +63,10 @@ enum RunnerProbeSetup {
     }
 
     static func test(config: HearthConfig, model: String, http: any HTTPClient = URLSessionHTTPClient()) async throws -> TestResult {
+        guard isValidEndpointHost(config.host), (1...65_535).contains(config.port),
+              (1...65_535).contains(config.clientPort) else {
+            throw SetupError.failed("Correct the host and client port in Preferences first.")
+        }
         let runner = config.makeRunner()
         guard let request = runner.deepReadinessRequest(model: model) else {
             throw SetupError.unsupportedProbe

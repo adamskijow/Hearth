@@ -6,14 +6,16 @@
 # remote access. Avoid raw 0.0.0.0 exposure.
 #
 # Install Caddy (brew install caddy), edit the address and token below, and run:
-#   caddy run --config deploy/Caddyfile.example
+#   caddy run --adapter caddyfile --config deploy/Caddyfile.example
 #
 # This example gates every request on a bearer token and forwards the rest to the
 # local runner. Bind the site address to your Tailscale address (or use Caddy's
 # automatic HTTPS with a real hostname) and keep it private.
+# This HTTP example relies on Tailscale encryption; use HTTPS on other networks.
 
 # Replace with your Tailscale address or hostname and port.
-100.64.0.2:8443 {
+http://100.64.0.2:8443 {
+	bind 100.64.0.2
 	@authorized header Authorization "Bearer CHANGE-ME-to-a-long-random-token"
 
 	handle @authorized {

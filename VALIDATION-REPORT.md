@@ -7,6 +7,26 @@ The recent gates below use isolated configuration, data, ports, and owned proces
 identities. The older `./scripts/validate-real.sh` targets normal runner state and
 uses broad process cleanup; use it only in a dedicated test environment.
 
+## September 7, 2026: setup and controlled recovery
+
+The [setup matrix](docs/setup-validation.md) records admission and failed-save
+regressions, actual address/PID ownership checks, real Ollama and MLX inference,
+and buffered/streamed inference through an authenticating Caddy instance.
+Five isolated managed drills passed: process exit, API wedge, inference wedge,
+crash loop, and supervisor crash/orphan sweep. Every restored service completed
+inference; normal teardown left no captured fixture groups.
+
+Setup now stops at failed stages, preserves custom executable paths, and offers
+`setup --check --model MODEL` without login-agent installation. Preferences keeps
+edits after a failed save. Caddy output now includes explicit HTTP, interface
+binding, adapter selection, quoted commands, and a securely written token file.
+Adversarial review found additional invalid-port and remote wildcard-ownership
+cases; both have regression coverage.
+
+Actual login-agent installation, unlocked keyboard/menu checks, and the bounded
+72-hour workload remain pending. Normal Hearth/Ollama services were not changed.
+No release or scheduled workload was started.
+
 ## September 7, 2026: request activity and UI
 
 The [request-activity stage](docs/request-activity.md) replaces idle-connection

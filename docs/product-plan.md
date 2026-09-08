@@ -41,7 +41,11 @@ completed responses, and explicitly defers adapters without residency evidence.
 [Request-level traffic observation](request-activity.md) now distinguishes idle
 pooling from active work and preserves cancellation uncertainty until owned
 group shutdown is confirmed. The UI and generated client endpoint have also
-been updated. Clean setup, the bounded workload, and release remain pending.
+been updated. The [setup and recovery checks](setup-validation.md) now cover
+configuration admission, failed saves, endpoint ownership, real Ollama/MLX
+inference, authenticated Caddy routing, and five isolated managed failure drills.
+Live keyboard testing, actual login-agent installation, the bounded workload,
+and release remain pending.
 
 ## 1. Reproduce before changing recovery policy
 
@@ -181,9 +185,13 @@ packaging, and separate monitoring apps until the core milestones are done.
 
 ## Next implementation session
 
-Complete the isolated clean-setup matrix in milestone 3, using the new focused
-Preferences and consistent client endpoint. Finish live keyboard/menu checks
-when an unlocked desktop is available, and verify real inference through Caddy.
-Then run the controlled recovery drills before beginning the bounded 72-hour
-workload. Preserve partial traffic visibility and the additive evidence contract.
-No recruitment or outreach step precedes this work.
+Finish live keyboard/menu checks when an unlocked desktop is available. Review
+one actual login-agent installation in a dedicated environment; current setup
+orchestration tests inject the installer to protect the normal service.
+
+Then run the bounded 72-hour local workload in milestone 4, with quiet periods,
+streaming, model loading/unloading, explicit client retries, and an overhead
+baseline. The five controlled recovery drills already pass and are repeatable
+without an installed runner. Investigate any false restart, idle model load, or
+cleanup failure before release. Preserve partial traffic visibility and the
+additive evidence contract. No recruitment or outreach step precedes this work.

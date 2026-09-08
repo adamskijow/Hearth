@@ -27,7 +27,8 @@ enum StatusCLI {
           Hearth proxy-setup        Generate an authenticating Caddy reverse proxy config for the runner.
           Hearth mode managed|attached [--daemon] [--force]
                                     Set whether Hearth starts the runner or watches one.
-          Hearth setup              Turnkey: detect the runner, install the login agent, wait for ready.
+          Hearth setup              Install the login agent and check the client endpoint.
+          Hearth setup --check [--model MODEL]  Check without installing; --model runs inference.
           Hearth wait-ready [-t S]  Block until the runner answers (exit 0), or time out (exit 1).
           Hearth install-agent      Install a login agent that keeps Hearth running (no sudo).
           Hearth uninstall-agent    Remove that login agent.
@@ -195,24 +196,39 @@ enum StatusCLI {
         let url = config.makeRunner().readinessEndpoint
         let deadline = Date().addingTimeInterval(timeout)
         repeat {
-            let (_, response, _) = syncGET(url, bearer: nil, timeout: 3)
-            if (response as? HTTPURLResponse)?.statusCode == 200 { return true }
+            let (body, response, _) = syncGET(url, bearer: nil, timeout: 3)
+            if (response as? HTTPURLResponse)?.statusCode == 200, let body {
+                if config.runnerKind == .ollama {
+                    if let object = try? JSONSerialization.jsonObject(with: body) as? [String: Any],
+                       let version = object["version"] as? String, !version.isEmpty { return true }
+                } else {
+                    let runner = config.makeRunner()
+                    let catalog: Data?
+                    if runner.availableModelsEndpoint == url { catalog = body }
+                    else {
+                        let (data, reply, _) = syncGET(runner.availableModelsEndpoint, bearer: nil, timeout: 3)
+                        catalog = (reply as? HTTPURLResponse)?.statusCode == 200 ? data : nil
+                    }
+                    if let catalog, (try? runner.parseAvailableModels(catalog)) != nil { return true }
+                }
+            }
             Thread.sleep(forTimeInterval: 1)
         } while Date() < deadline
         return false
     }
 
-    struct RunnerPortProbe {
+    struct RunnerPortProbe: Sendable {
         var portOccupied: Bool
         var compatibleRunnerReady: Bool
         var hearthRunner: RunnerProcessIdentity?
     }
 
     static func probeRunnerPort(config: HearthConfig) -> RunnerPortProbe {
-        RunnerPortProbe(
-            portOccupied: isSomethingListening(host: config.host, port: config.port),
-            compatibleRunnerReady: isRunnerReady(config: config, timeout: 1),
-            hearthRunner: liveRecordedRunner()
+        let addresses = ListenerOwnership.reachableAddresses(host: config.host, port: config.port)
+        return RunnerPortProbe(
+            portOccupied: !addresses.isEmpty,
+            compatibleRunnerReady: !addresses.isEmpty && isRunnerReady(config: config, timeout: 1),
+            hearthRunner: ListenerOwnership.recordedOwner(addresses: addresses, port: config.port)
         )
     }
 
@@ -385,39 +401,7 @@ enum StatusCLI {
     }
 
     private static func isSomethingListening(host: String, port: Int) -> Bool {
-        // The shared wildcard-to-loopback mapping the probe URLs use, so this
-        // port check and the readiness probe agree about where to dial.
-        let target = probeHost(for: host)
-
-        var hints = addrinfo(
-            ai_flags: AI_NUMERICSERV,
-            ai_family: AF_UNSPEC,
-            ai_socktype: SOCK_STREAM,
-            ai_protocol: IPPROTO_TCP,
-            ai_addrlen: 0,
-            ai_canonname: nil,
-            ai_addr: nil,
-            ai_next: nil
-        )
-        var result: UnsafeMutablePointer<addrinfo>?
-        guard getaddrinfo(target, String(port), &hints, &result) == 0, let result else {
-            return false
-        }
-        defer { freeaddrinfo(result) }
-
-        var cursor: UnsafeMutablePointer<addrinfo>? = result
-        while let info = cursor {
-            let fd = socket(info.pointee.ai_family, info.pointee.ai_socktype, info.pointee.ai_protocol)
-            if fd >= 0 {
-                var timeout = timeval(tv_sec: 0, tv_usec: 500_000)
-                setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
-                let connected = connect(fd, info.pointee.ai_addr, info.pointee.ai_addrlen) == 0
-                close(fd)
-                if connected { return true }
-            }
-            cursor = info.pointee.ai_next
-        }
-        return false
+        !ListenerOwnership.reachableAddresses(host: host, port: port).isEmpty
     }
 
     private static func directoryIsWritable(_ url: URL) -> Bool {
@@ -430,17 +414,6 @@ enum StatusCLI {
     /// while its teardown is still in flight; the newest entry is the current one).
     private static func recordedRunner() -> RunnerProcessIdentity? {
         RunnerStateStore.loadRecorded().last
-    }
-
-    /// The newest recorded runner that is still the same live instance.
-    private static func liveRecordedRunner() -> RunnerProcessIdentity? {
-        for recorded in RunnerStateStore.loadRecorded().reversed() {
-            guard let live = RunnerStateStore.liveIdentity(pid: recorded.pid),
-                  RunnerSweep.shouldSweep(recorded: recorded, live: live),
-                  kill(recorded.pid, 0) == 0 else { continue }
-            return recorded
-        }
-        return nil
     }
 
     // MARK: - metrics

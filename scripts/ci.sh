@@ -79,6 +79,10 @@ section "Unit tests"
 section "HTTP activity and relay (isolated fake runner)"
 python3 ./scripts/validate-inference.py && ok || bad "HTTP activity or relay regression"
 
+section "Isolated setup and managed recovery"
+python3 ./scripts/validate-setup.py && ok || bad "Setup validation failed"
+python3 ./scripts/validate-recovery.py && ok || bad "Managed recovery validation failed"
+
 section "Lint: whitespace"
 if git diff --check \
    && git diff --cached --check \

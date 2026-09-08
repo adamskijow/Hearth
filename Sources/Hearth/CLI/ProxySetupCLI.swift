@@ -11,7 +11,21 @@ import SupervisorCore
 /// address when one is present, plus the exact commands to run it.
 enum ProxySetupCLI {
     static func run(_ args: [String]) -> Never {
-        let config = ConfigStore.load().config
+        guard args.isEmpty || (args.count == 2 && args[0] == "--output" && !args[1].hasPrefix("--")) else {
+            print("Usage: hearth proxy-setup [--output DIRECTORY]")
+            exit(1)
+        }
+        let loaded = ConfigStore.load(from: AppPaths.configFile, createDefaultIfMissing: false)
+        guard !loaded.createdDefault else {
+            print("No configuration exists. Run `hearth setup` or save settings in Preferences first.")
+            exit(1)
+        }
+        let blocking = loaded.blockingDiagnostics()
+        guard blocking.isEmpty else {
+            FileHandle.standardError.write(Data((blocking.map(\.message).joined(separator: "\n") + "\n").utf8))
+            exit(1)
+        }
+        let config = loaded.config
         var outputDirectory = FileManager.default.currentDirectoryPath
         if let flagIndex = args.firstIndex(of: "--output"), args.indices.contains(flagIndex + 1) {
             outputDirectory = args[flagIndex + 1]
@@ -31,15 +45,13 @@ enum ProxySetupCLI {
                                 runnerPort: config.clientPort, token: token, runnerHost: upstreamHost)
 
         let url = URL(fileURLWithPath: outputDirectory).appendingPathComponent("Caddyfile.hearth")
-        do {
-            try Data(content.utf8).write(to: url)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-        } catch {
+        guard SecureFile.write(Data(content.utf8), to: url) else {
             FileHandle.standardError.write(Data(
-                "Hearth: could not write \(url.path): \(error.localizedDescription)\n".utf8))
+                "Hearth: could not securely write \(url.path). Check folder permissions.\n".utf8))
             exit(1)
         }
 
+        let commandPath = "'" + url.path.replacingOccurrences(of: "'", with: "'\\''") + "'"
         print("""
         Hearth proxy-setup
           wrote \(url.path) (mode 600; it contains the bearer token)
@@ -48,19 +60,21 @@ enum ProxySetupCLI {
         \(config.clientEndpoint). To serve it:
 
           brew install caddy
-          caddy validate --config \(url.path)
-          caddy run --config \(url.path)
+          caddy validate --adapter caddyfile --config \(commandPath)
+          caddy run --adapter caddyfile --config \(commandPath)
 
         (or copy it to $(brew --prefix)/etc/Caddyfile and `brew services start
         caddy` so launchd keeps the proxy alive too.)
 
         Clients then call:
 
-          curl -H "Authorization: Bearer \(token)" http://\(bind):8443/api/version
+          curl -H "Authorization: Bearer \(token)" http://\(urlAuthorityHost(for: bind)):8443\(config.makeRunner().readinessEndpoint.path)
 
         \(bind == "YOUR-TAILSCALE-OR-LAN-ADDRESS"
             ? "No Tailscale interface was found; edit the bind address in the file to your private address first."
-            : "The bind address is this Mac's Tailscale address, so only your tailnet can reach it.")
+            : "The listener binds to this Mac's Tailscale address. Keep access restricted by your tailnet policy.")
+        This HTTP example relies on Tailscale encryption. Configure HTTPS when
+        using another network, so the bearer token is encrypted in transit.
         Keep the runner itself on 127.0.0.1; the proxy is the only thing that
         should face the network. docs/reverse-proxy.md has the background and an
         nginx variant.
@@ -75,7 +89,8 @@ enum ProxySetupCLI {
         # front of the runner: every request must carry the bearer token below,
         # and the runner itself stays on 127.0.0.1. See docs/reverse-proxy.md.
 
-        \(bindAddress):\(proxyPort) {
+        http://\(urlAuthorityHost(for: bindAddress)):\(proxyPort) {
+        \tbind \(bindAddress)
         \t@authorized header Authorization "Bearer \(token)"
 
         \thandle @authorized {

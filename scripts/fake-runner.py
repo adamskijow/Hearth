@@ -16,9 +16,21 @@
 import json
 import os
 import signal
+import subprocess
 import sys
 import time
+from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+# Optional isolated drill controls. No files are touched unless explicitly set.
+if spawn_log := os.environ.get("FAKE_SPAWN_LOG"):
+    with open(spawn_log, "a") as log:
+        started = subprocess.check_output(["/bin/ps", "-p", str(os.getpid()), "-o", "lstart="], text=True).strip()
+        log.write(json.dumps({"pid": os.getpid(), "pgid": os.getpgrp(), "started": started,
+                              "time": time.monotonic()}) + "\n")
+if crash_marker := os.environ.get("FAKE_CRASH_MARKER"):
+    if Path(crash_marker).exists():
+        sys.exit(1)
 
 host_port = os.environ.get("OLLAMA_HOST", "127.0.0.1:11434")
 host, _, port = host_port.partition(":")
@@ -109,7 +121,7 @@ class Handler(BaseHTTPRequestHandler):
         if wedged or inference_wedged:
             time.sleep(600)
             return
-        body = json.dumps({"model": "fake-model:latest", "response": "ok", "done": True}).encode()
+        body = json.dumps({"model": "fake-model:latest", "response": "ok", "done": True, "eval_count": 1}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))

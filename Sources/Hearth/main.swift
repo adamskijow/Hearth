@@ -33,7 +33,7 @@ case "update":
 case "proxy-setup":
     ProxySetupCLI.run(Array(arguments.dropFirst()))  // exits
 case "setup":
-    SetupCLI.run()  // exits
+    SetupCLI.run(Array(arguments.dropFirst()))  // exits
 case "install-agent":
     AgentInstaller.install()  // exits
 case "uninstall-agent":

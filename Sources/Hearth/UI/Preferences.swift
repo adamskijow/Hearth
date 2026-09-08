@@ -11,13 +11,13 @@ import SupervisorCore
 final class PreferencesController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private let model: PreferencesModel
-    private let onSave: (HearthConfig) -> Void
+    private let onSave: (HearthConfig) -> Bool
     /// The config this window started from, so an external change (a file edit
     /// plus SIGHUP, the CLI, a menu switch) can be told apart from the user's own
     /// in-window edits.
     private var baseline: HearthConfig?
 
-    init(config: HearthConfig, onSave: @escaping (HearthConfig) -> Void) {
+    init(config: HearthConfig, onSave: @escaping (HearthConfig) -> Bool) {
         self.model = PreferencesModel(config)
         self.onSave = onSave
         super.init()
@@ -63,8 +63,9 @@ final class PreferencesController: NSObject, NSWindowDelegate {
             let view = PreferencesView(
                 model: model,
                 onSave: { [weak self] config in
-                    self?.baseline = config
-                    self?.onSave(config)
+                    guard let self, self.onSave(config) else { return false }
+                    self.baseline = config
+                    return true
                 },
                 onClose: { [weak self] in self?.window?.close() }
             )
@@ -116,6 +117,15 @@ final class PreferencesModel: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    func save(using persist: (HearthConfig) -> Bool) {
+        guard canSave, persist(config) else {
+            status = "Could not save. Check folder permissions; your edits are still here."
+            return
+        }
+        baseline = config
+        status = "Saved. Reload requested; check the menu for runner status."
+    }
+
     func resetProbeUI() {
         probeRequestID = UUID()
         probeBusy = false
@@ -132,7 +142,7 @@ final class PreferencesModel: ObservableObject {
 
 struct PreferencesView: View {
     @ObservedObject var model: PreferencesModel
-    let onSave: (HearthConfig) -> Void
+    let onSave: (HearthConfig) -> Bool
     let onClose: () -> Void
     @State private var showingEnvEditor = false
     @State private var showingTokensEditor = false
@@ -169,17 +179,15 @@ struct PreferencesView: View {
                          : "These changes restart supervision; the watched runner stays running.")
                         .foregroundStyle(.orange).font(.callout)
                 }
-                HStack {
+                if !model.status.isEmpty {
                     Text(model.status).foregroundStyle(.secondary).font(.callout)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                HStack {
                     Spacer()
                     Button("Close", action: onClose)
                     Button(saveButtonTitle) {
-                        let impact = saveImpact
-                        onSave(model.config)
-                        model.baseline = model.config
-                        model.status = impact == .live
-                            ? "Saved without restarting the runner."
-                            : impact == .none ? "No changes to save." : "Saved and reloaded."
+                        model.save(using: onSave)
                     }
                     .keyboardShortcut(.defaultAction)
                     .disabled(!model.canSave || saveImpact == .none)

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import Foundation
+import Darwin
 
 /// The host a probe should dial for a runner bound to `host`. A wildcard bind
 /// address (`0.0.0.0`, `::`) tells the runner to listen on every interface, but
@@ -8,10 +9,33 @@ import Foundation
 /// target loopback instead. Only probing uses this mapping; a managed runner is
 /// still launched with the raw configured host as its bind address.
 public func probeHost(for host: String) -> String {
+    let host = host.hasPrefix("[") && host.hasSuffix("]") ? String(host.dropFirst().dropLast()) : host
     switch host {
     case "0.0.0.0": return "127.0.0.1"
     case "::", "::0": return "::1"
     default: return host
+    }
+}
+
+/// Config fields hold a hostname or IP literal, never a URL or authority.
+/// URL construction alone accepts userinfo, paths, and fragments as host input.
+public func isValidEndpointHost(_ host: String) -> Bool {
+    guard !host.isEmpty, host.utf8.count <= 253, host.utf8.allSatisfy({ (33...126).contains($0) }) else { return false }
+    let literal = host.hasPrefix("[") && host.hasSuffix("]") ? String(host.dropFirst().dropLast()) : host
+    if literal.contains(":") {
+        var address = in6_addr()
+        return literal.withCString { inet_pton(AF_INET6, $0, &address) } == 1
+    }
+    if host.utf8.allSatisfy({ (48...57).contains($0) || $0 == 46 }) {
+        var address = in_addr()
+        return host.withCString { inet_pton(AF_INET, $0, &address) } == 1
+    }
+    let name = host.hasSuffix(".") ? String(host.dropLast()) : host
+    return name.split(separator: ".", omittingEmptySubsequences: false).allSatisfy { label in
+        !label.isEmpty && label.utf8.count <= 63 && label.first != "-" && label.last != "-"
+            && label.utf8.allSatisfy {
+                (48...57).contains($0) || (65...90).contains($0) || (97...122).contains($0) || $0 == 45
+            }
     }
 }
 

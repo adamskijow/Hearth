@@ -90,9 +90,8 @@ public enum ConfigDiagnostics {
                 let runner = config.runnerKind == .ollama ? "Ollama" : config.runnerKind.displayName
                 issues.append(.init(.warning, "Runner is bound to \(host) (all interfaces). \(runner) is exposed beyond this Mac; use this only on a trusted LAN or behind an authenticated private reverse proxy."))
             }
-            // Bracket an IPv6 literal the same way the probe endpoints do, so a
-            // host like ::1 that supervision handles fine is not flagged invalid.
-            if URL(string: "http://\(urlAuthorityHost(for: config.host)):\(config.port)/") == nil {
+            // A host field must not accept URL paths, userinfo, or a port.
+            if !isValidEndpointHost(config.host) {
                 issues.append(.init(.error, "Host \"\(config.host)\" is not a valid hostname or address."))
             }
         }
@@ -196,6 +195,9 @@ public enum ConfigDiagnostics {
             // 0.0.0.0 exposes the control surface on every interface, including any
             // public one; a specific private/Tailscale address is the intended bind.
             let controlHost = config.controlHost.trimmingCharacters(in: .whitespaces)
+            if !isValidEndpointHost(config.controlHost) {
+                issues.append(.init(.error, "controlHost must be a hostname or IP address, without a scheme, port, or path."))
+            }
             if controlHost == "0.0.0.0" || controlHost == "::" {
                 issues.append(.init(.warning, "Control endpoint is bound to \(controlHost) (all interfaces); its start/stop/restart surface is reachable from any network this Mac joins. Bind controlHost to 127.0.0.1 or a specific private (Tailscale) address."))
             }

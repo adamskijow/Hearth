@@ -35,11 +35,12 @@ enum AgentInstaller {
         let outLog = AppPaths.logDirectory.appendingPathComponent("headless.out.log").path
         let errLog = AppPaths.logDirectory.appendingPathComponent("headless.err.log").path
 
+        let environment = launchEnvironment(config: config, inherited: ProcessInfo.processInfo.environment)
         // Build the plist from a dictionary so paths are escaped correctly.
         let job: [String: Any] = [
             "Label": label,
             "ProgramArguments": [exe, "--headless"],
-            "EnvironmentVariables": ["HEARTH_CONFIG": config],
+            "EnvironmentVariables": environment,
             "RunAtLoad": true,
             "KeepAlive": true,
             "ProcessType": "Background",
@@ -83,6 +84,14 @@ enum AgentInstaller {
         lines.append("If the menubar app also launches, that is fine: whichever starts first supervises")
         lines.append("and the other stands by (single-instance guard). Remove this with `hearth uninstall-agent`.")
         return (loaded.ok, lines)
+    }
+
+    static func launchEnvironment(config: String, inherited: [String: String]) -> [String: String] {
+        var environment = ["HEARTH_CONFIG": config]
+        if let dataDirectory = inherited["HEARTH_DATA_DIR"], !dataDirectory.isEmpty {
+            environment["HEARTH_DATA_DIR"] = (dataDirectory as NSString).expandingTildeInPath
+        }
+        return environment
     }
 
     static func uninstall() -> Never {

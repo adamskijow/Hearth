@@ -19,8 +19,18 @@ a localhost-only listener is not reachable at the Mac's Tailscale address.
 
 For bearer-authenticated runner access, start with
 [`deploy/Caddyfile.example`](../deploy/Caddyfile.example) or `hearth proxy-setup`.
-The examples below assume access is already restricted to a trusted private
-network; they do not add runner authentication.
+The generated file uses explicit HTTP and binds its listener to the chosen
+Tailscale address. A site hostname alone is a request matcher, not an interface
+restriction; Caddy needs [`bind`](https://caddyserver.com/docs/caddyfile/directives/bind)
+for that. The HTTP example relies on Tailscale encryption. Configure HTTPS for
+other networks so the bearer token is encrypted in transit.
+
+Use `caddy validate --adapter caddyfile --config Caddyfile.hearth` before starting
+it. The explicit adapter is needed for this generated filename. The printed
+commands quote the output path and select the runner's readiness endpoint.
+
+The hostname examples below assume access is already restricted to a trusted
+private network; they do not add runner authentication.
 
 ```caddyfile
 ollama.your-tailnet.ts.net {

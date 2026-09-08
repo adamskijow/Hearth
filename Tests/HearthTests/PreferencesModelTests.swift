@@ -8,6 +8,24 @@ import Testing
 
 @MainActor
 struct PreferencesModelTests {
+    @Test func failedSaveKeepsEditsAndSuccessfulSaveUpdatesBaseline() throws {
+        let model = PreferencesModel(HearthConfig())
+        let original = model.baseline
+        model.config.port = 12434
+        model.save { _ in false }
+        #expect(model.baseline == original)
+        #expect(model.config.port == 12434)
+        #expect(model.status.contains("edits are still here"))
+        let view = PreferencesView(model: model, onSave: { _ in false }, onClose: {})
+            .frame(width: 560, height: 640)
+            .background(Color(nsColor: .windowBackgroundColor))
+        let image = try render(view, size: NSSize(width: 560, height: 640))
+        try export(image, name: "preferences-save-failure")
+        model.save { _ in true }
+        #expect(model.baseline == model.config)
+        #expect(model.status.contains("Reload requested"))
+    }
+
     @Test func managedMLXCannotBeSavedWithoutAModel() {
         let model = PreferencesModel(HearthConfig(runner: "mlx", mode: "managed", port: 8080))
         #expect(!model.canSave)
@@ -24,7 +42,7 @@ struct PreferencesModelTests {
 
     @Test func managedMLXPreferencesRenderAtTheReleaseWindowSize() throws {
         let model = PreferencesModel(HearthConfig(runner: "mlx", mode: "managed", port: 8080))
-        let view = PreferencesView(model: model, onSave: { _ in }, onClose: {})
+        let view = PreferencesView(model: model, onSave: { _ in true }, onClose: {})
             .frame(width: 500, height: 620)
             .background(Color(nsColor: .windowBackgroundColor))
         let image = try render(view, size: NSSize(width: 500, height: 620))
@@ -54,7 +72,7 @@ struct PreferencesModelTests {
                 config.controlToken = "fixture-token-not-a-real-secret"
                 let model = PreferencesModel(config)
                 model.page = page
-                let view = PreferencesView(model: model, onSave: { _ in }, onClose: {})
+                let view = PreferencesView(model: model, onSave: { _ in true }, onClose: {})
                     .frame(width: 560, height: 640)
                     .background(Color(nsColor: .windowBackgroundColor))
                     .preferredColorScheme(dark ? .dark : .light)

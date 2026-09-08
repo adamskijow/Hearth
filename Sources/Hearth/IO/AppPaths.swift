@@ -55,7 +55,7 @@ enum AppPaths {
 /// The outcome of loading the config, so the UI can tell apart a clean load, a
 /// first-run template, and a parse failure (which is a setup problem to surface
 /// loudly rather than silently revert).
-struct ConfigLoad {
+struct ConfigLoad: Sendable {
     var config: HearthConfig
     var note: String?
     var isProblem: Bool
@@ -105,8 +105,11 @@ enum ConfigStore {
         let detected: String? = exists ? nil : RunnerLocator.locate(HearthConfig().runner)
 
         let resolution = ConfigLoading.resolve(fileContents: contents, configPath: url.path, detectedBinary: detected)
-        if resolution.createdDefault && createDefaultIfMissing {
-            save(resolution.config, to: url)
+        if resolution.createdDefault && createDefaultIfMissing,
+           !save(resolution.config, to: url) {
+            return ConfigLoad(config: resolution.config,
+                note: "Could not write the starter config. Check the configuration folder permissions.",
+                isProblem: true, createdDefault: false)
         }
         return ConfigLoad(
             config: resolution.config,

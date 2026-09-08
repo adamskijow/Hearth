@@ -92,6 +92,7 @@ def run(binary):
             print("PASS: unrelated HTTP 200 rejected; proxy setup preserves malformed/missing config", flush=True)
             output = work / "a folder's configs"
             output.mkdir()
+            output.chmod(0o755)
             config.write_text(json.dumps(dict(base, runner="mlx", mode="attached")))
             generated = subprocess.run([binary, "proxy-setup", "--output", str(output)], env=env,
                                        text=True, capture_output=True, timeout=10)
@@ -101,6 +102,7 @@ def run(binary):
                 if line.strip().startswith(("caddy validate", "caddy run")):
                     assert shlex.split(line)[-1] == str(output / "Caddyfile.hearth"), line
             assert (output / "Caddyfile.hearth").stat().st_mode & 0o777 == 0o600
+            assert output.stat().st_mode & 0o777 == 0o755
             print("PASS: generated commands quote paths, use selected adapter endpoint, and protect the token file", flush=True)
     finally:
         server.shutdown()

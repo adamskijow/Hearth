@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import Foundation
+import Darwin
 
 /// Writes Hearth's on-disk state so only its owner can read it. The config file
 /// holds the control token and the ntfy topic (both bearer secrets), and the
@@ -28,6 +29,37 @@ enum SecureFile {
         guard (try? data.write(to: url, options: .atomic)) != nil else { return false }
         try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
         return true
+    }
+
+    /// Write an exported secret into a caller-chosen folder. Unlike Hearth's
+    /// state directories, that folder may be shared and must retain its mode.
+    /// mkstemp creates a private file before any bytes are written; rename then
+    /// replaces the destination atomically without following an existing symlink.
+    static func writePrivateOutput(_ data: Data, to url: URL) -> Bool {
+        let directory = url.deletingLastPathComponent()
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
+                                                     attributes: [.posixPermissions: 0o700])
+        } catch { return false }
+        var template = Array(directory.appendingPathComponent(".hearth-private-XXXXXX").path.utf8CString)
+        let fd = mkstemp(&template)
+        guard fd >= 0 else { return false }
+        let temporary = template.withUnsafeBufferPointer { String(cString: $0.baseAddress!) }
+        defer { unlink(temporary) }
+        // A shared macOS folder can grant inherited ACL access even at 0600.
+        // Remove those grants through the open descriptor before writing data.
+        guard let acl = acl_init(0) else { close(fd); return false }
+        defer { acl_free(UnsafeMutableRawPointer(acl)) }
+        guard acl_set_fd(fd, acl) == 0, fchmod(fd, 0o600) == 0 else { close(fd); return false }
+        let handle = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
+        do {
+            try handle.write(contentsOf: data)
+            try handle.close()
+            return rename(temporary, url.path) == 0
+        } catch {
+            try? handle.close()
+            return false
+        }
     }
 
     /// Tighten an already-present file to 0600, retro-hardening one an older

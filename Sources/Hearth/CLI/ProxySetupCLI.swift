@@ -45,7 +45,7 @@ enum ProxySetupCLI {
                                 runnerPort: config.clientPort, token: token, runnerHost: upstreamHost)
 
         let url = URL(fileURLWithPath: outputDirectory).appendingPathComponent("Caddyfile.hearth")
-        guard SecureFile.write(Data(content.utf8), to: url) else {
+        guard SecureFile.writePrivateOutput(Data(content.utf8), to: url) else {
             FileHandle.standardError.write(Data(
                 "Hearth: could not securely write \(url.path). Check folder permissions.\n".utf8))
             exit(1)

@@ -47,7 +47,7 @@ to the current reload before any services start.
 | Real MLX, managed startup model | Completed inference through metrics proxy; unknown residency correctly withholds automatic inference recovery |
 | MLX without managed startup model | Managed configuration rejected; attached verification works without the startup field |
 | Generated Caddy template | Actual server rejects missing/wrong tokens and forwards buffered and streamed Ollama inference |
-| Copied Caddy commands | Explicit adapter, quoted paths including spaces/apostrophe, correct runner readiness path; token file mode 0600 |
+| Copied Caddy commands | Explicit adapter, quoted paths including spaces/apostrophe, correct runner readiness path; token file mode 0600 from creation; output folder permissions preserved |
 
 The real Ollama check used the installed `qwen2.5:0.5b` model. The real MLX check
 used cached `mlx-community/Qwen2.5-0.5B-Instruct-4bit`, Python 3.12, MLX-LM 0.31.3,

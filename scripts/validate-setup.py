@@ -10,7 +10,8 @@ import shlex
 import subprocess
 import tempfile
 import threading
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
+from fixture_http import FixtureHTTPServer
 
 
 def run(binary):
@@ -35,7 +36,15 @@ def run(binary):
             else:
                 self.respond(200, {"done": True, "eval_count": 1})
 
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    def unexpected_lookup(*_args):
+        raise AssertionError("A numeric loopback fixture must not depend on reverse DNS")
+
+    lookup = socket.getfqdn
+    socket.getfqdn = unexpected_lookup
+    try:
+        server = FixtureHTTPServer(("127.0.0.1", 0), Handler)
+    finally:
+        socket.getfqdn = lookup
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     wrong = socket.socket()

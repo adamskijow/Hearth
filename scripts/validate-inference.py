@@ -18,7 +18,8 @@ import tempfile
 import threading
 import time
 import urllib.request
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
+from fixture_http import FixtureHTTPServer
 
 
 class Runner:
@@ -105,7 +106,7 @@ def run(binary):
             else:
                 self.reply(200, {"response": "ok", "done": True, "eval_count": 1})
 
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server = FixtureHTTPServer(("127.0.0.1", 0), Handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     reservations = [socket.socket() for _ in range(2)]
     for sock in reservations:

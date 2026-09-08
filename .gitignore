@@ -41,3 +41,6 @@ HANDOFF.md
 
 # macOS
 .DS_Store
+
+# Python validation helpers
+__pycache__/

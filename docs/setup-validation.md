@@ -93,7 +93,9 @@ fixture startup exceeded the original two-second test allowance. The harness now
 allows ten seconds for startup; all five drills also pass with
 `HEARTH_FIXTURE_STARTUP_DELAY=3`. Failure output includes the synthetic fixture's
 last state and redacted logs. Wedge detection and crash-loop assertions remain
-unchanged.
+unchanged. Synthetic HTTP fixtures also avoid reverse DNS before opening their
+listeners; a regression rejects hostname lookup during numeric loopback startup.
+The fake runner reports listening only after server construction completes.
 
 Both use dedicated state and ports. Never substitute the older broad-cleanup
 `validate-real.sh` or `smoke-test.sh` against a normal installation.

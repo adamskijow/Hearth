@@ -20,7 +20,8 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
+from fixture_http import FixtureHTTPServer
 
 # Optional isolated drill controls. No files are touched unless explicitly set.
 if spawn_log := os.environ.get("FAKE_SPAWN_LOG"):
@@ -59,10 +60,6 @@ def _unwedge(_signum, _frame):
 
 signal.signal(signal.SIGUSR1, _wedge)
 signal.signal(signal.SIGUSR2, _unwedge)
-
-sys.stderr.write(f"fake-runner: serving on {host}:{port} (argv={sys.argv[1:]})\n")
-sys.stderr.flush()
-
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
@@ -134,4 +131,7 @@ class Handler(BaseHTTPRequestHandler):
 
 # Threaded so a wedged (hanging) request never blocks the accept loop: the process
 # keeps accepting connections, it just never answers.
-ThreadingHTTPServer((host, port), Handler).serve_forever()
+server = FixtureHTTPServer((host, port), Handler)
+sys.stderr.write(f"fake-runner: listening on {host}:{port} (argv={sys.argv[1:]})\n")
+sys.stderr.flush()
+server.serve_forever()

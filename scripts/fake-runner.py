@@ -32,6 +32,9 @@ if crash_marker := os.environ.get("FAKE_CRASH_MARKER"):
     if Path(crash_marker).exists():
         sys.exit(1)
 
+# A controlled cold start for checking the harness's startup allowance.
+time.sleep(float(os.environ.get("FAKE_STARTUP_DELAY_SECONDS", "0")))
+
 host_port = os.environ.get("OLLAMA_HOST", "127.0.0.1:11434")
 host, _, port = host_port.partition(":")
 port = int(port or "11434")

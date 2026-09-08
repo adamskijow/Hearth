@@ -88,6 +88,13 @@ python3 scripts/validate-setup.py
 python3 scripts/validate-recovery.py
 ```
 
+A separate cold-start check reproduced premature retries when a three-second
+fixture startup exceeded the original two-second test allowance. The harness now
+allows ten seconds for startup; all five drills also pass with
+`HEARTH_FIXTURE_STARTUP_DELAY=3`. Failure output includes the synthetic fixture's
+last state and redacted logs. Wedge detection and crash-loop assertions remain
+unchanged.
+
 Both use dedicated state and ports. Never substitute the older broad-cleanup
 `validate-real.sh` or `smoke-test.sh` against a normal installation.
 

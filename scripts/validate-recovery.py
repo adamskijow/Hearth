@@ -54,8 +54,10 @@ class Session:
         self.config.write_text(json.dumps({
             "mode": "managed", "host": "127.0.0.1", "port": self.runner_port,
             "ollamaBinaryPath": str(Path(__file__).resolve().with_name("fake-runner.py")),
-            "runnerEnv": {"FAKE_CRASH_MARKER": str(self.marker), "FAKE_SPAWN_LOG": str(self.spawn_log)},
-            "startupGraceSeconds": 2, "probeIntervalSeconds": 1, "probeTimeoutSeconds": 1,
+            "runnerEnv": {"FAKE_CRASH_MARKER": str(self.marker), "FAKE_SPAWN_LOG": str(self.spawn_log),
+                          "FAKE_STARTUP_DELAY_SECONDS": os.environ.get("HEARTH_FIXTURE_STARTUP_DELAY", "0")},
+            # Cold Python startup on a hosted Mac is separate from wedge detection.
+            "startupGraceSeconds": 10, "probeIntervalSeconds": 1, "probeTimeoutSeconds": 1,
             "probeModel": "fake-model:latest", "deepProbeIntervalSeconds": 5, "deepProbeTimeoutSeconds": 1,
             "initialBackoffSeconds": 0.5, "maxBackoffSeconds": 2,
             "crashLoopThreshold": 3, "crashLoopWindowSeconds": 30, "failingProbeIntervalSeconds": 5,
@@ -67,6 +69,7 @@ class Session:
         self.log = (self.work / "hearth.log").open("w")
         self.groups = set()
         self.child = None
+        self.last_status = {}
         if crash:
             self.marker.touch()
         for sock in reservations:
@@ -90,7 +93,8 @@ class Session:
 
     def status(self):
         assert self.child.poll() is None, "isolated Hearth exited"
-        return self.request(self.control_port, "/status", control=True)
+        self.last_status = self.request(self.control_port, "/status", control=True)
+        return self.last_status
 
     def identity(self):
         records = json.loads((self.work / "runner-state.json").read_text())
@@ -113,6 +117,21 @@ class Session:
         wait_for(lambda: gone(previous["pgid"]))
         elapsed = time.monotonic() - started
         print(f"PASS: {name}; replacement, completed inference, old group gone ({elapsed:.1f}s)", flush=True)
+
+    def diagnostics(self):
+        # Only this synthetic fixture's logs/state are eligible for CI output.
+        # Exclude config/environment and redact its temporary and repository paths.
+        state = {key: self.last_status.get(key) for key in ("phase", "healthy", "api", "inference", "recovery")}
+        print("FIXTURE last state: " + json.dumps(state), flush=True)
+        count = len(self.spawn_log.read_text().splitlines()) if self.spawn_log.exists() else 0
+        print(f"FIXTURE recorded spawns: {count}", flush=True)
+        for path in (self.work / "hearth.log", self.work / "logs" / "runner.log"):
+            if path.exists():
+                lines = path.read_text(errors="replace").splitlines()[-40:]
+                content = "\n".join(lines).replace(str(self.work), "<fixture>")
+                content = content.replace(str(Path(__file__).resolve().parents[1]), "<repository>")
+                content = content.replace(str(Path.home()), "<home>")
+                print(f"FIXTURE {path.name}:\n{content}", flush=True)
 
     def close(self):
         if self.child and self.child.poll() is None:
@@ -178,6 +197,9 @@ def run(binary):
             assert not gone(prior["pgid"]), "fixture should survive abrupt supervisor exit"
             session.launch()
             session.recovered(prior, started, "supervisor crash and orphan sweep")
+        except BaseException:
+            session.diagnostics()
+            raise
         finally:
             session.close()
         print("PASS: all captured managed groups absent after shutdown", flush=True)
@@ -194,6 +216,9 @@ def run(binary):
             session.marker.unlink()
             session.verify()
             print("PASS: crash loop enters failing, slows retries, then verifies inference after fault removal", flush=True)
+        except BaseException:
+            session.diagnostics()
+            raise
         finally:
             session.close()
 

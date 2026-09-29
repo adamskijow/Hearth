@@ -31,8 +31,9 @@ cold-loading idle models.
 A long client generation can resemble an inference timeout. Automatic recovery
 from deep-probe failures therefore requires client-traffic visibility from the
 metrics proxy. Hearth defers probes during observed work and can restart after a
-confirmed inference failure when the proxy reports idle. The proxy currently
-counts connections, which limits what this signal proves; see
+confirmed inference failure when observed requests have completed and activity
+is known. Idle keep-alive connections do not block checks; interrupted or unknown
+work does. Direct requests remain invisible; see
 [known limitations](limitations.md). Without traffic visibility Hearth alerts
 and preserves the running workload. Process exits and shallow API failures
 retain automatic recovery.

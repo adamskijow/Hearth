@@ -49,8 +49,14 @@ failure without inbound access.
 
 ## CLI
 
+`setup --check` and `--model` require source builds after v1.5.1. Version 1.5.1
+ignores these options and runs the installer; they do not provide a read-only
+check on that release.
+
 ```text
-hearth setup               Detect runner, install login agent, wait for readiness
+hearth setup               Install login agent and check the client endpoint
+hearth setup --check       Check existing setup without installing an agent
+hearth setup --check --model MODEL  Verify a completed inference response
 hearth status [--json]     Health, uptime, restarts, metrics, and models
 hearth logs -n 100         Tail the runner log
 hearth logs -f             Follow the runner log
@@ -67,8 +73,12 @@ hearth uninstall-agent     Remove the login agent
 ```
 
 `hearth status` queries the control endpoint when enabled and falls back to local
-process and port checks. Commands return `0` on success, `1` on operational
-failure, and `2` for invalid usage or rejected configuration.
+process and port checks. A successful `status` command does not mean the runner
+is healthy. Read the returned fields; see [CLI exit codes](stability.md#command-line).
+
+In source builds after v1.5.1, `setup` preserves existing executable paths.
+`setup --check --model MODEL` uses the selected client endpoint, deliberately
+runs inference, and may load the model.
 
 `events.log` records Hearth decisions and survives restarts. The runner log holds
 runner stdout and stderr. The menu's **History** window groups incidents and

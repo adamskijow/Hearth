@@ -57,7 +57,7 @@ runner, configuration, and data directory.
 ## What happens during a crash loop?
 
 Hearth backs off after repeated failures, reports **Crash loop**, and keeps
-probing. It retries slowly until the underlying problem clears. Open **Logs** or
+probing. It retries slowly until the underlying problem clears. Choose **Open Logs** or
 run `hearth logs -n 100` to find the cause.
 
 ## Must my apps change?
@@ -94,8 +94,8 @@ Run one Hearth instance per runner, each with a separate config, data directory,
 runner port, and any enabled control and metrics-proxy ports:
 
 ```sh
-HEARTH_CONFIG="$HOME/.config/hearth-mlx.json" \
-HEARTH_DATA_DIR="$HOME/Library/Application Support/Hearth-MLX" \
+HEARTH_CONFIG="$HOME/.config/hearth-secondary.json" \
+HEARTH_DATA_DIR="$HOME/Library/Application Support/Hearth-Secondary" \
 hearth --headless
 ```
 

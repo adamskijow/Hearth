@@ -1,11 +1,23 @@
 # Hearth validation report
 
-This dated evidence log records real-runner failures, fixes, and remaining gaps.
-M4 added scenarios 1 through 5; M5 added hard-crash orphan recovery.
+This log records checks at specific commits and dates. Older results describe
+the implementation tested at that time, including behavior since changed.
 
 The recent gates below use isolated configuration, data, ports, and owned process
 identities. The older `./scripts/validate-real.sh` targets normal runner state and
 uses broad process cleanup; use it only in a dedicated test environment.
+
+## September 29, 2026: current source checks
+
+At `3fb38ec`, the local gate and [hosted CI](https://github.com/adamskijow/Hearth/actions/runs/36561098257)
+passed 452 tests in 67 suites, debug/release builds, isolated HTTP and setup
+checks, five managed recovery drills, and lint. Welcome and Preferences renders
+were inspected in light and dark appearances. This was a source check; no new
+binary was released.
+
+Real Ollama/MLX and Caddy results are recorded in the September 7 setup matrix
+below. Live keyboard/menu interaction, actual login-agent installation, and the
+72-hour Ollama workload remain unverified. See the [product plan](docs/product-plan.md).
 
 ## September 7, 2026: setup and controlled recovery
 
@@ -62,8 +74,9 @@ Preferences and Welcome were rendered natively in light and dark appearances.
 The pass groups setup into focused pages, exposes the selected client endpoint,
 masks credentials, clarifies ownership, and removes unsupported health claims.
 Live keyboard/menu interaction remains unverified because the Mac was locked.
-The full clean-setup matrix, Caddy runtime check, and bounded 72-hour workload
-remain pending. This is source validation, not a binary release.
+At this point the setup matrix, Caddy runtime check, and 72-hour workload were
+pending. The setup section above records the later matrix and Caddy results; the
+72-hour workload remains pending. This was source validation, not a binary release.
 
 ## September 7, 2026: adversarial review and structured evidence
 

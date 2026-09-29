@@ -21,8 +21,12 @@ Config files travel across versions:
 The subcommand names (`status`, `logs`, `events`, `metrics`, `doctor`,
 `doctor-daemon`, `mode`, `wait-ready`, `update`, `proxy-setup`, `setup`,
 `install-agent`, `uninstall-agent`) and their documented flags are stable. Exit
-code 0 means success, 1 means an operational failure, and 2 means invalid usage
-or a configuration that Hearth refused to apply.
+code 0 means the command completed; nonzero means failure. Codes are not uniform
+across commands: invalid `mode` arguments and unknown subcommands return 2, while
+invalid `setup` or `proxy-setup` arguments return 1. Headless startup returns 2
+when configuration blocks activation. `status` can return 0 while reporting an
+unhealthy runner; inspect its fields rather than using its exit code as a
+health check.
 
 CLI prose may change. Scripts should use `/status` or `hearth status --json`.
 
@@ -64,7 +68,7 @@ credential may read `/status` and `/metrics`; process commands return 403.
 Prometheus metric names (the `hearth_` family) and their label names are stable
 and additive-only.
 
-Webhook payload field names and the event `kind` strings are stable and
+Webhook payload field names and the strings in its `event` field are stable and
 additive-only.
 
 ## Event log

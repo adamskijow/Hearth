@@ -7,6 +7,10 @@ checks do not establish independent usability results or sustained reliability.
 
 ## Verify an existing setup
 
+The commands below require a source build after v1.5.1. Version 1.5.1 ignores
+`--check` and `--model` and still runs the installer. They do not provide a
+read-only check on that release; use its Preferences inference test instead.
+
 `hearth setup` installs the login agent and checks the configured client endpoint.
 It preserves existing executable paths and stops on invalid configuration,
 failed persistence, failed agent loading, or an unavailable client endpoint.

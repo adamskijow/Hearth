@@ -1,20 +1,22 @@
 <!-- SPDX-License-Identifier: MIT -->
 # Keeping Ollama running on macOS
 
-Common causes of an unavailable local Ollama server:
+Common causes of an unavailable or slow local Ollama server:
 
 - **Memory pressure:** the model or context exceeds available unified memory.
 - **Inference hang:** Metal or the model runner stalls while the server process
   remains alive.
-- **Idle unload:** Ollama evicts a model, making the next request pay a cold load.
+- **Idle unload:** a model leaves memory, so the next request must load it again.
+  This is a cold start, not a failed server.
 - **Sleep:** the Mac suspends the service.
 
-Start with a smaller quantization or context, inspect
-`~/.ollama/logs/server.log`, and set `OLLAMA_KEEP_ALIVE` when cold loads are the
-problem. `launchd` or `brew services` can relaunch an exited process.
+For memory pressure, try a smaller quantization or context. For cold loads,
+review Ollama's `OLLAMA_KEEP_ALIVE` setting. Use `hearth logs` for a Hearth-managed
+server or `~/.ollama/logs/server.log` for Ollama.app; see [Ollama troubleshooting](https://github.com/ollama/ollama/blob/main/docs/troubleshooting.mdx).
+`launchd` or `brew services` can relaunch an exited process.
 
 Hearth adds API and inference readiness checks, bounded restart recovery, sleep
-prevention, alerts, and repeated model-memory diagnosis:
+prevention, alerts, and warnings about repeated memory-related failures:
 
 ```sh
 brew install --cask adamskijow/tap/hearth

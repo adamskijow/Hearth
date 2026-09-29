@@ -5,10 +5,11 @@ Hearth reads `~/Library/Application Support/Hearth/config.json`. Override the
 path with `HEARTH_CONFIG`. Omitted keys use the defaults below; the resulting
 configuration must still satisfy runner-specific requirements, such as `mlxModel`
 for managed MLX. Malformed JSON and error-level diagnostics block activation.
-Edit through Preferences or JSON, then choose **Reload Config** or send `SIGHUP`.
-Notification, pressure, heartbeat, and control settings reload live. Runner and
-engine changes restart supervision. The root daemon reloads through launchd and
-briefly cycles a managed runner.
+In the menu-bar app, edit through Preferences or JSON, then choose **Reload
+Config** or send `SIGHUP`. Notification, pressure, heartbeat, and control settings
+reload live; runner and engine changes restart supervision. Headless instances
+exit on `SIGHUP`. The login agent or root daemon restarts them through launchd,
+cycling a managed runner; a manually launched headless instance must be restarted.
 
 Run `hearth doctor` after editing, or `sudo hearth doctor-daemon` for
 `/etc/hearth/config.json`. Errors block activation; warnings are advisory.
@@ -42,30 +43,6 @@ system/com.hearth.daemon`.
 | `port` | int | `11434` | Port the runner serves on (Ollama's default is 11434). |
 | `runnerEnv` | object | `{}` | Environment variables for a managed runner. Hearth derives `OLLAMA_HOST` from `host` and `port`; a conflicting value here is ignored and reported by `hearth doctor`. |
 
-### Managed mlx_lm
-
-Current `mlx_lm.server` releases require a model when the server starts. Set a
-Hugging Face repository ID or an existing local model directory; Hearth passes
-the value as one argument, so local paths containing spaces are supported:
-
-```json
-{
-  "runner": "mlx",
-  "mode": "managed",
-  "mlxModel": "mlx-community/Qwen2.5-0.5B-Instruct-4bit",
-  "host": "127.0.0.1",
-  "port": 8080
-}
-```
-
-Managed mlx_lm requires a nonblank `mlxModel`. Attached mode accepts a server
-started elsewhere without this setting.
-
-Keep mlx_lm on loopback unless an authenticated private proxy protects it. The
-[official server documentation](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/SERVER.md)
-says the server implements only basic security checks; `hearth doctor` warns for
-every non-loopback MLX bind.
-
 ### Common Ollama setups
 
 For Homebrew Ollama, use managed mode and stop `brew services` so Hearth is the
@@ -94,13 +71,37 @@ only watches it:
 
 See [ollama.md](ollama.md) for the full Ollama setup guide, including deep probes.
 
+### Managed mlx_lm
+
+Hearth starts `mlx_lm.server` with an explicit model. Set a Hugging Face
+repository ID or an existing local model directory; Hearth passes
+the value as one argument, so local paths containing spaces are supported:
+
+```json
+{
+  "runner": "mlx",
+  "mode": "managed",
+  "mlxModel": "mlx-community/Qwen2.5-0.5B-Instruct-4bit",
+  "host": "127.0.0.1",
+  "port": 8080
+}
+```
+
+Managed mlx_lm requires a nonblank `mlxModel`. Attached mode accepts a server
+started elsewhere without this setting.
+
+Keep mlx_lm on loopback unless an authenticated private proxy protects it. The
+[official server documentation](https://github.com/ml-explore/mlx-lm/blob/main/mlx_lm/SERVER.md)
+says the server implements only basic security checks; `hearth doctor` warns for
+every non-loopback MLX bind.
+
 ## Health and restart policy
 
 | Key | Type | Default | Meaning |
 |-----|------|---------|---------|
 | `probeTimeoutSeconds` | number | `2` | How long a readiness probe waits before it counts as a failure. |
 | `probeIntervalSeconds` | number | `5` | How often to probe while healthy. |
-| `busyTimeoutSeconds` | number | `600` | Busy (503) duration before Hearth treats the state as a hang. Minimum 30. |
+| `busyTimeoutSeconds` | number | `600` | Shallow API busy (503) duration before Hearth treats it as a hang. Minimum 30. Inference-probe 503 responses defer checks instead. |
 | `startupGraceSeconds` | number | `30` | How long to allow for the runner to come up before treating it as failed. |
 | `startupProbeIntervalSeconds` | number | `1` | Probe cadence during startup and restart. |
 | `initialBackoffSeconds` | number | `1` | Wait before the first restart attempt. Minimum 0.1. |
@@ -116,9 +117,13 @@ See [ollama.md](ollama.md) for the full Ollama setup guide, including deep probe
 | `runnerMemoryLimitMB` | int | `0` | Restart a healthy managed runner above this RSS limit. `0` disables. Leave room for loaded models. |
 | `probeModel` | string or null | `null` | Model for the optional one-token inference probe. Scheduled checks run while resident. Automatic deep recovery also requires client traffic through the metrics proxy. |
 | `deepProbeIntervalSeconds` | number | `60` | How often to run the deep probe, separate from and slower than the shallow probe. Floored at 5. |
-| `deepProbeTimeoutSeconds` | number | `30` | Resident inference-probe timeout. Setup and Check Now allow at least 60 seconds for uncertain loads. Minimum 1. |
+| `deepProbeTimeoutSeconds` | number | `30` | Resident inference-probe timeout. Preferences **Run Inference Test** and `setup --check --model MODEL` allow at least 60 seconds for uncertain loads. Minimum 1. |
 | `modelOOMThreshold` | int | `2` | After a model is resident at this many memory-related crashes (an out-of-memory kill, or a crash as it loads) within `modelOOMWindowSeconds`, Hearth flags it as likely too large for this Mac: a "Model likely too large" alert, an `oversizedModels` entry on `/status`, and a menu warning, so you switch models instead of crash-looping. `0` disables the check. |
 | `modelOOMWindowSeconds` | number | `1800` | Sliding window, in seconds, for counting a model's memory-related crashes toward `modelOOMThreshold`. A model un-flags once its crashes age out of this window. |
+
+`setup --check --model` requires a source build after v1.5.1. Version 1.5.1
+ignores these options and runs the installer. Use the inference test in
+Preferences on that release.
 
 ## Notifications
 
@@ -177,7 +182,7 @@ Reboot escalation handles driver or GPU hangs that survive a process restart. It
 is disabled by default and requires the root daemon or the experimental
 privileged helper. See
 [Recovering a wedge a restart cannot](running-headless.md#recovering-a-wedge-a-restart-cannot)
-for the full safety story.
+for requirements and safeguards.
 
 | Key | Type | Default | Meaning |
 |-----|------|---------|---------|

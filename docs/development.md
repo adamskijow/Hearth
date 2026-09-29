@@ -17,10 +17,16 @@ headers, whitespace, shell syntax, and the repository's no-em-dash rule.
 The pre-push hook and GitHub Actions call the same CI script. Add `--smoke` for
 the desktop fake-runner test or `--real` for the Ollama lifecycle gate.
 
+The older smoke and real-runner scripts use broad process cleanup. Run them
+only in a dedicated test environment. The Python gates use isolated state and
+owned processes.
+
 ```sh
 ./scripts/smoke-test.sh       # fake runner; logged-in desktop required
 ./scripts/validate-real.sh    # real Ollama
-python3 scripts/validate-inference.py  # isolated fake runner and real HTTP clients
+python3 scripts/validate-inference.py  # HTTP relay and inference evidence
+python3 scripts/validate-setup.py      # setup admission and copied commands
+python3 scripts/validate-recovery.py   # process exit, wedges, crash loop, orphan cleanup
 make demo                     # isolated narrated wedge recovery
 ```
 
@@ -29,9 +35,9 @@ evidence lives in [VALIDATION-REPORT.md](../VALIDATION-REPORT.md). The
 [product plan](product-plan.md) defines the next local validation milestones.
 
 The inference gate uses temporary config/data and loopback ports. It checks
-status agreement, an idle pooled HTTP connection across the busy timeout, and
-successful inference after closing that connection. Build first, or supply
-`--binary` with another Hearth executable.
+status agreement, inference checks over idle keep-alive connections, active
+requests across the busy timeout, cancellation, and byte-preserving relay
+behavior. Build first, or supply `--binary` with another Hearth executable.
 
 ## Hearth release
 

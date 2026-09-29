@@ -101,6 +101,7 @@ termination witness stays false until its group is gone.
 
 Native offscreen renders were inspected at the Preferences window size in light
 and dark appearances. Live keyboard/menu interaction could not be checked because
-the development Mac was locked. The full clean-setup matrix, controlled workload
-drills, and bounded 72-hour run remain the next milestones in the
-[product plan](product-plan.md); no recruitment is required.
+the development Mac was locked. Subsequent [setup and recovery checks](setup-validation.md)
+passed the isolated setup matrix and five managed failure drills. Actual
+login-agent installation and the bounded 72-hour workload remain in the
+[product plan](product-plan.md).

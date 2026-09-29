@@ -3,7 +3,8 @@
 
 Authenticated `/status` and `/metrics` report:
 
-- supervisor phase, runner kind, busy state, and last failure category;
+- supervisor phase, API and inference evidence, recovery eligibility, and last failure;
+- observed proxy requests, open connections, and uncertain activity;
 - restarts, uptime, deep-probe state, and resident-model count;
 - system memory, runner RSS, and thermal state;
 - generation throughput when the metrics proxy carries client traffic.
@@ -20,8 +21,9 @@ Traffic sent directly to the runner is absent. Latency distributions,
 time-to-first-token, and queue depth await reliable runner data.
 
 Ollama's `/api/ps` reports resident models. Some OpenAI-compatible `/v1/models`
-endpoints list available models instead, so those values do not prove GPU
-residency even where a current UI or metric uses a resident-model label.
+endpoints list available models instead. Hearth excludes MLX and Osaurus catalog
+entries from resident-model counts and defers their scheduled inference checks
+because residency is unknown.
 
 Out-of-memory classification remains heuristic. See [Known
 limitations](limitations.md) and the [validation

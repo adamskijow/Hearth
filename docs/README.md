@@ -2,7 +2,8 @@
 # Hearth documentation
 
 Start with [Ollama setup](ollama.md) to keep an unattended Mac serving inference.
-The guides below cover setup, recovery, and operation.
+These docs follow the source on `main`. The [latest release](https://github.com/adamskijow/Hearth/releases/latest)
+may differ; changes since v1.5.1 are marked in the relevant guides.
 
 ## Install and operate Hearth
 
@@ -43,4 +44,6 @@ The guides below cover setup, recovery, and operation.
 
 ## Development and maintenance
 
-- [Development](development.md): build, test, dogfood, and release workflows.
+- [Development](development.md): build, test, and release workflows.
+- [Setup validation](setup-validation.md): tested setups and remaining gaps.
+- [Validation report](../VALIDATION-REPORT.md): dated test results.

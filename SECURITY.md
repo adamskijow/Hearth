@@ -6,8 +6,8 @@ Security fixes land on the latest 1.x release line.
 
 | Product/version | Supported |
 |-----------------|-----------|
-| Full Hearth 1.x | yes |
-| Full Hearth < 1.0 | no |
+| Hearth 1.x | yes |
+| Hearth < 1.0 | no |
 
 ## Reporting a vulnerability
 
@@ -26,7 +26,7 @@ you prefer to stay anonymous.
 Hearth's main security boundaries:
 
 - **Apple frameworks only.** The Swift package has no third-party dependencies.
-- **Signed and notarized releases.** Hardened Runtime is enabled. Full Hearth runs
+- **Signed and notarized releases.** Hardened Runtime is enabled. Hearth runs
   outside App Sandbox to supervise another process.
 - **Private control endpoint.** Bearer tokens use constant-time comparison.
   Peer throttling and connection caps limit abuse. Bind to localhost or a VPN.

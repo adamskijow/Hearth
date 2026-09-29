@@ -126,7 +126,7 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Full Hearth's additive `/status` document reports `mode`, `rebootOnWedge`, and
+- Hearth's additive `/status` document reports `mode`, `rebootOnWedge`, and
   the authenticated credential's `credentialAccess`. Its browser page hides
   Start/Stop/Restart when a status-only token is used. Existing primary and named
   control tokens retain full behavior and compatibility.

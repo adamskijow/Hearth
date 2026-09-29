@@ -1,8 +1,9 @@
 <!-- SPDX-License-Identifier: MIT -->
 # Integrating with Hearth
 
-Apps talk to the local AI runner directly. Hearth keeps that shared runner
-available underneath them.
+Apps can send requests to Ollama directly or through Hearth's metrics proxy.
+Automatic recovery from inference failures requires the proxy; process and API
+recovery do not.
 
 ## Recommended setup
 
@@ -13,9 +14,22 @@ available underneath them.
    hearth setup
    ```
 
-   `hearth setup` detects the runner, writes the config, installs the per-user
-   login agent, and waits for readiness. `hearth install-agent` and `hearth
-   uninstall-agent` manage only the login agent.
+   In v1.5.1, `setup` detects the runner, may update its executable path, installs
+   the login agent, and waits for API readiness. A readiness timeout does not make
+   that version fail, so verify the result separately. Source builds after
+   v1.5.1 preserve existing paths, stop on failed setup stages, and check the
+   configured client endpoint. API readiness alone does not verify inference.
+
+   **Source builds after v1.5.1 only:** check an existing setup without installing
+   an agent. In v1.5.1, `setup` ignores `--check` and `--model` and runs the
+   installer anyway; use the inference test in Preferences on that release.
+
+   ```sh
+   hearth setup --check --model YOUR-WORKLOAD-MODEL
+   ```
+
+   This deliberately runs inference and may load that model. `hearth install-agent`
+   and `hearth uninstall-agent` manage only the login agent.
 
 2. Gate dependent startup when order matters:
 

@@ -1,8 +1,8 @@
 <!-- SPDX-License-Identifier: MIT -->
 # Contributing to Hearth
 
-Hearth is a focused macOS supervisor for local AI runners. Contributions should
-improve availability, recovery, diagnostics, security, or their user experience.
+Hearth supervises Ollama on macOS. Contributions should improve availability,
+recovery, diagnostics, security, or their user experience.
 
 Current work is listed in the [product plan](docs/product-plan.md).
 
@@ -12,8 +12,8 @@ Hearth builds as a Swift Package.
 
 ```
 make build        # debug build
-make test         # the SupervisorCore unit suite
-make ci           # what the pre-push hook and CI run: build (debug + release), tests, lint
+make test         # core and app tests
+make ci           # debug/release builds, tests, HTTP/setup/recovery checks, lint
 ```
 
 Install the pre-push hook once so the gate runs before every push:
@@ -22,7 +22,8 @@ Install the pre-push hook once so the gate runs before every push:
 make hooks        # points core.hooksPath at the in-repo scripts/hooks
 ```
 
-End-to-end checks (need a desktop session or a runner installed):
+The following older checks use broad process cleanup. Run them only in a
+dedicated test environment, with a desktop session or Ollama installed:
 
 ```
 make smoke        # drives the agent against scripts/fake-runner.py
@@ -32,8 +33,6 @@ make validate     # drives the agent against a real `ollama serve`
 GitHub Actions and local development use the same `scripts/ci.sh`.
 
 ## Architecture rules
-
-The split is the point. Keep it.
 
 - **`SupervisorCore` is pure.** No AppKit, no SwiftUI, no real `sleep`, no direct
   process or socket calls. All I/O is behind protocols (`SupervisorClock`,
@@ -60,12 +59,13 @@ The split is the point. Keep it.
 
 ## Validation and honesty
 
-Hearth's value is that it actually works against real runners. If you change the
-supervision or process-control paths, run `make validate` against a real Ollama
-and update [VALIDATION-REPORT.md](VALIDATION-REPORT.md) if the evidence changes.
-Never fabricate a result; if something is unverified, say so.
+For supervision or process-control changes, run the isolated recovery checks
+and verify the affected behavior against real Ollama using separate config,
+data, ports, and owned processes. Run `make validate` only in a dedicated test
+environment. Update [VALIDATION-REPORT.md](VALIDATION-REPORT.md) when the evidence
+changes, and record anything left unverified.
 
 ## Releasing
 
-The [development guide](docs/development.md#full-hearth-release) covers full
-Hearth's Developer ID release path.
+The [development guide](docs/development.md#hearth-release) covers Developer ID
+signing and notarization.

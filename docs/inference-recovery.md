@@ -92,5 +92,7 @@ The [request activity implementation](request-activity.md) supersedes the initia
 connection-count deferral. It distinguishes completed pooled requests from active
 work and keeps interrupted/unknown work conservative across reloads. Direct
 requests remain invisible; policy eligibility does not guarantee that recovery
-will preserve every client request. Clean setup and controlled local workloads
-remain next in [the product plan](product-plan.md).
+will preserve every client request. The [setup and recovery checks](setup-validation.md)
+now cover isolated configurations and failure drills. Live UI interaction, actual
+login-agent installation, and the 72-hour Ollama workload remain in the
+[product plan](product-plan.md).

@@ -5,11 +5,15 @@ Hearth supervises an existing Ollama installation. Managed mode launches and
 restarts `ollama serve`; attached mode watches a server owned by Ollama.app or
 another service manager.
 
-Your apps still talk to Ollama directly:
+For process and API recovery, apps can keep using Ollama directly:
 
 ```
 http://127.0.0.1:11434
 ```
+
+For automatic inference recovery, enable the metrics proxy and use the client
+address configured by `metricsProxyPort` (default `http://127.0.0.1:11436`).
+Source builds after v1.5.1 show a copyable address in **Preferences > Health**.
 
 ## Which mode should I use?
 
@@ -80,7 +84,7 @@ other manager, run `hearth mode managed`, and then run `hearth doctor`.
 
 The default probe checks Ollama's lightweight `/api/version` endpoint. That proves
 the HTTP server answers, but a model or GPU can still be wedged behind it. To
-catch that, set `probeModel` to a small model you have already pulled:
+catch that, set `probeModel` to a model your workload uses. For example:
 
 ```json
 {
@@ -99,9 +103,11 @@ inference-wedge recovery, enable the metrics proxy and point clients at its port
 Hearth then defers checks while a client request is in flight. Ordinary process
 crashes and shallow API wedges still recover without the proxy.
 
-In Preferences, **Inference health** can discover installed models, put the
-smallest reported model first, and run the one-token test before you save. The
-free-form config remains available for headless setups.
+In source builds after v1.5.1, open **Preferences > Health**, enable **Scheduled
+inference checks**, select your workload model, and use **Run Inference Test**.
+In v1.5.1 these controls are under **Inference health**, with a **Test Now** button.
+Save endpoint changes before testing. The explicit test may load the model;
+scheduled checks will not. JSON configuration is also available for headless setups.
 
 Choose a model your workload keeps resident. Smaller models make the optional
 setup test cheaper. List models with:

@@ -34,7 +34,10 @@ The exposed series (all `gauge` unless noted):
 | `hearth_healthy` | Shallow readiness with no unresolved inference incident (1); not proof of verified inference. |
 | `hearth_busy` | Last check returned a runner HTTP 503 busy response (1). |
 | `hearth_inference_recovery_withheld` | Confirmed inference failure remains unresolved with automatic recovery withheld (1). |
-| `hearth_inference_deferred_by_proxy` | Open proxy connections defer the inference check (1); connections may be idle. |
+| `hearth_inference_deferred_by_proxy` | Active requests, uncertain activity, or unavailable proxy observation defer the inference check (1). Idle keep-alive connections do not. |
+| `hearth_proxy_active_requests` | Outstanding observed HTTP requests. |
+| `hearth_proxy_open_connections` | Open proxy connections, including idle keep-alive connections. |
+| `hearth_proxy_activity_uncertain` | Interrupted or unsupported traffic leaves work unsettled (1). |
 | `hearth_phase{phase=...}` | Current supervisor phase; the active one is 1. |
 | `hearth_last_down{reason=...}` | Last failure category. |
 | `hearth_last_restart{category=...}` | Last restart category. |
@@ -46,8 +49,8 @@ The exposed series (all `gauge` unless noted):
 | `hearth_deep_probe_last_failure_timestamp_seconds` | Last inference-probe failure. |
 | `hearth_restarts_total` (counter) | Restarts this session. |
 | `hearth_consecutive_failures` | Consecutive failed readiness probes. |
-| `hearth_uptime_seconds` | Seconds the runner has been continuously healthy. |
-| `hearth_resident_models` | Model count reported by the adapter; residency semantics depend on the runner. |
+| `hearth_uptime_seconds` | Seconds in the healthy lifecycle phase; can continue during an unresolved inference incident. |
+| `hearth_resident_models` | Loaded-model count from Ollama or LM Studio. MLX/Osaurus report zero because residency is unknown, not because no model is loaded. |
 | `hearth_memory_used_percent` | System memory in use, percent. |
 | `hearth_runner_resident_bytes` | Resident memory of the runner process, bytes. |
 | `hearth_thermal{state=...}` | Thermal state; the active one is 1. |
@@ -68,7 +71,7 @@ groups:
         expr: hearth_up == 1 and hearth_healthy == 0
         for: 1m
         annotations:
-          summary: "Local LLM runner is up but not answering (wedged or restarting)"
+          summary: "Hearth reports the runner unhealthy"
       - alert: HearthMemoryPressure
         expr: hearth_memory_used_percent >= 90
         for: 2m

@@ -169,7 +169,7 @@ public enum ConfigDiagnostics {
             }
             for (name, secret) in config.controlStatusTokens {
                 if name.lowercased() == "default" {
-                    issues.append(.init(.warning, "controlStatusTokens has an entry named \"default\", which is easily confused with the primary full-control token; use a caller name such as hearth-monitor."))
+                    issues.append(.init(.warning, "controlStatusTokens has an entry named \"default\", which is easily confused with the primary full-control token; use a caller name such as dashboard."))
                 }
                 if config.controlTokens[name] != nil {
                     issues.append(.init(.warning, "Token name \"\(name)\" exists in both controlTokens and controlStatusTokens; rename one so its authority is clear."))

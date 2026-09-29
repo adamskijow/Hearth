@@ -15,7 +15,7 @@ struct ControlRoutingTests {
 
     @Test func statusOnlyTokenReadsButCannotControl() {
         let readOnly = ControlToken(
-            name: "hearth-monitor",
+            name: "dashboard",
             secret: "read-only-secret",
             access: .statusOnly)
         let status = ControlRouting.handle(
@@ -35,7 +35,7 @@ struct ControlRoutingTests {
             token: token, namedTokens: [readOnly]) == .forbidden)
         #expect(ControlRouting.authorization(
             bearer(readOnly.secret), token: token, namedTokens: [readOnly])
-            == ControlAuthorization(name: "hearth-monitor", access: .statusOnly))
+            == ControlAuthorization(name: "dashboard", access: .statusOnly))
     }
 
     @Test func duplicateSecretNeverDowngradesFullControl() {

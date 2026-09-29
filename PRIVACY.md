@@ -1,9 +1,9 @@
 <!-- SPDX-License-Identifier: MIT -->
 # Hearth privacy policy
 
-Updated September 7, 2026.
+Updated September 29, 2026.
 
-## Full Hearth
+## Local data
 
 Hearth has no developer account, analytics, advertising, or tracking service.
 It stores configuration, process identity, event history, system metrics, and
@@ -48,37 +48,12 @@ Connections go directly to the selected services; the developer does not relay
 them. Those services can observe requests and network addresses. Review copied
 diagnostics and logs before sharing them through GitHub or another service.
 
-## Monitor prototype
-
-The sandboxed Monitor prototype has no analytics, advertising, tracking,
-developer account, or crash-reporting service. Its sandbox stores settings,
-runner addresses, check timing, recent latency samples, and up to 500 confirmed
-incidents. Runner credentials and optional full Hearth status tokens use separate
-Keychain items.
-
-Monitor connects directly to configured runner and full Hearth endpoints for
-health, model-list, optional fixed inference, and authenticated status requests.
-Redirects are refused. Copied diagnostics and incident history exclude
-credentials, prompts, model responses, and response bodies.
-
-Apple on-device functional checks request one fixed response through Foundation
-Models when enabled by the user. The prompt and response are discarded. Retained
-data is limited to timing, health, broad failure categories, and incidents.
-Checks pause during sleep, Low Power Mode, and serious thermal pressure.
-
 ## Delete data
 
-For full Hearth, stop supervision and remove any installed agent or daemon before
+Stop supervision and remove any installed agent or daemon before
 removing its configuration and logs. See [uninstallation](docs/faq.md#how-do-i-uninstall-it)
 and [headless operation](docs/running-headless.md). Runner applications and their
 model data are managed separately.
-
-For Monitor, remove configured runners and connections to delete associated
-Keychain items, disable Open at Login, then quit the app and delete:
-
-```text
-~/Library/Containers/com.hearth.HearthMonitor
-```
 
 ## Contact
 

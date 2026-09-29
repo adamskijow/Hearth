@@ -272,10 +272,10 @@ struct PreferencesView: View {
     private var runnerSection: some View {
         Section("Runner") {
             Picker("Runner", selection: $model.config.runner) {
-                Text("Ollama").tag("ollama")
-                Text("LM Studio").tag("lmstudio")
+                Text("Ollama (recommended)").tag("ollama")
                 Text("mlx_lm").tag("mlx")
-                Text("Osaurus").tag("osaurus")
+                Text("LM Studio (attached only)").tag("lmstudio")
+                Text("Osaurus (experimental)").tag("osaurus")
             }
             .help("Which local LLM server Hearth supervises.")
             Picker("Mode", selection: $model.config.mode) {

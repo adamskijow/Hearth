@@ -9,7 +9,6 @@
 #   scripts/ci.sh --smoke    also run the fake-runner smoke test (needs a desktop)
 #   scripts/ci.sh --real     also run the real Ollama gate (needs ollama + a model)
 #   scripts/ci.sh --all      everything above
-#   scripts/ci.sh --legacy-monitor  also package/audit the Monitor prototype
 #
 # Exits non-zero if any stage fails. Build failures stop early; test and lint
 # failures are collected so one run shows the full picture.
@@ -40,13 +39,12 @@ swift_build() {
   fi
 }
 
-SMOKE=0; REAL=0; LEGACY_MONITOR=0
+SMOKE=0; REAL=0
 for arg in "$@"; do
   case "$arg" in
     --smoke) SMOKE=1 ;;
     --real)  REAL=1 ;;
     --all)   SMOKE=1; REAL=1 ;;
-    --legacy-monitor) LEGACY_MONITOR=1 ;;
     -h|--help) sed -n '3,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown flag: $arg (see --help)" >&2; exit 2 ;;
   esac
@@ -63,15 +61,6 @@ swift_build && ok || die "debug build failed"
 
 section "Build (release)"
 swift_build -c release && ok || die "release build failed"
-
-if [ "$LEGACY_MONITOR" = "1" ]; then
-  section "Hearth Monitor sandbox prototype"
-  if ./scripts/package-monitor-app.sh && ./scripts/audit-monitor-boundary.sh; then
-    ok
-  else
-    die "legacy Hearth Monitor sandbox package or boundary audit failed"
-  fi
-fi
 
 section "Unit tests"
 ./scripts/test.sh && ok || bad "unit tests failed"

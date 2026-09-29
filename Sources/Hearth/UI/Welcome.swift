@@ -89,6 +89,10 @@ struct WelcomeView: View {
                 }
             }
 
+            Text("Keep \(runnerLabel) ready for your apps, even when you step away.")
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
             statusBlock
 
             if let collisionWarning {

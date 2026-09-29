@@ -104,7 +104,7 @@ struct ConfigDiagnosticsTests {
         let clean = HearthConfig(
             controlEnabled: true,
             controlToken: strong,
-            controlStatusTokens: ["hearth-monitor": "separate-read-only-long-token"])
+            controlStatusTokens: ["dashboard": "separate-read-only-long-token"])
         #expect(!messages(clean).contains(where: { $0.contains("Status-only token") }))
         #expect(clean.namedStatusTokens.first?.access == .statusOnly)
 

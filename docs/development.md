@@ -11,9 +11,8 @@ make hooks
 
 `make test` runs Swift Testing through `scripts/test.sh`, which supports full
 Xcode and Command Line Tools layouts. `make ci` builds debug and release, runs
-the tests, and lints source headers, whitespace, shell syntax, and the
-repository's no-em-dash rule. Retained Monitor source and regression tests still
-compile; prototype packaging is outside the default gate.
+the tests and isolated HTTP, setup, and recovery checks, then lints source
+headers, whitespace, shell syntax, and the repository's no-em-dash rule.
 
 The pre-push hook and GitHub Actions call the same CI script. Add `--smoke` for
 the desktop fake-runner test or `--real` for the Ollama lifecycle gate.
@@ -34,7 +33,7 @@ status agreement, an idle pooled HTTP connection across the busy timeout, and
 successful inference after closing that connection. Build first, or supply
 `--binary` with another Hearth executable.
 
-## Full Hearth release
+## Hearth release
 
 `scripts/release.sh` builds, Developer ID signs, notarizes, staples, and packages
 the app as DMG and ZIP. Supply a signing identity plus either a Keychain profile:
@@ -63,28 +62,3 @@ Pushing a `v*` tag triggers `release.yml`. It verifies that the tag matches the
 bundle version, points at the checked-out commit, and belongs to `origin/main`.
 Configured signing secrets enable hosted publication; otherwise the workflow
 runs only the release gate and artifacts must be published locally.
-
-## Monitor prototype
-
-The sandboxed Monitor prototype's source and tests remain available for
-reference. See its [implementation notes](hearth-monitor.md).
-
-To build and inspect the universal sandbox app locally:
-
-```sh
-./scripts/ci.sh --legacy-monitor
-```
-
-This adds ad-hoc Monitor packaging and the sandbox boundary audit to the normal
-gate. It does not publish a release or contact App Store Connect.
-`--all` selects the supported product's smoke and real-runner checks; it does
-not implicitly select this legacy packaging step.
-
-Monitor publishing and App Store upload scripts are disabled.
-
-Historical sampling scripts remain for reference. To remove an existing local
-sampling agent, use:
-
-```sh
-./scripts/install-dogfood-monitor-agent.sh --uninstall
-```

@@ -1,7 +1,8 @@
 <!-- SPDX-License-Identifier: MIT -->
 # Hearth documentation
 
-Start with the guide that matches what you are trying to do.
+Start with [Ollama setup](ollama.md) to keep an unattended Mac serving inference.
+The guides below cover setup, recovery, and operation.
 
 ## Install and operate Hearth
 

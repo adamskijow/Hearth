@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/hearth-banner.svg" alt="Hearth: keeps your local LLM runner alive and serving" width="100%">
+  <img src="assets/hearth-banner.svg" alt="Hearth: keeps Ollama alive and serving on your Mac" width="100%">
 </p>
 
 # Hearth
@@ -11,13 +11,14 @@
   <img src="https://img.shields.io/badge/macOS-14%2B%20Apple%20silicon-black?logo=apple&logoColor=white" alt="macOS 14+ on Apple silicon">
 </p>
 
-**Keep local AI runners alive on an always-on Mac.** Hearth supervises Ollama,
-LM Studio, `mlx_lm`, and Osaurus. It detects crashes and hung inference, preserves
-native Metal GPU use, keeps the Mac awake, and sends failure alerts.
+**Keep Ollama alive and serving on an always-on Mac.** Hearth detects process
+crashes, API failures, and hung inference, keeps the Mac awake, and sends failure
+alerts. Recovery preserves Ollama's native Metal GPU use.
 
 It suits an unattended Mac mini, home-lab server, or desktop left on overnight.
-Apps continue using the runner's normal endpoint. Hearth is an independent
-community project.
+Apps can use Ollama's normal endpoint. Automatic inference recovery requires
+client traffic through Hearth's optional metrics proxy. Hearth is an independent
+community project, unaffiliated with Ollama.
 
 Hearth requires macOS 14 or later on Apple silicon.
 
@@ -36,17 +37,16 @@ process alive. Recovery stays native, retaining Metal GPU acceleration. See
 
 ## Recovery coverage
 
-Managed mode starts and restarts Ollama or `mlx_lm`. Attached mode watches a
-runner owned by Ollama.app, LM Studio, or another manager and leaves process
-control to that owner. Osaurus support is experimental; attached mode is
-recommended.
+Managed mode starts and restarts Ollama. Attached mode watches Ollama.app or an
+existing service and leaves process control to that owner. Choose one manager
+for Ollama to avoid competing restarts.
 
 Process exits and API failures recover automatically in managed mode. Inference
 checks require a configured resident model. Automatic inference recovery also
 requires client traffic through the metrics proxy. See [known
 limitations](docs/limitations.md) for current traffic-visibility limits.
 
-## Install full Hearth
+## Install Hearth
 
 If you already run Ollama on this Mac:
 
@@ -62,12 +62,18 @@ If you use Ollama.app or `brew services`, read the
 [Ollama setup guide](docs/ollama.md) before choosing managed or attached mode.
 Most options live in **Preferences**; every advanced setting is in the
 [configuration reference](docs/configuration.md).
-Managed `mlx_lm` requires a startup model in Preferences (`mlxModel` in JSON);
-attached MLX servers need no Hearth-side model setting.
+
+## Other runners
+
+Ollama is the primary setup and validation path. Existing `mlx_lm`, LM Studio,
+and experimental Osaurus integrations remain available. Managed MLX requires a
+startup model; LM Studio supports attached mode only. See the [configuration
+reference](docs/configuration.md) and [known limitations](docs/limitations.md)
+for their coverage.
 
 ## Security
 
-Full Hearth is signed, notarized, and unsandboxed for process supervision. Alerts
+Hearth is signed, notarized, and unsandboxed for process supervision. Alerts
 carry Hearth status; log excerpts require an explicit opt-in. Runner endpoints
 default to `127.0.0.1`. See the
 [privacy policy](PRIVACY.md) and [network guide](docs/reverse-proxy.md).

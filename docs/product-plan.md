@@ -1,21 +1,26 @@
 <!-- SPDX-License-Identifier: MIT -->
 # Hearth product plan
 
-Updated September 7, 2026. This plan focuses on full Hearth.
+Updated September 29, 2026. This plan focuses on Ollama reliability.
 
 ## Objective
 
-Make unattended Ollama and MLX service on Mac dependable, with accurate health
+Make unattended Ollama service on Mac dependable, with accurate health
 reports and a setup path that verifies the protection actually enabled.
+
+Ollama is the primary onboarding, documentation, and validation path. Keep
+existing runner configurations compatible, with MLX secondary for actual local
+workloads. Pause expansion of other integrations until the Ollama workload
+demonstrates reliable recovery and useful reduction in manual intervention.
 
 Progress depends on reproducible tests and the maintainer's own workloads.
 This plan requires no recruitment, interviews, user panels, or external testers.
 It can establish reliability and usefulness for those workloads; it does not
 claim market demand or willingness to pay.
 
-GitHub release-asset download counts are not evidence of active users. As of this
-review, the [Homebrew cask sync workflow](https://github.com/adamskijow/homebrew-tap/blob/main/.github/workflows/sync-hearth.yml)
-downloads the latest DMG on each hourly run before checking whether the cask is
+GitHub release-asset download counts are not evidence of active users. At the
+September 7 review, the [Homebrew cask sync workflow](https://github.com/adamskijow/homebrew-tap/blob/main/.github/workflows/sync-hearth.yml)
+downloaded the latest DMG on each hourly run before checking whether the cask was
 already current. The counts therefore include our own automation; the share of
 independent downloads is unknown.
 
@@ -132,7 +137,7 @@ maintainer-run clean setups; do not present them as independent usability tests.
 
 ## 4. Demonstrate value on local workloads
 
-Use the available Mac and installed small Ollama/MLX models. Keep validation
+Use the available Mac and installed Ollama workload model. Keep validation
 isolated from the normal service and store raw evidence outside Git.
 
 First run repeatable process-exit, API-wedge, inference-only-wedge, crash-loop,
@@ -189,7 +194,7 @@ Finish live keyboard/menu checks when an unlocked desktop is available. Review
 one actual login-agent installation in a dedicated environment; current setup
 orchestration tests inject the installer to protect the normal service.
 
-Then run the bounded 72-hour local workload in milestone 4, with quiet periods,
+Then run the bounded 72-hour Ollama workload in milestone 4, with quiet periods,
 streaming, model loading/unloading, explicit client retries, and an overhead
 baseline. The five controlled recovery drills already pass and are repeatable
 without an installed runner. Investigate any false restart, idle model load, or

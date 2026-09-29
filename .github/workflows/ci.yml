@@ -21,8 +21,7 @@ on:
 
 jobs:
   ci:
-    # Foundation Models must compile against the public macOS 26 SDK. The
-    # package still targets macOS 14 and cross-builds universal runner mode.
+    # Build with the current hosted Xcode toolchain; Hearth targets macOS 14+.
     runs-on: macos-26
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # releases/v5

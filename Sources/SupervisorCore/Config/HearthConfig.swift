@@ -118,7 +118,7 @@ public struct HearthConfig: Codable, Sendable, Equatable {
     public var controlTokens: [String: String]
     /// Named read-only bearer tokens. They authorize `/status` and `/metrics`
     /// but receive HTTP 403 for start, stop, or restart. Intended for dashboards
-    /// and the sandboxed Hearth Monitor companion.
+    /// and other status consumers.
     public var controlStatusTokens: [String: String]
 
     // Opt-in tokens-per-second tap: a transparent relay in front of the runner.

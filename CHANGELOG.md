@@ -46,8 +46,8 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Scheduled inference checks require authoritative loaded-model evidence. MLX
   and Osaurus catalogs are no longer treated as proof of residency.
 
-- Moved legacy Monitor packaging and its sandbox audit out of the default CI
-  gate; maintainers can run them explicitly with `--legacy-monitor`.
+- Ollama is the primary setup, documentation, and validation path. Existing
+  runner configurations remain compatible.
 - Completed the pending documentation cleanup, corrected setup and monitoring
   guidance, and added a product plan based on automated and local validation.
 
@@ -76,27 +76,14 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   restart rather than killing a legitimately long generation.
 - Release provenance, artifact checksums, strict tag-to-version validation, and
   an automatically synchronized external Homebrew tap.
-- Recommended next steps for every current Monitor failure class. Active
-  incidents link directly to the relevant Details view, and selecting an outage
-  notification opens the affected Apple model or runner.
-- A restrained menu-bar proof-of-work line showing the latest successful
-  functional response without claiming an uptime percentage or lifetime count.
-- A token-free per-user dogfood scheduler for bounded Apple on-device model
-  canaries, with private local evidence and separate scheduler diagnostics.
-- A signed, isolated runner-incident release gate that proves a transient
-  inference miss stays provisional, a confirmed wedge produces actionable
-  outage content, and recovery is withheld until inference succeeds again.
-- A Developer ID–signed and notarized public GitHub beta path for Hearth
-  Monitor, with separate product-specific release tags and universal DMG/ZIP
-  artifacts.
 
 ### Changed
 
 - Managed first launch now checks for an existing runner or competing manager
   before spawning anything. The menu offers attached mode while keeping Start
   and remote control blocked until ownership is resolved.
-- Full Hearth's supported platform is stated precisely as macOS 14 or later on
-  Apple silicon; the universal sandboxed Monitor retains Intel attached checks.
+- Hearth's supported platform is stated precisely as macOS 14 or later on
+  Apple silicon.
 - Malformed and error-level configurations fail closed instead of running with
   fallback defaults that may supervise the wrong runner or endpoint.
 - Scheduled deep inference checks now run only while their model is already
@@ -107,11 +94,6 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - One runner outage now produces one down alert even when several replacement
   processes fail. The event log retains every retry, the crash-loop escalation
   remains distinct, and a fresh down alert is armed after recovery.
-- Hearth Monitor and its Store listing now name the checked surface precisely as
-  Apple's on-device language model through Foundation Models, rather than
-  implying that one canary verifies every Apple Intelligence feature.
-- Optional full Hearth recovery pairing remains available but is collapsed in
-  unpaired runner Details and absent from the primary runner menu until paired.
 - The privacy policy now matches the shipped feature set.
 - The repository front page is now a concise product and installation guide;
   operational, integration, release, and maintainer material is organized
@@ -135,59 +117,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   diluted Hearth's monitoring and recovery value without adding a defensible
   capability.
 
-## [1.4.0] - 2026-07-21
-
-### Added
-
-- A first-class **Apple Intelligence** mode in Hearth Monitor. On macOS 26 and
-  eligible hardware it reads the public system-model availability state and can
-  run an opt-in, tiny on-device functional canary every 15 minutes. It records a
-  per-Mac latency baseline, distinguishes slow completion from failure, requires
-  two failed checks before an incident, and verifies recovery with a fresh app
-  session without claiming control of Apple's model service.
-- Two-mode onboarding and details: Apple Intelligence works without endpoint
-  setup, while the original Ollama, LM Studio, mlx_lm, and Osaurus monitoring is
-  retained as **Local AI Runners**, including optional Full Hearth recovery
-  status. Both modes share local alerts, bounded history, and diagnostics.
-- A signed App Sandbox Foundation Models self-test and an injectable timeout gate
-  proving Hearth does not stack model requests behind one that timed out.
-
-### Changed
-
-- Functional Apple model checks pause during sleep, Low Power Mode, and serious
-  thermal pressure. Rate limiting, model download/not-ready, disabled Apple
-  Intelligence, unsupported hardware, and persistent timeouts remain distinct
-  user-facing states.
-- Hosted CI and release builds use the macOS 26 runner so the shipping binary is
-  compiled against the public Foundation Models SDK while remaining a universal
-  macOS 14+ app for Local AI Runner monitoring.
-
 ## [1.3.0] - 2026-07-11
 
-The two-product release: full Hearth keeps its unsandboxed managed runner and
-GPU-wedge recovery powers, while the new Hearth Monitor companion brings useful,
-inference-aware attached monitoring to the Mac App Store boundary.
-
 ### Added
 
-- **Hearth Monitor 0.1.0**, a separate universal macOS 14+ menu-bar app with only
-  App Sandbox and outbound network-client entitlements. It discovers or accepts
-  Ollama, LM Studio, mlx_lm, and Osaurus endpoints; monitors multiple local or
-  remote runners; distinguishes busy service from outages; optionally runs a
-  one-token inference check to catch GPU/inference wedges behind healthy HTTP;
-  and provides opt-in local alerts, snooze, Login Items registration, bounded
-  incident history, resident-model context, and copied diagnostics.
-- An optional read-only bridge from Monitor to a separately installed full
-  Hearth. Full Hearth now supports named `controlStatusTokens` that can read
-  `/status` and `/metrics` but receive HTTP 403 for start, stop, and restart.
-  Monitor verifies token scope and runner identity, stores the credential in its
-  private Keychain item, and shows managed restart/reboot coverage without ever
-  sending a control command.
-- App Store packaging and review assets: a distinct Monitor icon, privacy policy
-  and no-collection manifest, Utilities metadata, universal architecture audit,
-  distribution-signing script, reviewer checklist, user guide, and a mechanical
-  boundary audit that rejects process/privilege/control capabilities or unsafe
-  entitlements.
+- Named `controlStatusTokens` can read `/status` and `/metrics` but receive HTTP
+  403 for start, stop, and restart, providing scoped access for dashboards.
 
 ### Changed
 
@@ -200,21 +135,6 @@ inference-aware attached monitoring to the Mac App Store boundary.
   when status callers share a credential, preserving independent revocation.
 - The local test runner now selects a matching installed Xcode toolchain and
   isolated module cache when Command Line Tools contain a compiler/SDK mismatch.
-  CI packages and audits the sandboxed universal Monitor product as its own gate.
-
-### Fixed
-
-- Monitor never closes a confirmed inference incident on shallow HTTP or a busy
-  response; real one-token inference must recover. Transient misses preserve the
-  healthy-since time, overlapping and stale checks cannot overwrite newer state,
-  and one missed check never alerts or enters history.
-- Redirects, shared cookies/credentials, oversized responses, stale setup and
-  pairing success, corrupt/future settings, duplicate target IDs, Keychain/file
-  transaction failures, and misleading local-network/attached-recovery messages
-  all have bounded or actionable behavior.
-- The UI snapshot gate now hosts views in a real nonvisible AppKit window. This
-  caught and replaced a prior renderer that silently emitted unsupported-control
-  placeholders while reporting passing tests.
 
 ## [1.2.0] - 2026-07-09
 

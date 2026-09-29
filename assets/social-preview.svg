@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 640" width="1280" height="640" role="img" aria-labelledby="t d">
   <title id="t">Hearth</title>
-  <desc id="d">Keep Ollama and other local LLM runners alive on a headless Mac.</desc>
+  <desc id="d">Keep Ollama alive and serving on your Mac.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#1b0e08"/><stop offset="1" stop-color="#0c0604"/>
@@ -56,7 +56,7 @@
   <!-- text -->
   <g transform="translate(572 0)">
     <text x="0" y="298" font-family="Georgia, 'Iowan Old Style', 'Times New Roman', serif" font-size="124" font-weight="700" fill="#f7ead8" letter-spacing="1">Hearth</text>
-    <text x="4" y="352" font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="27" fill="#d8b79b">Keep your local LLM runner alive on a headless Mac.</text>
-    <text x="4" y="398" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="19" fill="#ff9a3c" letter-spacing="0.5">Ollama &#183; LM Studio &#183; mlx_lm &#183; macOS menubar supervisor</text>
+    <text x="4" y="352" font-family="-apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="27" fill="#d8b79b">Keep Ollama alive and serving on your Mac.</text>
+    <text x="4" y="398" font-family="ui-monospace, 'SF Mono', Menlo, monospace" font-size="19" fill="#ff9a3c" letter-spacing="0.5">Crash recovery &#183; Inference checks &#183; macOS</text>
   </g>
 </svg>

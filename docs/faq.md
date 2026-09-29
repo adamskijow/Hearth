@@ -8,11 +8,17 @@ not develop or support it.
 
 ## Who is Hearth for?
 
-Hearth serves people who rely on a local AI runner and want unattended recovery.
-It watches Ollama, LM Studio, `mlx_lm`, or Osaurus, keeps the Mac awake, and sends
-alerts. The runner still owns models and inference.
+Hearth serves people who run Ollama on an unattended Mac and want recovery from
+process crashes, API failures, and inference hangs. It keeps the Mac awake and
+sends alerts. Ollama still owns models and inference.
 
-Full Hearth requires Apple silicon and macOS 14 or later.
+Hearth requires Apple silicon and macOS 14 or later.
+
+## Does it support other runners?
+
+Existing MLX, LM Studio, and experimental Osaurus integrations remain available.
+Ollama is the primary setup and validation path. See the [configuration
+reference](configuration.md) for other runner settings and recovery limits.
 
 ## What failures can it recover?
 

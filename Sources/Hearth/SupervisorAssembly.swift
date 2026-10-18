@@ -67,7 +67,7 @@ struct SupervisorAssembly {
             managed: config.isManaged,
             deepProbe: config.deepProbe(),
             warmModels: config.warmModelsAfterRestart,
-            memoryLimitBytes: Int64(max(0, config.runnerMemoryLimitMB)) * 1_048_576,
+            memoryLimitBytes: config.runnerMemoryLimitBytes,
             drainSeconds: max(0, config.drainSeconds),
             inFlight: inFlight,
             clientTrafficObserved: clientTrafficObserved,

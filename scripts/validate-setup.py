@@ -73,6 +73,13 @@ def run(binary):
             check(dict(base, host="localhost/path"), 1, "not a valid hostname")
             check(dict(base, port=wrong.getsockname()[1]), 1, "not answering")
             check(dict(base, runner="mlx", mode="managed"), 1, "requires mlxModel")
+            for limit in [8_796_093_022_208, 9_223_372_036_854_775_807]:
+                check(dict(base, runnerMemoryLimitMB=limit), 1, "runnerMemoryLimitMB")
+                result = subprocess.run([binary, "--headless"], env=env, text=True,
+                                        capture_output=True, timeout=10)
+                assert result.returncode == 2, result.stdout + result.stderr
+                assert "runnerMemoryLimitMB" in result.stderr, result.stderr
+            print("PASS: oversized memory limits fail setup and headless admission without crashing", flush=True)
             check(dict(base, ollamaBinaryPath="/missing/executable"), 0, "attached observation",
                   ("--model", "fixture"))
             check(base, 0, "Inference has not been tested")

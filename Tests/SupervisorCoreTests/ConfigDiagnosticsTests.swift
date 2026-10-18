@@ -15,6 +15,22 @@ struct ConfigDiagnosticsTests {
         #expect(ConfigDiagnostics.check(HearthConfig()).isEmpty)
     }
 
+    @Test(arguments: [HearthConfig.maximumRunnerMemoryLimitMB + 1, Int.max])
+    func oversizedMemoryLimitsAreBlocking(limit: Int) {
+        #expect(errors(HearthConfig(runnerMemoryLimitMB: limit))
+            .contains { $0.message.contains("runnerMemoryLimitMB") })
+    }
+
+    @Test func memoryLimitConversionPreservesBoundariesWithoutOverflow() {
+        let maximum = HearthConfig.maximumRunnerMemoryLimitMB
+        #expect(errors(HearthConfig(runnerMemoryLimitMB: maximum)).isEmpty)
+        #expect(HearthConfig(runnerMemoryLimitMB: maximum).runnerMemoryLimitBytes == Int64(maximum) * 1_048_576)
+        #expect(HearthConfig(runnerMemoryLimitMB: 512).runnerMemoryLimitBytes == 536_870_912)
+        #expect(HearthConfig(runnerMemoryLimitMB: 0).runnerMemoryLimitBytes == 0)
+        #expect(HearthConfig(runnerMemoryLimitMB: -1).runnerMemoryLimitBytes == 0)
+        #expect(HearthConfig(runnerMemoryLimitMB: Int.max).runnerMemoryLimitBytes == Int64.max)
+    }
+
     @Test func portsMustBeInRange() {
         #expect(errors(HearthConfig(port: 0)).contains { $0.message.contains("Runner port 0") })
         #expect(errors(HearthConfig(port: 70000)).contains { $0.message.contains("70000") })

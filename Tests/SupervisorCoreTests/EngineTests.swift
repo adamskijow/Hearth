@@ -62,6 +62,41 @@ struct EngineTests {
         h.http.set(h.runner.modelsEndpoint, .ok(Data(models.utf8)))
     }
 
+    @Test func retirementPermanentlyRejectsDirectAndRemoteStarts() async {
+        let h = makeHarness()
+        await h.engine.start()
+        await h.engine.retire()
+        await h.engine.start()
+        await h.engine.restart()
+        #expect(await h.engine.perform(.start, isAuthorized: { true }) == false)
+        #expect(await h.engine.perform(.restart, isAuthorized: { true }) == false)
+        #expect(h.processes.spawnCount == 1)
+        #expect(await h.engine.snapshot().phase == .stopped)
+        #expect(!h.power.isHeld)
+    }
+
+    @Test(arguments: [ControlCommand.start, .stop, .restart])
+    func revokedControlCommandsCannotChangeEngineState(command: ControlCommand) async {
+        let h = makeHarness()
+        if command != .start { await h.engine.start() }
+        let before = await h.engine.snapshot().phase
+        let spawns = h.processes.spawnCount
+        #expect(await h.engine.perform(command, isAuthorized: { false }) == false)
+        #expect(await h.engine.snapshot().phase == before)
+        #expect(h.processes.spawnCount == spawns)
+        await h.engine.stop()
+    }
+
+    @Test func ordinaryStopStillAllowsAuthorizedStart() async {
+        let h = makeHarness()
+        #expect(await h.engine.perform(.start, isAuthorized: { true }))
+        #expect(await h.engine.perform(.stop, isAuthorized: { true }))
+        #expect(await h.engine.perform(.start, isAuthorized: { true }))
+        #expect(h.processes.spawnCount == 2)
+        #expect(await h.engine.snapshot().phase == .starting)
+        await h.engine.stop()
+    }
+
     @Test func startSpawnsHoldsPowerAndBecomesHealthy() async {
         let h = makeHarness()
         makeServing(h)

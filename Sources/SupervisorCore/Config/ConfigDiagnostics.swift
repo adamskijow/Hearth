@@ -248,7 +248,9 @@ public enum ConfigDiagnostics {
         if config.heartbeatIntervalSeconds < 10 {
             issues.append(.init(.warning, "heartbeatIntervalSeconds below 10 is clamped to 10; a monitor rarely needs a faster pulse."))
         }
-        if config.runnerMemoryLimitMB > 0, config.runnerMemoryLimitMB < 512 {
+        if config.runnerMemoryLimitMB > HearthConfig.maximumRunnerMemoryLimitMB {
+            issues.append(.init(.error, "runnerMemoryLimitMB exceeds the supported maximum of \(HearthConfig.maximumRunnerMemoryLimitMB) MB. Choose a smaller limit, or 0 to disable it."))
+        } else if config.runnerMemoryLimitMB > 0, config.runnerMemoryLimitMB < 512 {
             issues.append(.init(.warning, "runnerMemoryLimitMB \(config.runnerMemoryLimitMB) is smaller than almost any loaded model; the watchdog would restart the runner in a loop. Use a value above what your models need, or 0 to disable."))
         }
         if config.metricsProxyEnabled {

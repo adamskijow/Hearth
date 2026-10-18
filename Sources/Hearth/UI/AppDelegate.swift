@@ -78,7 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard let coordinator else { return }
         let semaphore = DispatchSemaphore(value: 0)
         Task.detached {
-            await coordinator.end()
+            await coordinator.retire()
             semaphore.signal()
         }
         // Pump the main run loop while waiting instead of blocking on the
@@ -196,7 +196,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         metricsProxy?.stop()
         stateTask?.cancel()
         eventTask?.cancel()
-        if let coordinator { await coordinator.end() }
+        if let coordinator { await coordinator.retire() }
 
         // Several triggers (SIGHUP, the menu, a Preferences save) each kick off a
         // reload Task; they interleave at the await above. If a newer reload

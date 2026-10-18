@@ -400,6 +400,16 @@ public struct HearthConfig: Codable, Sendable, Equatable {
         return trimmed
     }
 
+    public static let maximumRunnerMemoryLimitMB = Int(Int64.max / 1_048_576)
+
+    /// Admission rejects oversized values. Saturation also protects callers that
+    /// construct an assembly directly without first running diagnostics.
+    public var runnerMemoryLimitBytes: Int64 {
+        let (bytes, overflow) = Int64(max(0, runnerMemoryLimitMB))
+            .multipliedReportingOverflow(by: 1_048_576)
+        return overflow ? Int64.max : bytes
+    }
+
     /// The restart policy these settings describe. Values that would brick
     /// supervision are clamped to a safe floor here, independent of the
     /// `ConfigDiagnostics` warnings: a non-positive probe interval would busy

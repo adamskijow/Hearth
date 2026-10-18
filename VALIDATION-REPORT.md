@@ -7,6 +7,29 @@ The recent gates below use isolated configuration, data, ports, and owned proces
 identities. The older `./scripts/validate-real.sh` targets normal runner state and
 uses broad process cleanup; use it only in a dedicated test environment.
 
+## October 18, 2026: follow-up audit fixes
+
+The audit of `f5df1ec` reproduced a remote command restarting a stopped
+supervisor during reload, a heartbeat sending after stop, and an oversized
+memory limit passing validation before trapping at startup. All three original
+reproductions pass with these fixes.
+
+Control commands now recheck their server's lifetime on the engine actor.
+Reload and shutdown permanently retire the old engine; an ordinary Stop still
+allows Start. Heartbeats track and cancel pending work, isolate each start from
+old callbacks, and cancel HTTP requests already in flight. Memory-limit admission
+rejects values above the representable byte range, with overflow-safe conversion
+as a second defense.
+
+Permanent focused tests passed for revoked start/stop/restart commands, engine
+retirement, the real control-socket reload race, pending heartbeat health checks,
+heartbeat stop/start and HTTP cancellation, and memory-limit boundaries. The
+shared setup gate also checks that oversized limits produce a diagnostic and
+exit code 2 from the headless binary instead of a crash.
+
+Checks use isolated state and simulated runners; no installed service was
+changed and no release was created. The live UI and workload limits below remain.
+
 ## October 18, 2026: bug fixes and UI simplification
 
 Working changes based on `175b539` fix first-launch lock-directory creation,

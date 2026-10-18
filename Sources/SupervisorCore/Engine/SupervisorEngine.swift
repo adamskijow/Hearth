@@ -77,6 +77,8 @@ public actor SupervisorEngine {
     /// probe that was in flight across the actor's await can tell its report
     /// belongs to the previous child and must not be applied to the fresh one.
     private var controlGeneration = 0
+    /// A replaced engine cannot become a second supervisor through queued work.
+    private var retired = false
     /// The continuation parked by the loop's interruptible wait, resumed early
     /// by a control action so a user restart is probed immediately instead of
     /// silently sleeping out the remaining backoff.
@@ -197,7 +199,7 @@ public actor SupervisorEngine {
 
     /// Begin supervising. No effect if already supervising.
     public func start() async {
-        guard machine.phase == .stopped else { return }
+        guard !retired, machine.phase == .stopped else { return }
         controlGeneration &+= 1
         outageNotificationOpen = false
         // A fresh session warms nothing: whatever was resident before an
@@ -226,6 +228,7 @@ public actor SupervisorEngine {
 
     /// Restart now by request. Does not count as a crash.
     public func restart() async {
+        guard !retired else { return }
         controlGeneration &+= 1
         busySince = nil
         drainDeadline = nil
@@ -233,6 +236,28 @@ public actor SupervisorEngine {
         let output = machine.userRestart(now: clock.now)
         await apply(output, models: nil)
         nudgeLoop()
+    }
+
+    /// Permanently end a replaced engine. Unlike an ordinary Stop, retirement
+    /// rejects queued starts and restarts even after teardown has completed.
+    public func retire() async {
+        retired = true
+        await stop()
+    }
+
+    /// Check a caller's lifetime on the engine actor, immediately before changing
+    /// state. A transport-side check alone can go stale during the actor hop.
+    @discardableResult
+    public func perform(_ command: ControlCommand,
+                        isAuthorized: @Sendable () -> Bool) async -> Bool {
+        guard !retired, isAuthorized() else { return false }
+        switch command {
+        case .start: await start()
+        case .stop: await stop()
+        case .restart: await restart()
+        case .status: break
+        }
+        return true
     }
 
     /// Stop/start is a fresh observation session, including attached mode.

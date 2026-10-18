@@ -288,9 +288,13 @@ final class ControlServer: @unchecked Sendable {
                         authorization, token: token, namedTokens: namedTokens) {
                         onControlAction?(command, actor)
                     }
-                    await coordinator.perform(command)
-                    status = 202
-                    body = Data(#"{"ok":true,"command":"\#(command.rawValue)"}"#.utf8)
+                    let accepted = await coordinator.perform(command, isAuthorized: { [weak self] in
+                        self?.isStopped == false
+                    })
+                    status = accepted ? 202 : 503
+                    body = accepted
+                        ? Data(#"{"ok":true,"command":"\#(command.rawValue)"}"#.utf8)
+                        : Self.errorJSON("server reloading")
                 }
             }
             // If the server was torn down mid-request (the config-reload path),

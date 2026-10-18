@@ -88,7 +88,7 @@ final class HeadlessRunner {
                 // Stop cleanly (kill the child, release power), then exit.
                 let semaphore = DispatchSemaphore(value: 0)
                 Task.detached {
-                    await coordinator.end()
+                    await coordinator.retire()
                     semaphore.signal()
                 }
                 _ = semaphore.wait(timeout: .now() + 2)

@@ -9,6 +9,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Commands queued by a stopped control server are rejected on the engine actor.
+  Replaced engines retire permanently, preventing stale starts after reload.
+- Stopping a heartbeat cancels pending health checks and HTTP requests. A later
+  start cannot inherit a pulse from the previous session.
+- Oversized runner memory limits are rejected before startup instead of crashing
+  during conversion to bytes; direct conversion is also protected from overflow.
 - Fresh installations create the configuration directory before acquiring the
   supervisor lock. Both GUI and headless launches refuse to run without a lock.
 - Model restoration cancels when supervision stops, restarts, or observes a crash.

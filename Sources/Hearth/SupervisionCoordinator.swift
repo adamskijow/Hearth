@@ -22,6 +22,10 @@ actor SupervisionCoordinator {
         await engine.stop()
     }
 
+    func retire() async {
+        await engine.retire()
+    }
+
     func restart() async {
         await engine.restart()
         ensureLoop()
@@ -31,13 +35,12 @@ actor SupervisionCoordinator {
         await engine.snapshot()
     }
 
-    func perform(_ command: ControlCommand) async {
-        switch command {
-        case .start: await begin()
-        case .stop: await end()
-        case .restart: await restart()
-        case .status: break
-        }
+    @discardableResult
+    func perform(_ command: ControlCommand,
+                 isAuthorized: @Sendable () -> Bool = { true }) async -> Bool {
+        guard await engine.perform(command, isAuthorized: isAuthorized) else { return false }
+        if command == .start || command == .restart { ensureLoop() }
+        return true
     }
 
     private func ensureLoop() {

@@ -76,53 +76,43 @@ struct WelcomeView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 13) {
                 Image(systemName: "flame.fill")
                     .font(.system(size: 30))
                     .foregroundStyle(.orange)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Welcome to Hearth")
+                    Text("Hearth")
                         .font(.title2).fontWeight(.semibold)
-                    Label("Find Hearth in the menu bar.", systemImage: "arrow.up")
+                    Text(managed ? "Keep \(runnerLabel) running." : "Watch \(runnerLabel) health.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
             }
-
-            Text("Keep \(runnerLabel) ready for your apps, even when you step away.")
-                .font(.callout).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
 
             statusBlock
 
             if let collisionWarning {
                 collisionBlock(collisionWarning)
-            } else if foundPath != nil {
-                Label("Review your runner in Preferences. The Health tab configures inference checks and gives you the client endpoint for request observation.", systemImage: "checkmark.seal")
-                    .font(.callout).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
 
             HStack(spacing: 10) {
-                Label("Get alerted when the runner goes down.", systemImage: "bell")
-                    .font(.callout).foregroundStyle(.secondary)
+                Text("Failure alerts")
+                    .font(.callout)
                 Spacer()
-                Button(notificationsEnabled ? "Permission requested" : "Enable notifications") {
+                Button(notificationsEnabled ? "Permission requested" : "Enable Notifications") {
                     onEnableNotifications()
                     notificationsEnabled = true
                 }
                 .disabled(notificationsEnabled)
             }
 
-            Label("The menu shows API and inference health separately. Finding a runner does not verify that it can complete a request.",
-                  systemImage: "stethoscope")
+            Text("Find the flame in your menu bar for status and controls.")
                 .font(.callout).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
 
             Divider()
 
             HStack {
-                Button("Later", action: onDone)
+                Button("Done", action: onDone)
                 Spacer()
                 Button("Open Preferences", action: onOpenPreferences)
                     .keyboardShortcut(.defaultAction)
@@ -137,8 +127,8 @@ struct WelcomeView: View {
             if !managed {
                 Image(systemName: "eye").foregroundStyle(.secondary).font(.title3)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Watching an existing runner").fontWeight(.medium)
-                    Text("Hearth checks and alerts. Your existing app or service handles restarts.")
+                    Text("Watching \(runnerLabel)").fontWeight(.medium)
+                    Text("Your existing app handles restarts. Hearth checks health and alerts you.")
                         .font(.callout).foregroundStyle(.secondary)
                 }
             } else if let found = foundPath {
@@ -146,8 +136,9 @@ struct WelcomeView: View {
                     .foregroundStyle(.green).font(.title3)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("\(runnerLabel) found").fontWeight(.medium)
-                    Text(found).textSelection(.enabled)
+                    Text("Review setup in Preferences, then check its status in the menu.")
                         .font(.callout).foregroundStyle(.secondary)
+                        .help(found)
                 }
             } else {
                 Image(systemName: "exclamationmark.triangle.fill")
@@ -190,7 +181,7 @@ struct WelcomeView: View {
                 Text(message)
                     .font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Button("Watch the Existing Runner Instead", action: onSwitchToAttached)
+                Button("Watch Existing Runner", action: onSwitchToAttached)
                     .controlSize(.small)
             }
             Spacer(minLength: 0)

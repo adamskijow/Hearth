@@ -60,7 +60,7 @@ public enum StatusText {
     /// tests, like every other user-facing warning.
     public static let crashLoopGuidance = [
         "The runner keeps failing right after starting; Hearth is still retrying, more slowly.",
-        "Open Logs below shows why it is failing; `hearth doctor` in Terminal checks the setup."
+        "Troubleshooting → Open Logs shows why; `hearth doctor` in Terminal checks the setup."
     ]
 
     public static func inferenceNotice(_ state: SupervisorState) -> String? {

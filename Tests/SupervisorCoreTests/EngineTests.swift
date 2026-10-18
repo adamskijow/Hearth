@@ -206,7 +206,7 @@ struct EngineTests {
         #expect(h.processes.spawnCount == spawnsAfterRecovery)
     }
 
-    /// Poll for work a detached warm-up task does off the loop.
+    /// Poll for warm-up work running independently of the supervision loop.
     private func eventually(_ condition: () async -> Bool) async -> Bool {
         for _ in 0..<400 {
             if await condition() { return true }
@@ -219,7 +219,7 @@ struct EngineTests {
         let h = makeHarness(warmModels: true)
         makeServing(h)
         let warmURL = try #require(h.runner.deepReadinessRequest(model: "llama3:8b")).url
-        h.http.set(warmURL, .ok(Data("{}".utf8)))
+        h.http.set(warmURL, .ok(Data(#"{"response":"ok","done":true,"eval_count":1}"#.utf8)))
 
         await h.engine.start()
         _ = await h.engine.stepOnce()   // healthy, llama3:8b resident
@@ -233,6 +233,10 @@ struct EngineTests {
 
         let warmed = await eventually { h.http.postCount(to: warmURL) >= 1 }
         #expect(warmed)
+        #expect(await eventually {
+            await h.notifier.received.contains { $0.title == "Models not restored" }
+        } == false)
+        await h.engine.stop()
     }
 
     @Test func warmupFailureNotifiesWhichModelWasNotRestored() async throws {
@@ -255,6 +259,55 @@ struct EngineTests {
             await h.notifier.received.contains { $0.title == "Models not restored" }
         }
         #expect(alerted)
+    }
+
+    @Test(arguments: ["stop", "restart", "crash"])
+    func warmupStopsSendingRequestsAfterProcessIsInvalidated(action: String) async throws {
+        let h = makeHarness(warmModels: true)
+        makeServing(h, models: #"{"models":[{"name":"first"},{"name":"second"}]}"#)
+        let warmURL = try #require(h.runner.deepReadinessRequest(model: "first")).url
+        h.http.set(warmURL, .timedOut)
+        let cancellation = Traffic()
+        h.http.onPost {
+            // Interleave a control action with the first in-flight warm-up.
+            switch action {
+            case "restart": await h.engine.restart()
+            case "crash":
+                if let handle = h.processes.lastHandle {
+                    h.processes.simulateExit(handle, exit: ProcessExit(code: 1))
+                    _ = await h.engine.stepOnce()
+                }
+            default: await h.engine.stop()
+            }
+            cancellation.set(Task.isCancelled ? 1 : 2)
+        }
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+        await h.engine.restart()
+        _ = await h.engine.stepOnce() // starts the two-model restore
+        #expect(await eventually { cancellation.current() != 0 })
+        #expect(cancellation.current() == 1)
+        #expect(await eventually { h.http.postCount(to: warmURL) > 1 } == false)
+        #expect(h.http.postCount(to: warmURL) == 1)
+        #expect(await h.notifier.received.contains { $0.title == "Models not restored" } == false)
+        await h.engine.stop()
+    }
+
+    @Test func warmupDoesNotAcceptEmptyHTTP200AsRestored() async throws {
+        let h = makeHarness(warmModels: true)
+        makeServing(h)
+        let warmURL = try #require(h.runner.deepReadinessRequest(model: "llama3:8b")).url
+        h.http.set(warmURL, .ok(Data("{}".utf8)))
+        await h.engine.start()
+        _ = await h.engine.stepOnce()
+        await h.engine.restart()
+        _ = await h.engine.stepOnce()
+        #expect(await eventually {
+            await h.notifier.received.contains {
+                $0.title == "Models not restored" && $0.body.contains("llama3:8b")
+            }
+        })
+        await h.engine.stop()
     }
 
     @Test func warmupIsSkippedAfterAnOutOfMemoryCrash() async throws {
@@ -328,7 +381,7 @@ struct EngineTests {
         let h = makeHarness(warmModels: true)
         makeServing(h)
         let warmURL = try #require(h.runner.deepReadinessRequest(model: "llama3:8b")).url
-        h.http.set(warmURL, .ok(Data("{}".utf8)))
+        h.http.set(warmURL, .ok(Data(#"{"response":"ok","done":true,"eval_count":1}"#.utf8)))
         await h.engine.start()
         _ = await h.engine.stepOnce()
 

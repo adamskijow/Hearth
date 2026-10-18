@@ -380,13 +380,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         // The status item is installed before the first config load finishes, so a
         // click in that first instant would dereference the engine components
-        // applyConfig has not built yet. Show a starting row instead of crashing.
+        // applyConfig has not built yet. Keep recovery actions available even
+        // when an invalid initial config prevents those components being built.
         guard runner != nil, metricsProvider != nil else {
-            menu.addItem(disabled("Starting\u{2026}"))
+            menu.addItem(infoRow(headlineAttr(configProblem ? "Setup needs attention" : "Starting\u{2026}",
+                                              color: configProblem ? .systemOrange : .labelColor)))
+            if let note = configNote { menu.addItem(infoRow(detailAttr(note))) }
+            menu.addItem(.separator())
+            addAction("Open Configuration…", #selector(openConfigurationTapped), enabled: true, to: menu)
+            addAction("Reload Configuration", #selector(reloadConfigTapped), enabled: true, to: menu)
+            addAction("Quit Hearth", #selector(quitTapped), enabled: true, keyEquivalent: "q", to: menu)
             return
         }
 
         let now = Date()
+        let details = NSMenu()
 
         // Setup problems first, prominent, with one-click fixes where possible.
         if let path = binaryMissingPath {
@@ -410,12 +418,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(infoRow(headlineAttr("\u{26A0} \(label)", color: color)))
             // Cap the detail rows: a badly broken config can produce many, and
             // a menu taller than the screen helps nobody. Doctor has them all.
-            let shown = configDiagnostics.prefix(5)
+            let shown = configDiagnostics.prefix(1)
             for diagnostic in shown {
                 menu.addItem(infoRow(detailAttr("   \(diagnostic.message)")))
             }
             if configDiagnostics.count > shown.count {
-                menu.addItem(infoRow(detailAttr("   \u{2026}and \(configDiagnostics.count - shown.count) more; run `hearth doctor` for the full list.")))
+                for diagnostic in configDiagnostics.dropFirst() {
+                    details.addItem(infoRow(detailAttr(diagnostic.message)))
+                }
             }
             menu.addItem(.separator())
         }
@@ -455,10 +465,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(infoRow(detailAttr(StatusText.contextLine(
             latestState, runnerName: runner.name, managed: config.isManaged, now: now))))
         if let notice = StatusText.inferenceNotice(latestState) {
-            menu.addItem(infoRow(detailAttr(notice)))
+            let target = latestState.inference?.incidentOpen == true ? menu : details
+            target.addItem(infoRow(detailAttr(notice)))
         }
         if let notice = StatusText.trafficNotice(latestState) {
-            menu.addItem(infoRow(detailAttr(notice)))
+            details.addItem(infoRow(detailAttr(notice)))
         }
         if latestState.phase != .healthy, let reason = latestState.lastRestartReason {
             menu.addItem(infoRow(detailAttr("Last: \(reason)")))
@@ -482,19 +493,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if let resident = metrics.runnerResidentBytes {
                 line += " \u{00B7} Runner \(StatusText.byteString(resident))"
             }
-            menu.addItem(infoRow(detailAttr(line)))
+            details.addItem(infoRow(detailAttr(line)))
         }
         // Throughput, when the metrics proxy is routing generation traffic.
         if let rate = tokenMetrics?.snapshot().lastTokensPerSecond {
-            menu.addItem(infoRow(detailAttr(String(format: "Throughput: %.1f tok/s (last generation)", rate))))
+            details.addItem(infoRow(detailAttr(String(format: "Throughput: %.1f tok/s (last generation)", rate))))
         }
         if !latestState.residentModels.isEmpty {
             let loaded = latestState.residentModels.map(StatusText.model).joined(separator: ", ")
-            menu.addItem(infoRow(detailAttr("Loaded: \(loaded)")))
+            details.addItem(infoRow(detailAttr("Loaded: \(loaded)")))
         } else if latestState.phase == .healthy {
             // Healthy but nothing resident yet (the runner unloads after its idle
             // timeout); say so rather than leaving a blank where models would be.
-            menu.addItem(infoRow(detailAttr("No model loaded")))
+            details.addItem(infoRow(detailAttr("No model loaded")))
         }
         // When the runner is up and bound to a routable address, show where another
         // machine on the network can reach it (the runner endpoint itself, distinct
@@ -503,19 +514,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
            let reachURL = RunnerReachability.url(
                host: config.host, port: config.port,
                resolvedAddress: NetworkInterfaces.lanIPv4() ?? NetworkInterfaces.tailnetIPv4()) {
-            menu.addItem(infoRow(detailAttr("Reachable at \(reachURL)")))
+            details.addItem(infoRow(detailAttr("Reachable at \(reachURL)")))
         }
         if let url = phoneAccessURL() {
-            menu.addItem(phoneAccessItem(url: url))
+            details.addItem(phoneAccessItem(url: url))
         }
 
+        if !details.items.isEmpty {
+            let detailsItem = NSMenuItem(title: "Details", action: nil, keyEquivalent: "")
+            detailsItem.submenu = details
+            menu.addItem(detailsItem)
+        }
         menu.addItem(.separator())
-        addAction("Start", #selector(startTapped), enabled: latestState.phase == .stopped && !supervisionStartBlocked)
-        addAction("Stop", #selector(stopTapped), enabled: latestState.phase != .stopped)
-        addAction("Restart", #selector(restartTapped), enabled: latestState.phase != .stopped)
-        addAction("Open Logs", #selector(openLogsTapped), enabled: true)
+        if latestState.phase == .stopped {
+            addAction("Start Supervision", #selector(startTapped), enabled: !supervisionStartBlocked)
+        } else {
+            addAction(config.isManaged ? "Restart Runner" : "Restart Checks", #selector(restartTapped), enabled: true)
+            addAction("Stop Supervision", #selector(stopTapped), enabled: true)
+        }
         addAction("History\u{2026}", #selector(openHistoryTapped), enabled: true)
-        addAction("Copy Diagnostics", #selector(copyDiagnosticsTapped), enabled: true)
+        let troubleshooting = NSMenu()
+        addAction("Open Logs", #selector(openLogsTapped), enabled: true, to: troubleshooting)
+        addAction("Copy Diagnostics", #selector(copyDiagnosticsTapped), enabled: true, to: troubleshooting)
+        addAction("Open Configuration…", #selector(openConfigurationTapped), enabled: true, to: troubleshooting)
+        addAction("Reload Configuration", #selector(reloadConfigTapped), enabled: true, to: troubleshooting)
 
         let recent = EventLogStore.recent(12)
         if !recent.isEmpty {
@@ -525,12 +547,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             let item = NSMenuItem(title: "Recent Activity", action: nil, keyEquivalent: "")
             item.submenu = activity
-            menu.addItem(item)
+            troubleshooting.addItem(item)
         }
+        let troubleshootingItem = NSMenuItem(title: "Troubleshooting", action: nil, keyEquivalent: "")
+        troubleshootingItem.submenu = troubleshooting
+        menu.addItem(troubleshootingItem)
 
         menu.addItem(.separator())
         addAction("Preferences\u{2026}", #selector(openPreferencesTapped), enabled: true, keyEquivalent: ",")
-        addAction("Reload Config", #selector(reloadConfigTapped), enabled: true)
         let login = NSMenuItem(title: "Start at Login", action: #selector(toggleLoginItemTapped), keyEquivalent: "")
         login.target = self
         login.state = LoginItem.isRegistered ? .on : .off
@@ -592,7 +616,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         field.lineBreakMode = .byWordWrapping
         field.maximumNumberOfLines = 0
         field.sizeToFit()
-        let width = min(field.frame.width, 400)
+        let width = min(field.frame.width, 320)
         let size = field.sizeThatFits(NSSize(width: width, height: .greatestFiniteMagnitude))
         field.setFrameSize(NSSize(width: width, height: size.height))
         let leftInset: CGFloat = 21, rightInset: CGFloat = 16
@@ -623,11 +647,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ])
     }
 
-    private func addAction(_ title: String, _ selector: Selector, enabled: Bool, keyEquivalent: String = "") {
+    private func addAction(_ title: String, _ selector: Selector, enabled: Bool, keyEquivalent: String = "", to targetMenu: NSMenu? = nil) {
         let item = NSMenuItem(title: title, action: selector, keyEquivalent: keyEquivalent)
         item.target = self
         item.isEnabled = enabled
-        menu.addItem(item)
+        (targetMenu ?? menu).addItem(item)
     }
 
     // MARK: - Phone access
@@ -724,6 +748,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func reloadConfigTapped() {
         Task { await reloadFromDisk(firstRun: false) }
+    }
+
+    @objc private func openConfigurationTapped() {
+        NSWorkspace.shared.open(AppPaths.configFile)
     }
 
     @objc private func useDetectedBinaryTapped() {

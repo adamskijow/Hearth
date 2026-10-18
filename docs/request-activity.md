@@ -76,7 +76,9 @@ active/uncertain traffic, native residency evidence, and confirmed inference
 failure. Process/API recovery and explicit operator restart retain their existing
 policies; routine maintenance draining remains bounded by `drainSeconds`.
 
-Preferences now separates Runner, Health, Alerts, Access, and Advanced settings.
+Preferences now separates General, Health, Alerts, and Advanced settings.
+Remote access lives in Advanced; connection fields and optional integrations
+expand when needed, and the Save footer remains visible while forms scroll.
 Health groups model selection, an explicit inference test, and the copyable
 client endpoint. Choose the workload model; Hearth no longer automatically
 selects the smallest catalog entry. The explicit test may load that model and

@@ -117,6 +117,8 @@ public actor SupervisorEngine {
     /// When the last warm-up began, to blame a crash that lands soon after on
     /// the warm-up load itself (the OOM classifier is a heuristic and can miss).
     private var lastWarmupStartedAt: Date?
+    private var warmupTask: Task<Void, Never>?
+    private var warmupGeneration = 0
     /// Remembers which models were resident at fit-related crashes, to call out
     /// a model that keeps running the Mac out of memory (proactive guidance, not
     /// just reactive recovery). Windowed, so a model un-flags once it stops.
@@ -244,6 +246,7 @@ public actor SupervisorEngine {
 
     /// Replacement invalidates old verification, but cannot resolve an incident.
     private func resetProcessEvidence() {
+        cancelWarmup()
         apiEvidence = APIEvidence()
         inferenceEvidence.currentProcess = false
         inferenceEvidence.validUntil = nil
@@ -781,6 +784,7 @@ public actor SupervisorEngine {
     }
 
     private func killChild() {
+        cancelWarmup()
         invalidateInferenceVerification()
         if let handle = currentHandle {
             beforeManagedTermination?(processes.terminationWitness(handle))
@@ -793,6 +797,7 @@ public actor SupervisorEngine {
         var followUps: [SupervisorEvent] = []
         switch event {
         case .down(let reason):
+            cancelWarmup()
             if inferenceEvidence.incidentOpen { pendingRecoveryEvent = .recovered }
             // A crash can land without a kill effect; snapshot here too so the
             // warm-up knows what was resident before the failure.
@@ -871,6 +876,8 @@ public actor SupervisorEngine {
     /// runner's own keep-alive policy then owns residency, as always.
     private func startWarmupIfNeeded() {
         guard warmModels, !modelsToRestore.isEmpty else { return }
+        cancelWarmup()
+        let generation = warmupGeneration
         // The runner just crashed loading these very models; reloading them would
         // most likely crash it again. Leave the runner idle-but-alive (the user
         // can switch to a smaller model) and say why, instead of driving a GPU
@@ -879,7 +886,9 @@ public actor SupervisorEngine {
             let skipped = modelsToRestore
             modelsToRestore = []
             suppressWarmupAfterCrash = false
-            Task { [weak self] in await self?.handleEvent(.warmupSkippedAfterCrash(models: skipped)) }
+            warmupTask = Task { [weak self] in
+                await self?.reportSkippedWarmup(skipped, generation: generation)
+            }
             return
         }
         let requests: [(String, DeepProbeRequest)] = modelsToRestore.compactMap { model in
@@ -888,18 +897,34 @@ public actor SupervisorEngine {
         modelsToRestore = []
         guard !requests.isEmpty else { return }
         lastWarmupStartedAt = clock.now
-        let http = self.http
-        Task.detached { [weak self] in
-            var missing: [String] = []
-            for (model, request) in requests {
-                let outcome = await http.post(request.url, body: request.body, timeout: Self.warmupTimeout)
-                if case .ok = outcome {} else { missing.append(model) }
-            }
-            await self?.warmupFinished(missing: missing)
+        warmupTask = Task { [weak self] in
+            await self?.restoreModels(requests, generation: generation)
         }
     }
 
-    private func warmupFinished(missing: [String]) async {
+    private func cancelWarmup() {
+        warmupGeneration &+= 1
+        warmupTask?.cancel()
+        warmupTask = nil
+    }
+
+    private func reportSkippedWarmup(_ models: [String], generation: Int) async {
+        guard !Task.isCancelled, generation == warmupGeneration else { return }
+        warmupTask = nil
+        await handleEvent(.warmupSkippedAfterCrash(models: models))
+    }
+
+    private func restoreModels(_ requests: [(String, DeepProbeRequest)], generation: Int) async {
+        var missing: [String] = []
+        for (model, request) in requests {
+            guard !Task.isCancelled, generation == warmupGeneration, machine.phase == .healthy else { return }
+            let outcome = await http.post(request.url, body: request.body, timeout: Self.warmupTimeout)
+            // A stop, replacement, or failed process invalidates all remaining
+            // requests and notifications from this restore operation.
+            guard !Task.isCancelled, generation == warmupGeneration, machine.phase == .healthy else { return }
+            if case .ok(let data) = outcome, runner.validatesInferenceCompletion(data) {} else { missing.append(model) }
+        }
+        warmupTask = nil
         await handleEvent(.warmupFinished(missing: missing))
     }
 

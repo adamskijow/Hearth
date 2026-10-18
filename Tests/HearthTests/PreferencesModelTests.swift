@@ -17,9 +17,9 @@ struct PreferencesModelTests {
         #expect(model.config.port == 12434)
         #expect(model.status.contains("edits are still here"))
         let view = PreferencesView(model: model, onSave: { _ in false }, onClose: {})
-            .frame(width: 560, height: 640)
+            .frame(width: 560, height: 560)
             .background(Color(nsColor: .windowBackgroundColor))
-        let image = try render(view, size: NSSize(width: 560, height: 640))
+        let image = try render(view, size: NSSize(width: 560, height: 560))
         try export(image, name: "preferences-save-failure")
         model.save { _ in true }
         #expect(model.baseline == model.config)
@@ -43,10 +43,10 @@ struct PreferencesModelTests {
     @Test func managedMLXPreferencesRenderAtTheReleaseWindowSize() throws {
         let model = PreferencesModel(HearthConfig(runner: "mlx", mode: "managed", port: 8080))
         let view = PreferencesView(model: model, onSave: { _ in true }, onClose: {})
-            .frame(width: 500, height: 620)
+            .frame(width: 560, height: 560)
             .background(Color(nsColor: .windowBackgroundColor))
-        let image = try render(view, size: NSSize(width: 500, height: 620))
-        #expect(image.size == NSSize(width: 500, height: 620))
+        let image = try render(view, size: NSSize(width: 560, height: 560))
+        #expect(image.size == NSSize(width: 560, height: 560))
 
         if let directory = ProcessInfo.processInfo.environment["HEARTH_RENDER_UI"],
            let tiff = image.tiffRepresentation,
@@ -73,10 +73,10 @@ struct PreferencesModelTests {
                 let model = PreferencesModel(config)
                 model.page = page
                 let view = PreferencesView(model: model, onSave: { _ in true }, onClose: {})
-                    .frame(width: 560, height: 640)
+                    .frame(width: 560, height: 560)
                     .background(Color(nsColor: .windowBackgroundColor))
                     .preferredColorScheme(dark ? .dark : .light)
-                let image = try render(view, size: NSSize(width: 560, height: 640))
+                let image = try render(view, size: NSSize(width: 560, height: 560))
                 try export(image, name: "preferences-\(page.rawValue)-\(dark ? "dark" : "light")")
             }
             for managed in [false, true] {
@@ -84,11 +84,24 @@ struct PreferencesModelTests {
                     foundPath: "/opt/homebrew/bin/ollama", installHint: "brew install ollama",
                     collisionWarning: nil, onSwitchToAttached: {}, onEnableNotifications: {},
                     onOpenPreferences: {}, onDone: {})
-                    .frame(width: 460, height: 430)
+                    .frame(width: 460, height: 330)
                     .background(Color(nsColor: .windowBackgroundColor))
                     .preferredColorScheme(dark ? .dark : .light)
-                let image = try render(view, size: NSSize(width: 460, height: 430))
+                let image = try render(view, size: NSSize(width: 460, height: 330))
                 try export(image, name: "welcome-\(managed ? "managed" : "attached")-\(dark ? "dark" : "light")")
+            }
+            for conflict in [false, true] {
+                let view = WelcomeView(runner: "ollama", managed: true,
+                    foundPath: conflict ? "/opt/homebrew/bin/ollama" : nil,
+                    installHint: "brew install ollama",
+                    collisionWarning: conflict ? "An existing Ollama process already owns this address. Watch it without starting another server." : nil,
+                    onSwitchToAttached: {}, onEnableNotifications: {},
+                    onOpenPreferences: {}, onDone: {})
+                    .frame(width: 460, height: 460)
+                    .background(Color(nsColor: .windowBackgroundColor))
+                    .preferredColorScheme(dark ? .dark : .light)
+                let image = try render(view, size: NSSize(width: 460, height: 460))
+                try export(image, name: "welcome-\(conflict ? "conflict" : "missing")-\(dark ? "dark" : "light")")
             }
         }
     }

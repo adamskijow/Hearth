@@ -83,7 +83,7 @@ default:
         // supervises, bow out rather than starting a second instance that fights it.
         guard SingleInstance.acquire(wait: false) else {
             FileHandle.standardError.write(Data(
-                "Hearth is already running; this menubar instance will exit.\n".utf8))
+                "Hearth: supervisor lock unavailable; this menubar instance will exit.\n".utf8))
             exit(0)
         }
         let application = NSApplication.shared

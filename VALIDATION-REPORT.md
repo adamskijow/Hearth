@@ -7,6 +7,31 @@ The recent gates below use isolated configuration, data, ports, and owned proces
 identities. The older `./scripts/validate-real.sh` targets normal runner state and
 uses broad process cleanup; use it only in a dedicated test environment.
 
+## October 18, 2026: bug fixes and UI simplification
+
+Working changes based on `175b539` fix first-launch lock-directory creation,
+fail closed when either entry point cannot acquire its supervisor lock, cancel
+stale model restoration on stop/restart/crash, and require a valid completed
+response before treating a model as restored. Regression tests reproduced the
+lock and restoration failures before the fixes and pass afterward. A startup
+menu regression checks that configuration and quit actions remain available
+before engine construction succeeds.
+
+Preferences now uses four pages with optional settings behind disclosures and a
+fixed Save footer. The menu moves routine metrics and diagnostics into submenus;
+Welcome removes repeated explanations. Native light/dark renders were inspected
+for every page, welcome states, the missing MLX model, and a failed save. The
+render pass caught and corrected numeric grouping in the server port label.
+
+The local CI gate passed **455 tests in 68 suites**, debug/release builds,
+isolated HTTP relay and setup checks, all five managed recovery drills, and
+lint. The final label/port polish also passed the focused Preferences and
+startup-menu tests with refreshed renders.
+
+Live menu and keyboard checks remain unverified because the Mac was locked.
+No release, tag, installation, or change to the normal service was performed.
+The real-runner and sustained-workload limitations below still apply.
+
 ## September 29, 2026: current source checks
 
 At `3fb38ec`, the local gate and [hosted CI](https://github.com/adamskijow/Hearth/actions/runs/36561098257)

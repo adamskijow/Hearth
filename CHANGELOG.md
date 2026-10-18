@@ -9,6 +9,13 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Fresh installations create the configuration directory before acquiring the
+  supervisor lock. Both GUI and headless launches refuse to run without a lock.
+- Model restoration cancels when supervision stops, restarts, or observes a crash.
+  Stale work cannot send further requests or failure alerts, and an empty HTTP 200
+  response no longer counts as a restored model.
+- An invalid initial configuration leaves Open Configuration, Reload, and Quit
+  available in the menu. Long Preferences pages scroll above a fixed Save footer.
 - Recovery waits for validated inference when an inference incident is open,
   including after process replacement. Empty HTTP 200 responses cannot clear it.
 - Old effects cannot kill a child created during a notification await. Attached
@@ -34,10 +41,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Preferences now has focused Runner, Health, Alerts, Access, and Advanced pages.
-  Health groups workload model selection, testing, and a copyable client address.
-  Welcome explains ownership without claiming a found binary is healthy; long
-  menu notices wrap, control tokens are masked, and irrelevant fields stay hidden.
+- Preferences has four compact pages: General, Health, Alerts, and Advanced.
+  Connection details and optional integrations expand when needed. Welcome is
+  shorter, and the menu groups metrics and diagnostics under Details and
+  Troubleshooting while keeping failures and primary controls visible.
+  Health groups model selection, testing, and a copyable client address;
+  control tokens stay masked, and ownership remains explicit.
 - Status exposes request activity and uncertainty consistently in the menu, CLI,
   browser, and metrics. Traffic visibility remains explicitly partial.
 

@@ -23,16 +23,26 @@ enum SingleInstance {
     static func acquire(configPath: URL = AppPaths.configFile,
                         wait: Bool,
                         onWait: (() -> Void)? = nil) -> Bool {
+        // The lock is acquired before ConfigStore creates a first-run config.
+        // Create its directory here so a fresh headless installation can start
+        // and the GUI cannot enter supervision without single-instance protection.
+        do {
+            try FileManager.default.createDirectory(
+                at: configPath.deletingLastPathComponent(), withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700])
+        } catch {
+            FileHandle.standardError.write(Data(
+                "Hearth: could not create the supervisor lock directory: \(error.localizedDescription)\n".utf8))
+            return false
+        }
         let lockPath = configPath.path + ".lock"
         let fd = open(lockPath, O_CREAT | O_RDWR, 0o644)
         guard fd >= 0 else {
-            // The lock file could not be created (an unwritable support directory,
-            // say). Do not fail silently: the menubar app proceeds best-effort, but
-            // the headless daemon must not fall open into a respawn fight over the
-            // runner, so it reports failure and its caller exits.
+            // Both entry points must fail closed: two unlocked supervisors can
+            // spawn and kill competing runners.
             FileHandle.standardError.write(Data(
                 "Hearth: could not create the single-instance lock at \(lockPath) (errno \(errno)); single-instance protection is unavailable.\n".utf8))
-            return !wait
+            return false
         }
 
         if flockRetryingEINTR(fd, LOCK_EX | LOCK_NB) != 0 {

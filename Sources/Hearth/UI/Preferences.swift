@@ -73,7 +73,8 @@ final class PreferencesController: NSObject, NSWindowDelegate {
             let window = NSWindow(contentViewController: hosting)
             window.title = "Hearth Preferences"
             window.styleMask = [.titled, .closable, .resizable]
-            window.setContentSize(NSSize(width: 560, height: 640))
+            window.setContentSize(NSSize(width: 560, height: 560))
+            window.contentMinSize = NSSize(width: 520, height: 500)
             window.isReleasedWhenClosed = false
             window.delegate = self
             window.center()
@@ -98,7 +99,7 @@ final class PreferencesController: NSObject, NSWindowDelegate {
 @MainActor
 final class PreferencesModel: ObservableObject {
     enum Page: String, CaseIterable, Identifiable {
-        case runner = "Runner", health = "Health", alerts = "Alerts", access = "Access", advanced = "Advanced"
+        case runner = "General", health = "Health", alerts = "Alerts", advanced = "Advanced"
         var id: String { rawValue }
     }
     @Published var page: Page = .runner
@@ -148,6 +149,11 @@ struct PreferencesView: View {
     @State private var showingTokensEditor = false
     @State private var showingStatusTokensEditor = false
     @State private var showAdvancedTuning = false
+    @State private var showConnectionSettings = false
+    @State private var showPhoneAlerts = false
+    @State private var showIntegrations = false
+    @State private var showDeviceAlerts = false
+    @State private var showLogSettings = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -157,16 +163,20 @@ struct PreferencesView: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .padding(.horizontal, 20).padding(.top, 16).padding(.bottom, 8)
-            Form {
-                switch model.page {
-                case .runner: runnerSection
-                case .health: inferenceHealthSection; clientProxySection
-                case .alerts: notificationsSection
-                case .access: controlSection
-                case .advanced: advancedSection; loggingSection
+            // Constrain the form to the space above the fixed footer. Without
+            // this boundary, long grouped forms can push Save out of the window.
+            GeometryReader { area in
+                Form {
+                    switch model.page {
+                    case .runner: runnerSection
+                    case .health: inferenceHealthSection; clientProxySection
+                    case .alerts: notificationsSection
+                    case .advanced: controlSection; advancedSection; loggingSection
+                    }
                 }
+                .formStyle(.grouped)
+                .frame(width: area.size.width, height: area.size.height)
             }
-            .formStyle(.grouped)
 
             Divider()
             VStack(alignment: .leading, spacing: 6) {
@@ -195,7 +205,7 @@ struct PreferencesView: View {
             }
             .padding(12)
         }
-        .frame(minWidth: 500, minHeight: 560)
+        .frame(minWidth: 500, minHeight: 500)
         .sheet(isPresented: $showingEnvEditor) {
             EnvEditorView(
                 env: model.config.runnerEnv,
@@ -225,6 +235,11 @@ struct PreferencesView: View {
             if deepProbeEnabled.wrappedValue {
                 await refreshProbeModels()
             }
+        }
+        .onAppear {
+            showPhoneAlerts = !(model.config.ntfyTopic ?? "").isEmpty
+            showIntegrations = !(model.config.webhookURL ?? "").isEmpty
+                || !(model.config.heartbeatURL ?? "").isEmpty
         }
     }
 
@@ -269,76 +284,78 @@ struct PreferencesView: View {
 
     // MARK: Sections
 
-    private var runnerSection: some View {
-        Section("Runner") {
+    @ViewBuilder private var runnerSection: some View {
+        Section {
             Picker("Runner", selection: $model.config.runner) {
-                Text("Ollama (recommended)").tag("ollama")
+                Text("Ollama").tag("ollama")
                 Text("mlx_lm").tag("mlx")
-                Text("LM Studio (attached only)").tag("lmstudio")
+                Text("LM Studio (watch only)").tag("lmstudio")
                 Text("Osaurus (experimental)").tag("osaurus")
             }
-            .help("Which local LLM server Hearth supervises.")
-            Picker("Mode", selection: $model.config.mode) {
-                Text(ModeKind.managed.pickerLabel).tag(ModeKind.managed.rawValue)
-                Text(ModeKind.attached.pickerLabel).tag(ModeKind.attached.rawValue)
+            Picker("Supervision", selection: $model.config.mode) {
+                Text("Start & recover").tag(ModeKind.managed.rawValue)
+                Text("Watch only").tag(ModeKind.attached.rawValue)
             }
             .pickerStyle(.segmented)
-            .help("Choose whether Hearth starts and restarts the runner, or only watches a runner started by something else.")
-            Text(model.config.isManaged
-                 ? "Hearth owns this runner and can restart it after a process or API failure."
-                 : "Hearth checks and alerts. The existing app or service remains responsible for restarting the runner.")
-                .font(.callout).foregroundStyle(.secondary)
-            if model.config.isManaged {
-                HStack {
-                    TextField("Binary path", text: binaryPath)
-                    Button("Detect") {
-                        if let found = RunnerLocator.locate(model.config.runner) {
-                            binaryPath.wrappedValue = found
-                            model.status = "Found \(found)"
-                        } else {
-                            model.status = "No \(model.config.runner) binary found."
-                        }
-                    }
-                    Button("Choose\u{2026}") { chooseBinary() }
-                }
-                .help("Path to the runner executable. Detect searches the usual install locations.")
-                if model.config.runnerKind == .mlx, model.config.isManaged {
-                    TextField("Startup model", text: optional(\.mlxModel),
-                              prompt: Text("mlx-community/Qwen2.5-0.5B-Instruct-4bit"))
-                        .help("Required in managed mode. Enter a Hugging Face repository ID or a local model directory; Hearth passes it to mlx_lm.server as --model.")
-                    if model.config.normalizedMLXModel == nil {
-                        Text("Required in managed mode. Watch existing runner does not need it.")
-                            .foregroundStyle(.red)
-                            .font(.caption)
-                    }
+            .help("Start & recover lets Hearth run the server. Watch only leaves it under its existing app or service.")
+            if model.config.runnerKind == .mlx, model.config.isManaged {
+                TextField("Startup model", text: optional(\.mlxModel),
+                          prompt: Text("Hugging Face model or local path"))
+                if model.config.normalizedMLXModel == nil {
+                    Text("Choose a startup model, or use Watch only.")
+                        .foregroundStyle(.red).font(.caption)
                 }
             }
-            TextField("Host", text: $model.config.host)
-                .help("Address the runner serves on. 127.0.0.1 keeps it on this machine.")
-            TextField("Port", value: $model.config.port, format: .number.grouping(.never))
-                .help("Port the runner serves on. Ollama's default is 11434.")
-            if model.config.isManaged {
-                HStack {
-                    Text("Environment")
-                    Spacer()
-                    Text(envSummary).foregroundStyle(.secondary)
-                    Button("Set Env\u{2026}") { showingEnvEditor = true }
+        } header: { Text("Runner") } footer: {
+            Text(model.config.isManaged
+                 ? "Hearth starts the server and restarts it if it crashes or stops answering."
+                 : "Hearth checks health and alerts you. Your existing app or service handles restarts.")
+        }
+        Section("Connection") {
+            LabeledContent("Server") {
+                Text(verbatim: "\(model.config.host):\(model.config.port)")
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+            }
+            DisclosureGroup("Connection settings", isExpanded: $showConnectionSettings) {
+                TextField("Host", text: $model.config.host)
+                    .help("127.0.0.1 keeps the runner on this Mac.")
+                TextField("Port", value: $model.config.port, format: .number.grouping(.never))
+                if model.config.isManaged {
+                    TextField("Executable", text: binaryPath)
+                    HStack {
+                        Spacer()
+                        Button("Detect") {
+                            if let found = RunnerLocator.locate(model.config.runner) {
+                                binaryPath.wrappedValue = found
+                                model.status = "Found \(found)"
+                            } else {
+                                model.status = "No \(model.config.runner) executable found."
+                            }
+                        }
+                        Button("Choose…") { chooseBinary() }
+                    }
+                    HStack {
+                        Text("Environment")
+                        Spacer()
+                        Text(envSummary).foregroundStyle(.secondary)
+                        Button("Edit…") { showingEnvEditor = true }
+                    }
                 }
-                .help("Extra environment variables set on a managed runner at launch, for example OLLAMA_LOAD_TIMEOUT. Click Set Env to add or remove variables.")
             }
         }
     }
 
     private var inferenceHealthSection: some View {
         Section {
-            Toggle("Scheduled inference checks", isOn: deepProbeEnabled)
+            Toggle("Check model responses", isOn: deepProbeEnabled)
                 .help("Periodically generate one token while the selected model is already resident. This catches a GPU or model hang without loading an idle model just for monitoring.")
             if deepProbeEnabled.wrappedValue {
                 if model.availableProbeModels.isEmpty {
-                    TextField("Probe model", text: optional(\.probeModel),
+                    TextField("Model", text: optional(\.probeModel),
                               prompt: Text("e.g. qwen2.5:0.5b"))
                 } else {
-                    Picker("Probe model", selection: optional(\.probeModel)) {
+                    Picker("Model", selection: optional(\.probeModel)) {
                         Text("Choose your workload model").tag("")
                         ForEach(probeModelOptions) { option in
                             Text(probeModelLabel(option)).tag(option.name)
@@ -346,10 +363,10 @@ struct PreferencesView: View {
                     }
                 }
                 HStack {
-                    Button("Refresh Models") {
+                    Button("Refresh") {
                         Task { await refreshProbeModels() }
                     }
-                    Button("Run Inference Test") {
+                    Button("Test Model") {
                         Task { await testProbe() }
                     }
                     .disabled(model.probeBusy || (model.config.probeModel ?? "").isEmpty)
@@ -362,47 +379,55 @@ struct PreferencesView: View {
                 }
             }
         } header: {
-            Text("Inference health")
+            Text("Model checks")
         } footer: {
             Text(model.config.makeRunner().reportsLoadedModels
-                 ? (!deepProbeEnabled.wrappedValue ? "Enable to periodically verify a response from a model your apps already have loaded."
-                    : "Choose a model your apps use. Scheduled checks never load an idle model. Run Inference Test may load it; save endpoint changes before testing.")
-                 : "This runner does not report loaded models, so scheduled checks stay deferred. A manual inference test can still verify a response and may load the model.")
+                 ? (!deepProbeEnabled.wrappedValue ? "Check that a loaded model can answer, even when the server API looks healthy."
+                    : "Automatic checks only use a loaded model. Test Model can load it; save connection changes first.")
+                 : "This runner supports manual tests only; it does not report which models are loaded.")
         }
     }
 
-    private var notificationsSection: some View {
-        Section("Notifications") {
-            Toggle("Local notifications", isOn: $model.config.localNotifications)
-                .help("Show a macOS notification when the runner goes down or recovers.")
-            TextField("ntfy topic (for phone alerts)", text: optional(\.ntfyTopic),
-                      prompt: Text("e.g. hearth-alerts-7f3a (click here and type)"))
-                .help("Subscribe to this topic in the ntfy app to get alerts on your phone. Leave blank to skip.")
-            TextField("ntfy server", text: $model.config.ntfyServer)
-                .help("ntfy server URL. The default is the public ntfy.sh.")
-            TextField("Webhook URL", text: optional(\.webhookURL),
-                      prompt: Text("https://your-server/hook (optional)"))
-                .help("Hearth POSTs a small JSON status body here on each event, to wire into your own automation. Leave blank to skip.")
-            TextField("Heartbeat URL", text: optional(\.heartbeatURL),
-                      prompt: Text("Uptime Kuma push or healthchecks.io URL (optional)"))
-                .help("While the runner is healthy, Hearth pings this URL on an interval; silence then means down, and the monitor you already run does the alerting.")
-            number("Heartbeat interval", $model.config.heartbeatIntervalSeconds,
-                   help: "Seconds between heartbeat pings while the runner is healthy. Match it to the monitor's expected period.")
-            Toggle("Thermal alerts", isOn: $model.config.thermalAlerts)
-                .help("Alert when the Mac's thermal state turns serious or critical, which throttles inference long before anything crashes.")
-            numberInt("Memory alert percent", $model.config.memoryAlertPercent,
-                      help: "Alert when system memory used reaches this percent, a precursor to the runner being killed under pressure. 0 disables it.")
-            Toggle("Pause all notifications", isOn: $model.config.notificationsPaused)
-                .help("Vacation mode: silence local, ntfy, and webhook alerts without clearing their settings. Events are still logged.")
-            Toggle("Include runner log tail in alerts", isOn: $model.config.alertsIncludeLogTail)
-                .help("Privacy trade-off, off by default: appends the runner's last log lines to down and failing alerts so the alert says why. Log lines are runner content (paths, model names, possibly request text) and travel to your notifiers, including the public ntfy.sh unless you self-host. hearth doctor warns about that combination.")
-            Button("Send test notification") { sendTest() }
+    @ViewBuilder private var notificationsSection: some View {
+        Section {
+            Toggle("Notifications on this Mac", isOn: $model.config.localNotifications)
+            Toggle("Pause all alerts", isOn: $model.config.notificationsPaused)
+            Button("Send Test Notification") { sendTest() }
+        } header: { Text("Alerts") } footer: {
+            Text("Get notified when the runner goes down or recovers.")
+        }
+        Section("Optional alerts") {
+            DisclosureGroup("Phone alerts", isExpanded: $showPhoneAlerts) {
+                TextField("ntfy topic", text: optional(\.ntfyTopic), prompt: Text("Choose a hard-to-guess name"))
+                    .help("On the public ntfy server, anyone who knows the topic name can subscribe.")
+                TextField("Server", text: $model.config.ntfyServer)
+                Text("Subscribe to this topic in the ntfy app on your phone.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            DisclosureGroup("Webhooks & heartbeat", isExpanded: $showIntegrations) {
+                TextField("Webhook URL", text: optional(\.webhookURL), prompt: Text("Optional"))
+                TextField("Heartbeat URL", text: optional(\.heartbeatURL), prompt: Text("Optional"))
+                if !(model.config.heartbeatURL ?? "").isEmpty {
+                    number("Heartbeat interval (s)", $model.config.heartbeatIntervalSeconds,
+                           help: "Seconds between pings while the runner is healthy.")
+                }
+                Toggle("Include recent runner logs", isOn: $model.config.alertsIncludeLogTail)
+                if model.config.alertsIncludeLogTail {
+                    Text("Recent logs are included in alerts. They may contain paths, model names, or request text.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            DisclosureGroup("Mac temperature & memory", isExpanded: $showDeviceAlerts) {
+                Toggle("Thermal alerts", isOn: $model.config.thermalAlerts)
+                numberInt("Memory alert (%)", $model.config.memoryAlertPercent,
+                          help: "Alert above this system memory usage. Set 0 to disable.")
+            }
         }
     }
 
     private var controlSection: some View {
         Section {
-            Toggle("Enable control endpoint", isOn: $model.config.controlEnabled)
+            Toggle("Remote control", isOn: $model.config.controlEnabled)
                 .help("Serve a small HTTP API so a phone can check status and start, stop, or restart the runner.")
                 .onChange(of: model.config.controlEnabled) { _, enabled in
                     // The endpoint refuses to start without a token, so make one
@@ -441,21 +466,21 @@ struct PreferencesView: View {
             }
 
         } header: {
-            Text("Remote control")
+            Text("Remote access")
         } footer: {
-            Text("Serve this on a private network only (a Tailscale address is ideal), never the open internet.")
+            Text("Allow status checks and controls over a private network, such as Tailscale.")
         }
     }
 
     private var clientProxySection: some View {
         Section {
-            Toggle("Observe client requests", isOn: $model.config.metricsProxyEnabled)
+            Toggle("Route requests through Hearth", isOn: $model.config.metricsProxyEnabled)
             if model.config.metricsProxyEnabled {
-                numberInt("Client proxy port", $model.config.metricsProxyPort,
+                numberInt("Proxy port", $model.config.metricsProxyPort,
                           help: "Your apps use this port instead of the runner port.")
             }
             VStack(alignment: .leading, spacing: 6) {
-                Text(model.config.metricsProxyEnabled ? "Use this endpoint in your apps" : "Current client endpoint")
+                Text(model.config.metricsProxyEnabled ? "Address for your apps" : "Server address")
                     .font(.callout).foregroundStyle(.secondary)
                 HStack {
                     Text(model.config.clientEndpoint).font(.system(.callout, design: .monospaced))
@@ -469,30 +494,26 @@ struct PreferencesView: View {
                     .accessibilityLabel("Copy client endpoint")
                 }
             }
-            Text(model.config.metricsProxyEnabled
-                 ? "Save, then use this address in your apps. Hearth can only observe requests sent through this address."
-                 : "Enable to observe requests and collect throughput metrics. Without observed traffic, inference failures alert but automatic inference recovery stays withheld.")
-                .font(.callout).foregroundStyle(.secondary)
-            if !model.config.isManaged {
-                Text("Attached mode never restarts the runner, even with request observation enabled.")
-                    .font(.callout).foregroundStyle(.secondary)
-            }
-        } header: { Text("Client connection") }
+        } header: { Text("Client connection") } footer: {
+            Text(!model.config.isManaged
+                 ? "Watch-only mode reports failures but never restarts the server."
+                 : model.config.metricsProxyEnabled
+                    ? "Use this address in your apps so Hearth can wait for active requests before inference recovery."
+                    : "Without routed requests, inference failures trigger alerts but no automatic restart.")
+        }
     }
 
     private var loggingSection: some View {
-        Section("Runner log") {
-            TextField("Max bytes before rotating", value: $model.config.logMaxBytes, format: .number.grouping(.never))
-                .help("Rotate the runner log once it grows past this many bytes.")
-            TextField("Rotated files to keep", value: $model.config.logKeepFiles, format: .number.grouping(.never))
-                .help("How many rotated log files to keep before deleting the oldest.")
+        Section {
+            DisclosureGroup("Log storage", isExpanded: $showLogSettings) {
+                TextField("Rotate after (bytes)", value: $model.config.logMaxBytes, format: .number.grouping(.never))
+                TextField("Old files to keep", value: $model.config.logKeepFiles, format: .number.grouping(.never))
+            }
         }
     }
 
     private var advancedSection: some View {
         Section {
-            Text("The defaults here suit almost every setup; a normal install never needs to touch them.")
-                .font(.callout).foregroundStyle(.secondary)
             DisclosureGroup("Timing and tuning", isExpanded: $showAdvancedTuning) {
                 number("Probe interval", $model.config.probeIntervalSeconds,
                        help: "How often Hearth asks the runner \u{201C}are you still answering?\u{201D} while it is up.")
@@ -534,9 +555,7 @@ struct PreferencesView: View {
                     .help("Only used by the headless root LaunchDaemon (see docs/running-headless.md); the menubar app ignores it.")
             }
         } header: {
-            Text("Advanced")
-        } footer: {
-            Text("For the headless root daemon, set Runner user and verify with hearth doctor-daemon.")
+            Text("Recovery")
         }
     }
 
@@ -652,7 +671,7 @@ struct PreferencesView: View {
             let result = try await RunnerProbeSetup.test(config: model.config, model: probeModel)
             guard target == probeTarget, endpoint == model.config.clientEndpoint,
                   model.config.probeModel == probeModel, model.probeRequestID == requestID else { return }
-            model.probeStatus = String(format: "Completed through %@ in %.1f seconds. This test does not establish automatic recovery coverage.", endpoint, result.elapsed)
+            model.probeStatus = String(format: "Model responded in %.1f seconds.", result.elapsed)
         } catch {
             guard target == probeTarget, endpoint == model.config.clientEndpoint,
                   model.config.probeModel == probeModel, model.probeRequestID == requestID else { return }

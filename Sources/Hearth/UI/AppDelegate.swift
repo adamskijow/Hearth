@@ -440,7 +440,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 menu.addItem(infoRow(headlineAttr("\u{26A0} Already running", color: .systemYellow)))
                 menu.addItem(infoRow(detailAttr("   \(warning)")))
             }
-            addAction("Watch the Existing Runner Instead", #selector(switchToAttachedTapped), enabled: true)
+            addAction("Watch Existing \(runner.name)", #selector(switchToAttachedTapped), enabled: true)
             menu.addItem(.separator())
         }
         // A model that keeps running the Mac out of memory: name it so the fix
@@ -484,7 +484,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         if !config.isManaged, latestState.phase == .down || latestState.phase == .failing {
             menu.addItem(infoRow(detailAttr(StatusText.watchingOnlyNotice(runnerName: runner.name))))
-            addAction("Have Hearth Start It Instead", #selector(switchToManagedTapped), enabled: true)
+            addAction("Have Hearth Start \(runner.name)", #selector(switchToManagedTapped), enabled: true)
         }
 
         let metrics = metricsProvider.sample()
@@ -527,10 +527,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         menu.addItem(.separator())
         if latestState.phase == .stopped {
-            addAction("Start Supervision", #selector(startTapped), enabled: !supervisionStartBlocked)
+            addAction(config.isManaged ? "Start \(runner.name)" : "Start Monitoring", #selector(startTapped), enabled: !supervisionStartBlocked)
         } else {
-            addAction(config.isManaged ? "Restart Runner" : "Restart Checks", #selector(restartTapped), enabled: true)
-            addAction("Stop Supervision", #selector(stopTapped), enabled: true)
+            addAction(config.isManaged ? "Restart \(runner.name)" : "Restart Monitoring", #selector(restartTapped), enabled: true)
+            addAction(config.isManaged ? "Stop \(runner.name)" : "Stop Monitoring", #selector(stopTapped), enabled: true)
         }
         addAction("History\u{2026}", #selector(openHistoryTapped), enabled: true)
         let troubleshooting = NSMenu()
@@ -564,7 +564,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         menu.addItem(login)
         // Vacation mode: silence every channel without touching their settings.
-        let pause = NSMenuItem(title: "Pause Notifications", action: #selector(togglePauseNotificationsTapped), keyEquivalent: "")
+        let pause = NSMenuItem(title: "Pause Alerts", action: #selector(togglePauseNotificationsTapped), keyEquivalent: "")
         pause.target = self
         pause.state = config.notificationsPaused ? .on : .off
         pause.toolTip = "Silence local, ntfy, and webhook alerts until unpaused. Events are still logged."
@@ -657,8 +657,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - Phone access
 
     /// The control URL a phone could actually reach, or nil if the endpoint is off
-    /// or only bound to loopback (which a phone cannot use). Prefers the Tailscale
-    /// address; an explicit non-loopback configured host is shown as-is.
+    /// or only bound to loopback (which a phone cannot use). A wildcard listener
+    /// uses the Tailscale address; an explicit configured host is shown as-is.
     private func phoneAccessURL() -> String? {
         guard config.controlEnabled, controlServer != nil else { return nil }
         return PhoneAccess.url(

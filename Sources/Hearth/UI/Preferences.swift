@@ -124,7 +124,7 @@ final class PreferencesModel: ObservableObject {
             return
         }
         baseline = config
-        status = "Saved. Reload requested; check the menu for runner status."
+        status = "Saved. Reload requested; check the menu for server status."
     }
 
     func resetProbeUI() {
@@ -139,6 +139,14 @@ final class PreferencesModel: ObservableObject {
     }
 
     var canSave: Bool { blockingDiagnostics.isEmpty }
+
+    func phoneURL(tailnetIPv4: String?) -> String? {
+        guard config.controlEnabled else { return nil }
+        let host = config.controlHost.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolved = host.lowercased() == "tailscale" ? (tailnetIPv4 ?? "127.0.0.1") : host
+        return PhoneAccess.url(tailnetIPv4: tailnetIPv4, controlHost: resolved,
+                               controlPort: config.controlPort)
+    }
 }
 
 struct PreferencesView: View {
@@ -148,7 +156,10 @@ struct PreferencesView: View {
     @State private var showingEnvEditor = false
     @State private var showingTokensEditor = false
     @State private var showingStatusTokensEditor = false
-    @State private var showAdvancedTuning = false
+    @State private var showCheckTiming = false
+    @State private var showRestartPolicy = false
+    @State private var showMaintenance = false
+    @State private var showAdditionalTokens = false
     @State private var showConnectionSettings = false
     @State private var showPhoneAlerts = false
     @State private var showIntegrations = false
@@ -185,8 +196,8 @@ struct PreferencesView: View {
                 }
                 if saveImpact == .restart {
                     Text(model.config.isManaged
-                         ? "These changes restart the runner and unload its models."
-                         : "These changes restart supervision; the watched runner stays running.")
+                         ? "Saving restarts \(serverName) and unloads its models."
+                         : "Saving restarts monitoring. \(serverName) stays running.")
                         .foregroundStyle(.orange).font(.callout)
                 }
                 if !model.status.isEmpty {
@@ -224,9 +235,9 @@ struct PreferencesView: View {
         .sheet(isPresented: $showingStatusTokensEditor) {
             TokensEditorView(
                 tokens: model.config.controlStatusTokens,
-                heading: "Status-only tokens",
-                explanation: "Give dashboards a read-only credential. These tokens can read /status and /metrics, but Hearth rejects start, stop, and restart with HTTP 403. Use a unique token per caller so access can be revoked independently.",
-                namePlaceholder: "name (e.g. dashboard)",
+                heading: "Read-only tokens",
+                explanation: "Read status and metrics without changing the server.",
+                namePlaceholder: "Device or dashboard name",
                 onDone: { model.config.controlStatusTokens = $0; showingStatusTokensEditor = false },
                 onCancel: { showingStatusTokensEditor = false }
             )
@@ -262,8 +273,10 @@ struct PreferencesView: View {
 
     private var saveButtonTitle: String {
         guard saveImpact == .restart else { return "Save" }
-        return model.config.isManaged ? "Save & Restart Runner" : "Save & Restart Supervision"
+        return model.config.isManaged ? "Save & Restart \(serverName)" : "Save & Restart Monitoring"
     }
+
+    private var serverName: String { model.config.runnerKind.displayName }
 
     /// A short summary of the configured runner environment for the Preferences row.
     private var envSummary: String {
@@ -286,13 +299,13 @@ struct PreferencesView: View {
 
     @ViewBuilder private var runnerSection: some View {
         Section {
-            Picker("Runner", selection: $model.config.runner) {
+            Picker("Server", selection: $model.config.runner) {
                 Text("Ollama").tag("ollama")
                 Text("mlx_lm").tag("mlx")
                 Text("LM Studio (watch only)").tag("lmstudio")
                 Text("Osaurus (experimental)").tag("osaurus")
             }
-            Picker("Supervision", selection: $model.config.mode) {
+            Picker("Monitoring", selection: $model.config.mode) {
                 Text("Start & recover").tag(ModeKind.managed.rawValue)
                 Text("Watch only").tag(ModeKind.attached.rawValue)
             }
@@ -306,7 +319,7 @@ struct PreferencesView: View {
                         .foregroundStyle(.red).font(.caption)
                 }
             }
-        } header: { Text("Runner") } footer: {
+        } header: { Text("Server") } footer: {
             Text(model.config.isManaged
                  ? "Hearth starts the server and restarts it if it crashes or stops answering."
                  : "Hearth checks health and alerts you. Your existing app or service handles restarts.")
@@ -319,7 +332,7 @@ struct PreferencesView: View {
             }
             DisclosureGroup("Connection settings", isExpanded: $showConnectionSettings) {
                 TextField("Host", text: $model.config.host)
-                    .help("127.0.0.1 keeps the runner on this Mac.")
+                    .help("127.0.0.1 keeps the server on this Mac.")
                 TextField("Port", value: $model.config.port, format: .number.grouping(.never))
                 if model.config.isManaged {
                     TextField("Executable", text: binaryPath)
@@ -348,7 +361,7 @@ struct PreferencesView: View {
 
     private var inferenceHealthSection: some View {
         Section {
-            Toggle("Check model responses", isOn: deepProbeEnabled)
+            Toggle("Enable model checks", isOn: deepProbeEnabled)
                 .help("Periodically generate one token while the selected model is already resident. This catches a GPU or model hang without loading an idle model just for monitoring.")
             if deepProbeEnabled.wrappedValue {
                 if model.availableProbeModels.isEmpty {
@@ -384,18 +397,16 @@ struct PreferencesView: View {
             Text(model.config.makeRunner().reportsLoadedModels
                  ? (!deepProbeEnabled.wrappedValue ? "Check that a loaded model can answer, even when the server API looks healthy."
                     : "Automatic checks only use a loaded model. Test Model can load it; save connection changes first.")
-                 : "This runner supports manual tests only; it does not report which models are loaded.")
+                 : "This server supports manual tests only; it does not report loaded models.")
         }
     }
 
     @ViewBuilder private var notificationsSection: some View {
         Section {
             Toggle("Notifications on this Mac", isOn: $model.config.localNotifications)
-            Toggle("Pause all alerts", isOn: $model.config.notificationsPaused)
-            Button("Send Test Notification") { sendTest() }
-        } header: { Text("Alerts") } footer: {
-            Text("Get notified when the runner goes down or recovers.")
-        }
+            Toggle("Pause Alerts", isOn: $model.config.notificationsPaused)
+            Button("Send Test Alert") { sendTest() }
+        } header: { Text("Alerts") }
         Section("Optional alerts") {
             DisclosureGroup("Phone alerts", isExpanded: $showPhoneAlerts) {
                 TextField("ntfy topic", text: optional(\.ntfyTopic), prompt: Text("Choose a hard-to-guess name"))
@@ -409,9 +420,9 @@ struct PreferencesView: View {
                 TextField("Heartbeat URL", text: optional(\.heartbeatURL), prompt: Text("Optional"))
                 if !(model.config.heartbeatURL ?? "").isEmpty {
                     number("Heartbeat interval (s)", $model.config.heartbeatIntervalSeconds,
-                           help: "Seconds between pings while the runner is healthy.")
+                           help: "Seconds between pings while the server is healthy.")
                 }
-                Toggle("Include recent runner logs", isOn: $model.config.alertsIncludeLogTail)
+                Toggle("Include recent server logs", isOn: $model.config.alertsIncludeLogTail)
                 if model.config.alertsIncludeLogTail {
                     Text("Recent logs are included in alerts. They may contain paths, model names, or request text.")
                         .font(.caption).foregroundStyle(.secondary)
@@ -427,8 +438,8 @@ struct PreferencesView: View {
 
     private var controlSection: some View {
         Section {
-            Toggle("Remote control", isOn: $model.config.controlEnabled)
-                .help("Serve a small HTTP API so a phone can check status and start, stop, or restart the runner.")
+            Toggle("Allow remote access", isOn: $model.config.controlEnabled)
+                .help("Check status and control the server from another device.")
                 .onChange(of: model.config.controlEnabled) { _, enabled in
                     // The endpoint refuses to start without a token, so make one
                     // the moment it is enabled rather than failing silently.
@@ -438,37 +449,54 @@ struct PreferencesView: View {
                     }
                 }
             if model.config.controlEnabled {
-                TextField("Bind host", text: $model.config.controlHost)
-                    .help("Address the control endpoint listens on. Use a private or Tailscale address.")
+                TextField("Listen address", text: $model.config.controlHost)
+                    .help("Use tailscale or a private IP address for access from another device. Loopback allows access only on this Mac.")
                 TextField("Port", value: $model.config.controlPort, format: .number.grouping(.never))
                     .help("Port for the control endpoint.")
                 HStack {
-                    SecureField("Bearer token", text: optional(\.controlToken),
-                              prompt: Text("click Generate, or paste a secret"))
+                    SecureField("Access token", text: optional(\.controlToken))
+                    Button("Copy Token") {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(model.config.controlToken ?? "", forType: .string)
+                        model.status = "Access token copied."
+                    }
+                    .disabled((model.config.controlToken ?? "").isEmpty)
                     Button("Generate") { model.config.controlToken = Self.randomToken() }
+                        .help("Replaces the main access token when you save. Existing devices will need the new token.")
                 }
-                .help("Required secret on every control request. Generate makes a random one.")
-                HStack {
-                    Text("Named tokens")
-                    Spacer()
-                    Text(tokensSummary).foregroundStyle(.secondary)
-                    Button("Edit Tokens\u{2026}") { showingTokensEditor = true }
+                if let url = phoneURL {
+                    LabeledContent("Phone address") {
+                        Text(url).font(.system(.callout, design: .monospaced))
+                            .textSelection(.enabled)
+                        Button("Copy") { copyPhoneURL() }
+                            .accessibilityLabel("Copy phone address")
+                    }
+                } else {
+                    Text("For phone access, set Listen address to tailscale or a private IP address.")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
-                .help("Optional: give each caller its own named token, so start, stop, and restart actions are logged with the caller's name. The bearer token above keeps working and is logged as default.")
-                HStack {
-                    Text("Status-only tokens")
-                    Spacer()
-                    Text(statusTokensSummary).foregroundStyle(.secondary)
-                    Button("Edit Read-Only Tokens\u{2026}") { showingStatusTokensEditor = true }
+                DisclosureGroup("Additional tokens", isExpanded: $showAdditionalTokens) {
+                    HStack {
+                        Text("Control tokens")
+                        Spacer()
+                        Text(tokensSummary).foregroundStyle(.secondary)
+                        Button("Edit…") { showingTokensEditor = true }
+                    }
+                    HStack {
+                        Text("Read-only tokens")
+                        Spacer()
+                        Text(statusTokensSummary).foregroundStyle(.secondary)
+                        Button("Edit…") { showingStatusTokensEditor = true }
+                    }
                 }
-                .help("Dashboard access: these tokens can read status and metrics but cannot start, stop, or restart the runner.")
-                Button("Copy phone URL") { copyPhoneURL() }
             }
 
         } header: {
             Text("Remote access")
         } footer: {
-            Text("Allow status checks and controls over a private network, such as Tailscale.")
+            if model.config.controlEnabled {
+                Text("Connect over a private network or Tailscale. Save changes before connecting.")
+            }
         }
     }
 
@@ -477,7 +505,7 @@ struct PreferencesView: View {
             Toggle("Route requests through Hearth", isOn: $model.config.metricsProxyEnabled)
             if model.config.metricsProxyEnabled {
                 numberInt("Proxy port", $model.config.metricsProxyPort,
-                          help: "Your apps use this port instead of the runner port.")
+                          help: "Your apps use this port instead of the server port.")
             }
             VStack(alignment: .leading, spacing: 6) {
                 Text(model.config.metricsProxyEnabled ? "Address for your apps" : "Server address")
@@ -489,7 +517,7 @@ struct PreferencesView: View {
                     Button("Copy") {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(model.config.clientEndpoint, forType: .string)
-                        model.status = "Client endpoint copied."
+                        model.status = "Address copied."
                     }
                     .accessibilityLabel("Copy client endpoint")
                 }
@@ -506,7 +534,7 @@ struct PreferencesView: View {
     private var loggingSection: some View {
         Section {
             DisclosureGroup("Log storage", isExpanded: $showLogSettings) {
-                TextField("Rotate after (bytes)", value: $model.config.logMaxBytes, format: .number.grouping(.never))
+                number("Rotate after (MB)", logSizeMB, help: "Maximum size of each log file in megabytes.")
                 TextField("Old files to keep", value: $model.config.logKeepFiles, format: .number.grouping(.never))
             }
         }
@@ -514,45 +542,46 @@ struct PreferencesView: View {
 
     private var advancedSection: some View {
         Section {
-            DisclosureGroup("Timing and tuning", isExpanded: $showAdvancedTuning) {
-                number("Probe interval", $model.config.probeIntervalSeconds,
+            DisclosureGroup("Check timing", isExpanded: $showCheckTiming) {
+                number("Check interval (s)", $model.config.probeIntervalSeconds,
                        help: "How often Hearth asks the runner \u{201C}are you still answering?\u{201D} while it is up.")
-                number("Probe timeout", $model.config.probeTimeoutSeconds,
+                number("Check timeout (s)", $model.config.probeTimeoutSeconds,
                        help: "If the runner does not answer within this many seconds, that check counts as a failure.")
-                number("Startup grace", $model.config.startupGraceSeconds,
+                number("Startup grace (s)", $model.config.startupGraceSeconds,
                        help: "How long a freshly started runner gets to come up before Hearth treats it as failed. Large models load slowly.")
-                number("Initial backoff", $model.config.initialBackoffSeconds,
+                number("Busy timeout (s)", $model.config.busyTimeoutSeconds,
+                       help: "Restart after this many seconds of continuous queue-full responses. Minimum 30 seconds.")
+            }
+            DisclosureGroup("Restart policy", isExpanded: $showRestartPolicy) {
+                number("Initial retry delay (s)", $model.config.initialBackoffSeconds,
                        help: "Wait before the first restart attempt.")
-                number("Backoff multiplier", $model.config.backoffMultiplier,
+                number("Retry delay multiplier", $model.config.backoffMultiplier,
                        help: "Each failed restart multiplies the wait by this, so a broken runner is not restarted in a tight loop.")
-                number("Max backoff", $model.config.maxBackoffSeconds,
+                number("Maximum retry delay (s)", $model.config.maxBackoffSeconds,
                        help: "Upper limit on the wait between restarts.")
-                numberInt("Crash loop threshold", $model.config.crashLoopThreshold,
+                numberInt("Crash loop threshold (failures)", $model.config.crashLoopThreshold,
                           help: "This many failures inside the window and Hearth slows down: it keeps retrying, but at the failing retry interval.")
-                number("Crash loop window", $model.config.crashLoopWindowSeconds,
+                number("Crash loop window (s)", $model.config.crashLoopWindowSeconds,
                        help: "Time window, in seconds, for counting failures toward the threshold above.")
-                number("Failing retry interval", $model.config.failingProbeIntervalSeconds,
+                number("Crash loop retry interval (s)", $model.config.failingProbeIntervalSeconds,
                        help: "How often to retry once the runner is failing repeatedly.")
-                number("Busy timeout", $model.config.busyTimeoutSeconds,
-                       help: "How long an uninterrupted busy (queue full) streak is believed before it is treated as a hang and restarted. A real queue drains; a 503 that never ends is a wedge. Floored at 30.")
                 numberInt("Memory limit (MB)", $model.config.runnerMemoryLimitMB,
                           help: "Restart a healthy Hearth-started runner whose resident memory crosses this many megabytes, catching slow memory creep before it wedges. 0 disables the watchdog.")
-                numberInt("Too-large model threshold", $model.config.modelOOMThreshold,
+                numberInt("Model memory warning (crashes)", $model.config.modelOOMThreshold,
                           help: "After a model is resident at this many out-of-memory crashes within the window below, Hearth flags it as likely too large for this Mac (an alert and a status flag), so you switch models instead of crash-looping. 0 disables the check.")
-                number("Too-large model window", $model.config.modelOOMWindowSeconds,
+                number("Model crash window (s)", $model.config.modelOOMWindowSeconds,
                        help: "Time window, in seconds, for counting a model's out-of-memory crashes toward the threshold above.")
-                number("Maintenance restart hours", $model.config.maintenanceRestartHours,
+                Toggle("Reload models after restart", isOn: $model.config.warmModelsAfterRestart)
+                    .help("Reload previously loaded models after recovery. This uses the GPU immediately after a restart.")
+            }
+            DisclosureGroup("Maintenance", isExpanded: $showMaintenance) {
+                number("Restart every (hours)", $model.config.maintenanceRestartHours,
                        help: "Optional: restart a long-healthy Hearth-started runner this often. 0 disables it.")
                 TextField("Maintenance window", text: optional(\.maintenanceWindow),
                           prompt: Text("optional, e.g. 03:00-06:00"))
                     .help("When set, scheduled maintenance restarts wait for this daily window (24-hour local time), so a routine cycle never lands while people are using the runner.")
-                Toggle("Warm models after restart", isOn: $model.config.warmModelsAfterRestart)
-                    .help("After a restart, load the models that were resident before it, so the next request does not pay a multi-gigabyte cold start. Does GPU work right after recovery.")
-                Toggle("Restart on binary change", isOn: $model.config.restartOnBinaryChange)
+                Toggle("Restart after server updates", isOn: $model.config.restartOnBinaryChange)
                     .help("Restart a Hearth-started runner after its program file changes on disk, for example after a Homebrew upgrade.")
-                TextField("Runner user (root daemon)", text: optional(\.runnerUser),
-                          prompt: Text("only for the headless root daemon"))
-                    .help("Only used by the headless root LaunchDaemon (see docs/running-headless.md); the menubar app ignores it.")
             }
         } header: {
             Text("Recovery")
@@ -581,6 +610,16 @@ struct PreferencesView: View {
 
     // MARK: Bindings and actions
 
+    private var logSizeMB: Binding<Double> {
+        Binding(get: { Double(model.config.logMaxBytes) / 1_000_000 }, set: { megabytes in
+            let bytes = megabytes * 1_000_000
+            guard bytes.isFinite else { return }
+            model.config.logMaxBytes = bytes >= Double(Int.max) ? Int.max : Int(max(0, bytes))
+        })
+    }
+
+    private var phoneURL: String? { model.phoneURL(tailnetIPv4: NetworkInterfaces.tailnetIPv4()) }
+
     /// The binary path for the currently selected runner.
     private var binaryPath: Binding<String> {
         Binding(
@@ -602,7 +641,7 @@ struct PreferencesView: View {
             set: { enabled in
                 model.probeEnabled = enabled
                 if enabled {
-                    model.probeStatus = "Looking for models on the runner\u{2026}"
+                    model.probeStatus = "Looking for models\u{2026}"
                     Task { await refreshProbeModels() }
                 } else {
                     model.probeRequestID = UUID()
@@ -665,7 +704,7 @@ struct PreferencesView: View {
         let requestID = UUID()
         model.probeRequestID = requestID
         model.probeBusy = true
-        model.probeStatus = "Running a one-token inference test\u{2026}"
+        model.probeStatus = "Testing the model response\u{2026}"
         defer { if model.probeRequestID == requestID { model.probeBusy = false } }
         do {
             let result = try await RunnerProbeSetup.test(config: model.config, model: probeModel)
@@ -707,13 +746,7 @@ struct PreferencesView: View {
     }
 
     private func copyPhoneURL() {
-        guard let url = PhoneAccess.url(
-            tailnetIPv4: NetworkInterfaces.tailnetIPv4(),
-            controlHost: ControlHostResolver.resolve(model.config.controlHost),
-            controlPort: model.config.controlPort) else {
-            model.status = "Bind host is loopback, which a phone cannot reach. Use a Tailscale or private address."
-            return
-        }
+        guard let url = phoneURL else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(url, forType: .string)
         model.status = "Copied \(url)"

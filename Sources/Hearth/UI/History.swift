@@ -43,6 +43,8 @@ final class HistoryController: NSObject, NSWindowDelegate {
 struct HistoryView: View {
     let eventLines: [String]
     let metrics: [MetricsSample]
+    @State private var showingMemory = false
+    @State private var showingActivity = false
 
     private var incidents: [IncidentHistory.Incident] {
         IncidentHistory.build(eventLines)
@@ -68,15 +70,36 @@ struct HistoryView: View {
         metrics.filter { $0.runnerResidentBytes != nil }
     }
 
+    private var observationPeriod: String? {
+        let dates = eventLines.compactMap(EventLog.parse).map(\.at) + metrics.map(\.at)
+        guard let first = dates.min(), let last = dates.max() else { return nil }
+        return "\(first.formatted(date: .abbreviated, time: .shortened)) to \(last.formatted(date: .abbreviated, time: .shortened))"
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
-                summaryCards
-                if !memorySamples.isEmpty { memoryChart }
-                if !rssSamples.isEmpty { rssChart }
-                incidentsSection
-                recentActivitySection
+                if eventLines.isEmpty && metrics.isEmpty {
+                    Text("Events and memory readings appear here while Hearth monitors your server.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    incidentsSection
+                    if !memorySamples.isEmpty || !rssSamples.isEmpty {
+                        DisclosureGroup("Memory history", isExpanded: $showingMemory) {
+                            VStack(alignment: .leading, spacing: 20) {
+                                if !memorySamples.isEmpty { memoryChart }
+                                if !rssSamples.isEmpty { rssChart }
+                            }
+                            .padding(.top, 12)
+                        }
+                    }
+                    if !eventLines.isEmpty {
+                        DisclosureGroup("Recent activity", isExpanded: $showingActivity) {
+                            recentActivitySection.padding(.top, 8)
+                        }
+                    }
+                }
             }
             .padding(22)
         }
@@ -87,32 +110,14 @@ struct HistoryView: View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Health history").font(.title2).fontWeight(.semibold)
-                Text("Incidents and resource pressure retained on this Mac.")
-                    .foregroundStyle(.secondary)
+                if let observationPeriod {
+                    Text(observationPeriod).font(.callout).foregroundStyle(.secondary)
+                }
             }
             Spacer()
             Button("Copy Summary") { copySummary() }
+                .disabled(eventLines.isEmpty && metrics.isEmpty)
         }
-    }
-
-    private var summaryCards: some View {
-        HStack(spacing: 10) {
-            card("Incidents", "\(stats.downCount)")
-            card("Crash loops", "\(stats.crashLoopCount)")
-            card("Mean recovery", stats.meanRecovery.map(StatusText.duration) ?? "None")
-            card("Memory peak", metrics.compactMap(\.memoryPercent).max().map { "\($0)%" } ?? "Unknown")
-        }
-    }
-
-    private func card(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.headline).monospacedDigit()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 9))
     }
 
     private var memoryChart: some View {
@@ -165,9 +170,13 @@ struct HistoryView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Incidents").font(.headline)
             if incidents.isEmpty {
-                Text("No runner failures in the retained history.")
+                Text("No incidents recorded in this period.")
                     .foregroundStyle(.secondary)
             } else {
+                if let mean = stats.meanRecovery {
+                    Text("Average recovery: \(StatusText.duration(mean))")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
                 ForEach(Array(incidents.reversed().enumerated()), id: \.offset) { _, incident in
                     HStack(alignment: .top, spacing: 10) {
                         Image(systemName: incident.recoveredAt == nil
@@ -189,7 +198,6 @@ struct HistoryView: View {
 
     private var recentActivitySection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Recent activity").font(.headline)
             ForEach(Array(eventLines.suffix(30).reversed().enumerated()), id: \.offset) { _, line in
                 Text(line).font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
@@ -206,6 +214,7 @@ struct HistoryView: View {
 
     private func copySummary() {
         var lines = ["Hearth history", "Incidents: \(stats.downCount)", "Crash loops: \(stats.crashLoopCount)"]
+        if let observationPeriod { lines.insert(observationPeriod, at: 1) }
         if let mean = stats.meanRecovery { lines.append("Mean recovery: \(StatusText.duration(mean))") }
         if let longest = stats.longestRecovery { lines.append("Longest recovery: \(StatusText.duration(longest))") }
         if !incidents.isEmpty {

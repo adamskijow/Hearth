@@ -7,6 +7,29 @@ The recent gates below use isolated configuration, data, ports, and owned proces
 identities. The older `./scripts/validate-real.sh` targets normal runner state and
 uses broad process cleanup; use it only in a dedicated test environment.
 
+## November 9, 2026: settings and setup cleanup
+
+The follow-up UI audit's eight findings are addressed in Preferences, the
+environment and token editors, Welcome, History, menus, and the phone page.
+Focused checks passed for native light/dark rendering, listener-aware phone
+addresses, control routing, and browser-script behavior with an isolated DOM
+fixture. The script checks cover read-only access, forgetting a token during a
+pending request, watch-only action labels, failed connections, and duplicate
+commands. They do not run a browser or contact a real control endpoint.
+
+Native renders include empty and populated editors and History, reachable and
+loopback-only remote access, expanded recovery controls, minimum window size,
+Welcome conflicts, and failed saves. Screenshots were reviewed in both
+appearances. Temporary rendering fixtures were removed after use.
+
+The package now selects Command Line Tools test frameworks only when those tools
+are active, avoiding the Xcode/Command Line Tools mismatch behind the previous
+hosted test compilation failure. The final push runs the shared CI gate.
+
+Live menu/keyboard interaction, phone-browser rendering, signed packages, and
+the sustained workload remain unverified. No installed service or release was
+changed.
+
 ## October 18, 2026: follow-up audit fixes
 
 The audit of `f5df1ec` reproduced a remote command restarting a stopped

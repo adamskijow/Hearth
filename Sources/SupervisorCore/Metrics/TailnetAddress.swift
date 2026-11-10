@@ -18,21 +18,21 @@ public enum TailnetAddress {
     }
 }
 
-/// The control URL a phone could actually reach. Prefers the tailnet address;
-/// otherwise uses an explicit non-loopback control host. Returns nil when only a
-/// loopback or the 0.0.0.0 wildcard is available, since neither is dialable from a
-/// phone, so the menu does not advertise a "phone access" URL that cannot work.
+/// Advertise the address the listener is bound to. A tailnet interface can stand
+/// in for a wildcard listener, but cannot make a loopback-only listener reachable.
 public enum PhoneAccess {
-    private static let unreachableHosts: Set<String> = ["127.0.0.1", "localhost", "::1", "0.0.0.0", ""]
-
     public static func url(tailnetIPv4: String?, controlHost: String, controlPort: Int) -> String? {
+        guard (1...65535).contains(controlPort) else { return nil }
+        let configured = controlHost.trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "[]")).lowercased()
+        guard !configured.isEmpty, configured != "localhost", configured != "::1",
+              !configured.hasPrefix("127.") else { return nil }
         let host: String
-        if let tailnetIPv4 {
+        if configured == "0.0.0.0" || configured == "::" {
+            guard let tailnetIPv4 else { return nil }
             host = tailnetIPv4
-        } else if unreachableHosts.contains(controlHost) {
-            return nil
         } else {
-            host = controlHost
+            host = configured
         }
         // Bracket an IPv6 literal so the advertised URL (menu, QR code, Copy
         // phone URL) is actually openable on the phone.

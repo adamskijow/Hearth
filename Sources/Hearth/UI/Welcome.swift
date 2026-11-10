@@ -89,21 +89,19 @@ struct WelcomeView: View {
                 }
             }
 
-            statusBlock
-
             if let collisionWarning {
                 collisionBlock(collisionWarning)
-            }
-
-            HStack(spacing: 10) {
-                Text("Failure alerts")
-                    .font(.callout)
-                Spacer()
-                Button(notificationsEnabled ? "Permission requested" : "Enable Notifications") {
-                    onEnableNotifications()
-                    notificationsEnabled = true
+            } else {
+                statusBlock
+                HStack(spacing: 10) {
+                    Text("Failure alerts").font(.callout)
+                    Spacer()
+                    Button(notificationsEnabled ? "Permission requested" : "Enable Notifications") {
+                        onEnableNotifications()
+                        notificationsEnabled = true
+                    }
+                    .disabled(notificationsEnabled)
                 }
-                .disabled(notificationsEnabled)
             }
 
             Text("Find the flame in your menu bar for status and controls.")
@@ -112,10 +110,17 @@ struct WelcomeView: View {
             Divider()
 
             HStack {
-                Button("Done", action: onDone)
-                Spacer()
-                Button("Open Preferences", action: onOpenPreferences)
-                    .keyboardShortcut(.defaultAction)
+                if collisionWarning != nil {
+                    Button("Preferences…", action: onOpenPreferences)
+                    Spacer()
+                    Button("Watch Existing Server", action: onSwitchToAttached)
+                        .keyboardShortcut(.defaultAction)
+                } else {
+                    Button("Done", action: onDone)
+                    Spacer()
+                    Button("Open Preferences", action: onOpenPreferences)
+                        .keyboardShortcut(.defaultAction)
+                }
             }
         }
         .padding(24)
@@ -181,8 +186,6 @@ struct WelcomeView: View {
                 Text(message)
                     .font(.callout).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Button("Watch Existing Runner", action: onSwitchToAttached)
-                    .controlSize(.small)
             }
             Spacer(minLength: 0)
         }

@@ -9,6 +9,10 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- Phone addresses follow the control listener's binding. A Tailscale interface
+  no longer makes a loopback-only listener appear reachable from another device.
+- Browser controls remain hidden for read-only access and after forgetting a
+  token, including when an earlier status request finishes later.
 - Commands queued by a stopped control server are rejected on the engine actor.
   Replaced engines retire permanently, preventing stale starts after reload.
 - Stopping a heartbeat cancels pending health checks and HTTP requests. A later
@@ -47,6 +51,12 @@ follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Remote access shows the phone address and a copyable token, with additional
+  tokens collapsed. Recovery settings have smaller groups and visible units.
+  Environment values use full-width fields, and editor instructions are shorter.
+- History leads with incidents and the observation period; memory charts and
+  event details expand when needed. Welcome prioritizes the existing-server
+  choice, and the phone page follows the device appearance.
 - Preferences has four compact pages: General, Health, Alerts, and Advanced.
   Connection details and optional integrations expand when needed. Welcome is
   shorter, and the menu groups metrics and diagnostics under Details and

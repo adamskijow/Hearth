@@ -40,6 +40,19 @@ struct PreferencesModelTests {
         #expect(model.canSave)
     }
 
+    @Test func phoneAddressFollowsTheConfiguredListener() {
+        let model = PreferencesModel(HearthConfig())
+        let tailnet = "100.64.0.5"
+        #expect(model.phoneURL(tailnetIPv4: tailnet) == nil)
+        model.config.controlEnabled = true
+        #expect(model.phoneURL(tailnetIPv4: tailnet) == nil)
+        model.config.controlHost = "tailscale"
+        #expect(model.phoneURL(tailnetIPv4: nil) == nil)
+        #expect(model.phoneURL(tailnetIPv4: tailnet) == "http://100.64.0.5:11435")
+        model.config.controlHost = "192.168.1.50"
+        #expect(model.phoneURL(tailnetIPv4: tailnet) == "http://192.168.1.50:11435")
+    }
+
     @Test func managedMLXPreferencesRenderAtTheReleaseWindowSize() throws {
         let model = PreferencesModel(HearthConfig(runner: "mlx", mode: "managed", port: 8080))
         let view = PreferencesView(model: model, onSave: { _ in true }, onClose: {})
@@ -102,6 +115,36 @@ struct PreferencesModelTests {
                     .preferredColorScheme(dark ? .dark : .light)
                 let image = try render(view, size: NSSize(width: 460, height: 460))
                 try export(image, name: "welcome-\(conflict ? "conflict" : "missing")-\(dark ? "dark" : "light")")
+            }
+        }
+    }
+
+    @Test func editorsAndHistoryRenderInBothAppearances() throws {
+        let events = [
+            EventLog.line(timestamp: "2026-11-09 08:00:00", message: "Down: inference timeout"),
+            EventLog.line(timestamp: "2026-11-09 08:00:20", message: "Recovered")
+        ]
+        for dark in [false, true] {
+            let views: [(String, AnyView, NSSize)] = [
+                ("environment-empty", AnyView(EnvEditorView(env: [:], runner: "ollama",
+                    onDone: { _ in }, onCancel: {})), NSSize(width: 560, height: 230)),
+                ("environment-custom", AnyView(EnvEditorView(
+                    env: ["MY_CUSTOM_VARIABLE": "long-custom-configuration-value"], runner: "ollama",
+                    onDone: { _ in }, onCancel: {})), NSSize(width: 560, height: 300)),
+                ("tokens-empty", AnyView(TokensEditorView(tokens: [:],
+                    onDone: { _ in }, onCancel: {})), NSSize(width: 560, height: 230)),
+                ("tokens-populated", AnyView(TokensEditorView(tokens: ["phone": "fixture-not-a-real-token"],
+                    onDone: { _ in }, onCancel: {})), NSSize(width: 560, height: 230)),
+                ("history-empty", AnyView(HistoryView(eventLines: [], metrics: [])),
+                    NSSize(width: 760, height: 680)),
+                ("history-incidents", AnyView(HistoryView(eventLines: events, metrics: [])),
+                    NSSize(width: 760, height: 680))
+            ]
+            for (name, content, size) in views {
+                let view = content.frame(width: size.width, height: size.height)
+                    .background(Color(nsColor: .windowBackgroundColor))
+                    .preferredColorScheme(dark ? .dark : .light)
+                try export(render(view, size: size), name: "\(name)-\(dark ? "dark" : "light")")
             }
         }
     }

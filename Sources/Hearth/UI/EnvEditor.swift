@@ -11,6 +11,7 @@ import SupervisorCore
 struct EnvEditorView: View {
     @State private var rows: [EnvRow]
     private let catalog: [RunnerEnvVar]
+    private let runnerName: String
     let onDone: ([String: String]) -> Void
     let onCancel: () -> Void
 
@@ -20,6 +21,7 @@ struct EnvEditorView: View {
          onCancel: @escaping () -> Void) {
         _rows = State(initialValue: env.sorted { $0.key < $1.key }.map { EnvRow(name: $0.key, value: $0.value) })
         self.catalog = RunnerEnvCatalog.variables(for: runner)
+        self.runnerName = RunnerKind(fromConfigString: runner).displayName
         self.onDone = onDone
         self.onCancel = onCancel
     }
@@ -27,16 +29,16 @@ struct EnvEditorView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Runner environment").font(.headline)
-                Text("Variables set on the managed runner when Hearth launches it. Pick from the list or choose Custom for one not shown. OLLAMA_HOST is managed by Hearth from the Host and Port, so it is not listed.")
+                Text("Environment variables").font(.headline)
+                Text("Variables passed to \(runnerName) at startup.")
                     .font(.callout).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .help("Hearth sets the server address from Host and Port; OLLAMA_HOST cannot be changed here.")
             }
 
             ScrollView {
                 VStack(spacing: 10) {
                     if rows.isEmpty {
-                        Text("No variables yet. Add one below.")
+                        Text("No variables added.")
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.vertical, 20)
@@ -49,7 +51,7 @@ struct EnvEditorView: View {
                 }
                 .padding(.vertical, 2)
             }
-            .frame(minHeight: 130, maxHeight: 280)
+            .frame(height: min(280, max(70, CGFloat(rows.count) * 100)))
 
             Button {
                 // A new row starts on the first catalog variable (if any) so the
@@ -74,8 +76,7 @@ struct EnvEditorView: View {
     }
 }
 
-/// One row: a name dropdown (plus a text field when Custom), an equals sign, the
-/// value, and a delete button, with the selected variable's description beneath.
+/// Keep the value on its own line so custom names do not squeeze it out.
 private struct EnvRowEditor: View {
     @Binding var row: EnvRow
     let catalog: [RunnerEnvVar]
@@ -104,7 +105,7 @@ private struct EnvRowEditor: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 8) {
                 if catalog.isEmpty {
                     TextField("NAME", text: $row.name)
@@ -117,23 +118,24 @@ private struct EnvRowEditor: View {
                         Text("Custom\u{2026}").tag(Self.customTag)
                     }
                     .labelsHidden()
-                    .frame(width: 230)
+                    .frame(width: isCustom ? 160 : nil)
                     if isCustom {
                         TextField("NAME", text: $row.name)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
-                            .frame(width: 150)
                     }
                 }
-                Text("=").foregroundStyle(.secondary)
-                TextField(spec?.example ?? "value", text: $row.value)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(.body, design: .monospaced))
+                Spacer(minLength: 0)
                 Button(action: onDelete) { Image(systemName: "minus.circle.fill") }
                     .buttonStyle(.borderless)
                     .foregroundStyle(.secondary)
                     .help("Remove this variable")
+                    .accessibilityLabel("Remove variable")
             }
+            TextField("Value", text: $row.value, prompt: Text(spec?.example ?? "Value"))
+                .textFieldStyle(.roundedBorder)
+                .font(.system(.body, design: .monospaced))
+                .accessibilityLabel("Variable value")
             if let spec {
                 Text(spec.summary).font(.caption).foregroundStyle(.secondary)
             }

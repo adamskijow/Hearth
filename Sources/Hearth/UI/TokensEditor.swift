@@ -17,9 +17,9 @@ struct TokensEditorView: View {
     let onCancel: () -> Void
 
     init(tokens: [String: String],
-         heading: String = "Named control tokens",
-         explanation: String = "Give each caller of the control endpoint its own token; start, stop, and restart actions are then logged with the token's name, so the event history says who acted. Name them after the caller (phone-kitchen, laptop). The main bearer token keeps working and is logged as “default”, so avoid that name here.",
-         namePlaceholder: String = "name (e.g. phone-kitchen)",
+         heading: String = "Control tokens",
+         explanation: String = "Give each device its own token to control the server.",
+         namePlaceholder: String = "Device name",
          onDone: @escaping ([String: String]) -> Void,
          onCancel: @escaping () -> Void) {
         _rows = State(initialValue: tokens.sorted { $0.key < $1.key }
@@ -43,7 +43,7 @@ struct TokensEditorView: View {
             ScrollView {
                 VStack(spacing: 10) {
                     if rows.isEmpty {
-                        Text("No named tokens yet. Add one below.")
+                        Text("No additional tokens.")
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.vertical, 20)
@@ -53,7 +53,8 @@ struct TokensEditorView: View {
                             TextField(namePlaceholder, text: $row.name)
                                 .textFieldStyle(.roundedBorder)
                                 .frame(width: 170)
-                            TextField("secret", text: $row.secret)
+                                .help("Actions are logged with this name. The main token is logged as default; use a different name here.")
+                            TextField("Token", text: $row.secret)
                                 .textFieldStyle(.roundedBorder)
                                 .font(.system(.body, design: .monospaced))
                             Button("Generate") { row.secret = PreferencesView.randomToken() }
@@ -76,12 +77,13 @@ struct TokensEditorView: View {
                             .buttonStyle(.borderless)
                             .foregroundStyle(.secondary)
                             .help("Remove this token")
+                            .accessibilityLabel("Remove token")
                         }
                     }
                 }
                 .padding(.vertical, 2)
             }
-            .frame(minHeight: 110, maxHeight: 260)
+            .frame(height: min(260, max(70, CGFloat(rows.count) * 44)))
 
             Button {
                 rows.append(TokenRow(name: "", secret: PreferencesView.randomToken()))

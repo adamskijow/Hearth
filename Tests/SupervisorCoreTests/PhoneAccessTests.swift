@@ -4,11 +4,17 @@ import Testing
 @testable import SupervisorCore
 
 struct PhoneAccessTests {
-    @Test func prefersTheTailnetAddress() {
-        // With a tailnet address, that is the phone-reachable host, even if the
-        // control host is bound to loopback.
-        #expect(PhoneAccess.url(tailnetIPv4: "100.64.0.5", controlHost: "127.0.0.1", controlPort: 11435)
+    @Test func aTailnetInterfaceDoesNotExposeALoopbackListener() {
+        for host in ["127.0.0.1", "127.0.0.2", "localhost", "::1", "[::1]", ""] {
+            #expect(PhoneAccess.url(tailnetIPv4: "100.64.0.5", controlHost: host, controlPort: 11435) == nil)
+        }
+    }
+
+    @Test func wildcardListenerCanUseItsTailnetInterface() {
+        #expect(PhoneAccess.url(tailnetIPv4: "100.64.0.5", controlHost: "0.0.0.0", controlPort: 11435)
                 == "http://100.64.0.5:11435")
+        #expect(PhoneAccess.url(tailnetIPv4: "100.64.0.5", controlHost: "192.168.1.50", controlPort: 11435)
+                == "http://192.168.1.50:11435")
     }
 
     @Test func loopbackOnlyIsNotAdvertised() {

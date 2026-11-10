@@ -11,10 +11,25 @@ import Foundation
 // path when only the Command Line Tools are installed (no full Xcode). A headless
 // Mac, which is exactly Hearth's target, is usually in that state. Detect the
 // Command Line Tools layout and, if present, add the search paths and runtime
-// rpaths so a plain `swift test` builds and runs. Harmless when full Xcode is
-// installed: `swift test` already works there and the extra rpaths to a missing
-// directory are simply ignored.
+// rpaths so a plain `swift test` builds and runs. Do not mix that framework with
+// an Xcode compiler: their Swift Testing macros can have different interfaces.
 let testingFrameworkSettings: (swift: [SwiftSetting], linker: [LinkerSetting]) = {
+    let selected: String
+    if let developer = ProcessInfo.processInfo.environment["DEVELOPER_DIR"] {
+        selected = developer
+    } else {
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/xcode-select")
+        process.arguments = ["-p"]
+        process.standardOutput = output
+        do { try process.run() } catch { return ([], []) }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0 else { return ([], []) }
+        selected = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+    guard selected == "/Library/Developer/CommandLineTools" else { return ([], []) }
     let base = "/Library/Developer/CommandLineTools/Library/Developer"
     let frameworks = base + "/Frameworks"
     let libs = base + "/usr/lib"

@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/hearth-banner.svg" alt="Hearth: keeps Ollama alive and serving on your Mac" width="100%">
+</p>
+
 # Hearth
 
 Hearth keeps Ollama running on an unattended Mac. It restarts crashed or
